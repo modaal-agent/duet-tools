@@ -1,0 +1,48 @@
+# duet-tools
+
+The open `duet` CLI — the verification toolchain for
+[Duet](https://github.com/modaal-agent/duet) repos: dual-platform fixture
+verification, scenario-driven recording, the replay-protocol lane, and the
+Swift ceremony killer's codegen verb.
+
+## Why a separate repo
+
+SwiftPM resolves package-level dependencies for every consumer regardless of
+which products they link, and resolves one URL package per repository root.
+The toolchain carries a swift-syntax dependency (for the sum-coder codegen);
+if it lived inside the `duet` library repo, every Duet consumer would fetch
+and pin swift-syntax forever. Here the pin stays in the tool's own graph —
+apps and test lanes never see it.
+
+## Verbs
+
+```sh
+swift run duet help
+```
+
+- `duet verify [--feature <name>] [--swift-only|--kotlin-only]` — meta-checks
+  (lockstep + fixture symmetry), then both platform lanes in parallel, with the
+  fixture coverage gate.
+- `duet record [--feature <name>] [--platform swift|kotlin] [--check]` —
+  scenario-driven fixture regeneration through the framework's ONE §6 writer;
+  sum-coder regen is folded in; `--check` is the CI drift gate (R10).
+- `duet explain` / `duet materialize <fixture>#<step> --platform <p>` — render
+  the last run's failures; emit a standalone failing unit test for one step.
+- `duet protocol-run [--runner <path>]` — byte-gate the full corpus through any
+  conforming replay-protocol runner (flavor-neutral).
+- `duet canonical-sum [--check]` — (re)generate the committed sum coders for
+  every `CanonicalSumCodable` enum (normally implicit via `record`).
+- `duet write-fixtures` — materialize pending record artifacts into §6 fixture
+  files (framework repos' own-corpus regen path).
+
+Run from anywhere inside an adopter repo — the root is discovered via
+`parity/fixtures`, and the platform roots are derived from the repo's own
+parity manifest (no configuration).
+
+`CanonicalSumEmission` is exported for
+[duet-macros](https://github.com/modaal-agent/duet-macros): both ceremony-killer
+vehicles assemble from the one emission rule-set.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
