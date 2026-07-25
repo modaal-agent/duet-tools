@@ -14,7 +14,11 @@ on:
 
 jobs:
   swift:
-    runs-on: macos-15
+    # Xcode-27 preview image: default Xcode = the 27 beta line (Swift 6.4) the
+    # family's strict-concurrency proofs are made on — see the duet repo's
+    # workflow for the full rationale. Older default toolchains fail compiling
+    # the framework sources this package links (DuetReplay).
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
         with:
