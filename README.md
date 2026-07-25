@@ -1,9 +1,19 @@
 # duet-tools
 
+[![ci](https://github.com/modaal-agent/duet-tools/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/modaal-agent/duet-tools/actions/workflows/ci.yml)
+
 The open `duet` CLI — the verification toolchain for
 [Duet](https://github.com/modaal-agent/duet) repos: dual-platform fixture
 verification, scenario-driven recording, the replay-protocol lane, and the
 Swift ceremony killer's codegen verb.
+
+The CI matrix (each job writes its toolchain and verdict to the run's job
+summary; both lanes build against the sibling `duet` checkout):
+
+| lane | toolchain | proves |
+| --- | --- | --- |
+| `swift` · macos-26 | Xcode 26.6 (Swift 6.3.3) | the GA floor — the adopter toolchain |
+| `swift` · xcode-27 | Xcode 27 beta (Swift 6.4) | the newest proven line |
 
 ## Why a separate repo
 

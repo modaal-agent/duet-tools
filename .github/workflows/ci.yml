@@ -43,4 +43,16 @@ jobs:
         with:
           xcode-version: ${{ matrix.xcode }}
       - name: Build + test the CLI (sum-coder emission suites)
+        id: tests
         run: cd duet-tools && swift test
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### swift · ${{ matrix.image }} — ${{ steps.tests.outcome == 'success' && '✅ passed' || '❌ failed' }}"
+            echo ""
+            echo "- toolchain: $(xcodebuild -version | tr '\n' ' ')"
+            echo "- swift: $(swift --version 2>&1 | head -1)"
+            echo "- lane: ${{ matrix.xcode != '' && 'the GA floor (pinned)' || 'the newest proven line (image default)' }}"
+            echo "- builds the \`duet\` CLI (module \`DuetCLI\`) against the sibling \`duet\` checkout; runs the sum-coder emission suites"
+          } >> "$GITHUB_STEP_SUMMARY"
