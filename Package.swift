@@ -24,7 +24,7 @@ let package = Package(
     .macOS(.v13)
   ],
   products: [
-    .executable(name: "duet", targets: ["duet"]),
+    .executable(name: "duet", targets: ["DuetCLI"]),
     .library(name: "CanonicalSumEmission", targets: ["CanonicalSumEmission"]),
   ],
   dependencies: [
@@ -47,8 +47,15 @@ let package = Package(
       ],
       path: "Sources/CanonicalSumGen"
     ),
+    // The MODULE is DuetCLI while the PRODUCT stays `duet` (the binary name,
+    // `swift run duet`, and the adopter wrapper are all product-named). A
+    // module literally named `duet` collides case-insensitively with the
+    // framework's `Duet` library module — build layouts key intermediates by
+    // module name, so on a default (case-insensitive) APFS volume the two
+    // clobber each other and the package cannot build at all. Caught only
+    // when building off a case-sensitive dev volume; do not rename back.
     .executableTarget(
-      name: "duet",
+      name: "DuetCLI",
       dependencies: [
         .target(name: "CanonicalSumGen"),
         .product(name: "DuetReplay", package: "modaal-agent-duet"),

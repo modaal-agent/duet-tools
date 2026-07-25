@@ -14,11 +14,18 @@ on:
 
 jobs:
   swift:
-    # Xcode-27 preview image: default Xcode = the 27 beta line (Swift 6.4) the
-    # family's strict-concurrency proofs are made on — see the duet repo's
-    # workflow for the full rationale. Older default toolchains fail compiling
-    # the framework sources this package links (DuetReplay).
-    runs-on: xcode-27
+    # Same two lanes as the duet repo's workflow (see its comment for the full
+    # rationale): macos-26 pinned to Xcode 26.6 = the verified GA floor,
+    # xcode-27 = the newest line (image default is the pin).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: macos-26
+            xcode: "26.6"
+          - image: xcode-27
+            xcode: ""
+    runs-on: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,5 +37,10 @@ jobs:
           # Private phase only: cross-repo checkout of a private sibling needs a
           # token with contents:read on modaal-agent/duet. Public: delete this.
           token: ${{ secrets.DUET_FAMILY_TOKEN }}
+      - name: Select Xcode ${{ matrix.xcode }}
+        if: matrix.xcode != ''
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.xcode }}
       - name: Build + test the CLI (sum-coder emission suites)
         run: cd duet-tools && swift test
