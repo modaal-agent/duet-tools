@@ -37,7 +37,7 @@ swift run duet help
   subtree packages are first-class; JSON: `lanes.swift` is an array).
 - `duet record [--feature <name>] [--platform swift|kotlin] [--check]` —
   scenario-driven fixture regeneration through the framework's ONE §6 writer;
-  sum-coder regen is folded in; `--check` is the CI drift gate (R10).
+  sum-coder regen is folded in; `--check` is the CI drift gate.
 - `duet explain` / `duet materialize <fixture>#<step> --platform <p>` — render
   the last run's failures; emit a standalone failing unit test for one step.
 - `duet protocol-run [--runner <path>]` — byte-gate the full corpus through any

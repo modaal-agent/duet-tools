@@ -62,19 +62,36 @@ struct Feature {
   /// The feature's test target — the `swift test --filter` scope.
   var swiftTestTarget: String? { swiftModule.map { "\($0)Tests" } }
 
-  /// `<androidRoot>/<module…>/src/{main,test}/…` → the module's directory path
+  /// `<androidRoot>/<module…>/src/<sourceSet>/…` → the module's directory path
   /// relative to the Android root (nested Gradle modules keep their nesting).
+  /// Source sets cover both the JVM layout (main/test) and the KMP flavor's
+  /// (commonMain/commonTest/jvmMain/jvmTest).
   var kotlinModulePath: String? {
     let parts = kotlinSource.split(separator: "/").map(String.init)
+    let sourceSets = ["main", "test", "commonMain", "commonTest", "jvmMain", "jvmTest"]
     guard let srcIndex = parts.firstIndex(of: "src"), srcIndex >= 2,
-      srcIndex + 1 < parts.count, ["main", "test"].contains(parts[srcIndex + 1])
+      srcIndex + 1 < parts.count, sourceSets.contains(parts[srcIndex + 1])
     else { return nil }
     return parts[1..<srcIndex].joined(separator: "/")
   }
 
-  /// The Gradle test task for the feature (`:module:test`, nesting colon-joined).
+  /// Whether the feature lives in a KMP module (its source set is a
+  /// multiplatform one). A KMP module has no aggregate `test` task — the JVM
+  /// host lane is `jvmTest` — so the lane task derives from this.
+  var isKmpSourceSet: Bool {
+    let parts = kotlinSource.split(separator: "/").map(String.init)
+    guard let srcIndex = parts.firstIndex(of: "src"), srcIndex + 1 < parts.count else {
+      return false
+    }
+    return ["commonMain", "commonTest", "jvmMain", "jvmTest"].contains(parts[srcIndex + 1])
+  }
+
+  /// The Gradle test task for the feature (`:module:test`, nesting
+  /// colon-joined; `jvmTest` for KMP modules).
   var gradleTestTask: String? {
-    kotlinModulePath.map { ":\($0.replacingOccurrences(of: "/", with: ":")):test" }
+    kotlinModulePath.map {
+      ":\($0.replacingOccurrences(of: "/", with: ":")):\(isKmpSourceSet ? "jvmTest" : "test")"
+    }
   }
 
   /// Package of the Kotlin sources (`…/kotlin/com/wikimemory/x/File.kt` → com.wikimemory.x).
@@ -104,9 +121,16 @@ struct Manifest {
   /// The Swift package roots (every distinct per-feature `swift:` prefix before
   /// /Sources/ — more than one since the first subtree re-cut, F5) and the
   /// Android build root (the first component of any feature's `kotlin:` path) —
-  /// derived, absolute. Sorted by path for stable lane ordering.
+  /// derived, absolute. Sorted by path for stable lane ordering. EMPTY for a
+  /// single-source (KMP-flavor) repo, whose manifest declares no `swift:` twins —
+  /// the Swift lane and the swift half of the coverage gate then don't apply.
   let swiftPackageDirs: [URL]
   let androidDir: URL
+  /// Optional manifest override (`replayRunner:` top-level key): the Swift package
+  /// root owning the `Sources/replay-runner` executable, for repos whose replay
+  /// glue lives outside every feature package (a scaffolded all-subtrees layout
+  /// has no aggregator root to probe).
+  let replayRunnerRelative: String?
   /// Repo root the relative paths resolve against (for per-feature lookups).
   let repoRoot: URL
 
@@ -115,11 +139,23 @@ struct Manifest {
     feature.swiftPackageRelative.map { repoRoot.appendingPathComponent($0) }
   }
 
+  /// The unscoped Gradle lane task: `test` for JVM modules; `jvmTest` when every
+  /// feature is KMP-shaped (a KMP module has no aggregate `test` task — running
+  /// `test` there silently replays nothing, which the coverage gate would catch
+  /// but record would not).
+  var unscopedGradleTask: String {
+    !features.isEmpty && features.allSatisfy(\.isKmpSourceSet) ? "jvmTest" : "test"
+  }
+
   /// The package that owns the `replay-runner` executable product (the protocol
-  /// lane's driver) — probed, because after a re-cut the aggregator hosting it
-  /// is just one root among several.
+  /// lane's driver): the manifest's explicit `replayRunner:` key when declared,
+  /// else probed — because after a re-cut the aggregator hosting it is just one
+  /// root among several.
   var replayRunnerPackageDir: URL? {
-    swiftPackageDirs.first {
+    if let declared = replayRunnerRelative {
+      return repoRoot.appendingPathComponent(declared)
+    }
+    return swiftPackageDirs.first {
       FileManager.default.fileExists(
         atPath: $0.appendingPathComponent("Sources/replay-runner").path)
     }
@@ -177,11 +213,10 @@ struct Manifest {
           fixtures: spec["fixtures"] as? [String] ?? [])
       }
       .sorted { $0.name < $1.name }
+    // Empty is legal: a single-source (KMP-flavor) manifest declares no `swift:`
+    // twins — the CLI then runs kotlin-shaped lanes only. (The Android root stays
+    // required: both flavors carry a Kotlin/Gradle lane.)
     let swiftRelatives = Set(features.compactMap(\.swiftPackageRelative)).sorted()
-    guard !swiftRelatives.isEmpty else {
-      throw ManifestError.layoutUnderivable(
-        "no feature `swift:` path contains /Sources/ (needed for the package roots)")
-    }
     guard
       let androidRelative = features.lazy
         .compactMap({ feature -> String? in
@@ -199,6 +234,7 @@ struct Manifest {
       lintErrors: root["errors"] as? [String] ?? [],
       swiftPackageDirs: swiftRelatives.map(repo.root.appendingPathComponent),
       androidDir: repo.root.appendingPathComponent(androidRelative),
+      replayRunnerRelative: root["replayRunner"] as? String,
       repoRoot: repo.root)
   }
 }

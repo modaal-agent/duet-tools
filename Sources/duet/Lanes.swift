@@ -175,7 +175,7 @@ enum Lanes {
       }
     }
     if !options.swiftOnly {
-      let task = feature?.gradleTestTask ?? "test"
+      let task = feature?.gradleTestTask ?? manifest.unscopedGradleTask
       // --rerun: an up-to-date Gradle test task would silently skip the replays and
       // write no reports — a "PASS" that verified nothing (caught by the coverage
       // check below, but rerunning is the correct behavior for a verification tool).
@@ -207,7 +207,11 @@ enum Lanes {
     var missing: [String] = []
     for fixture in expectedFixtures {
       for platform in ["swift", "kotlin"] {
-        if platform == "swift" && options.kotlinOnly { continue }
+        // A single-source (KMP-flavor) repo has no Swift lane at all — the swift
+        // half of the gate doesn't apply, flag or no flag.
+        if platform == "swift" && (options.kotlinOnly || manifest.swiftPackageDirs.isEmpty) {
+          continue
+        }
         if platform == "kotlin" && options.swiftOnly { continue }
         if !reports.contains(where: {
           ($0["fixture"] as? String) == fixture && ($0["platform"] as? String) == platform
@@ -307,12 +311,15 @@ enum Lanes {
   /// Recording is a *source-generation* step: the diff is meant to be reviewed like
   /// code (bless-by-git). `--platform kotlin` records through the Kotlin runner
   /// (`-PregenFixtures=1`); the §6 shared writer makes the two platforms' outputs
-  /// byte-identical for equivalent scenarios. `--check` is the CI regen gate (R10):
+  /// byte-identical for equivalent scenarios. `--check` is the CI regen gate:
   /// exit 1 if any fixture was stale relative to its scenario.
   /// (No lint gate here on purpose — record is how a lint-red tree gets repaired.)
   static func record(repo: Repo, options: Options) throws -> Int32 {
     let manifest = try Manifest.load(repo: repo)
     let feature = try options.resolveFeature(in: manifest)
+    // A single-source (KMP-flavor) repo records through its only lane — the
+    // Kotlin runner — without the caller having to say so.
+    let platform = options.platform ?? (manifest.swiftPackageDirs.isEmpty ? "kotlin" : nil)
     // Snapshot fixture bytes so the summary lists what THIS run rewrote (git diff
     // would also show unrelated uncommitted fixture changes).
     let before = fixtureDigests(repo)
@@ -321,7 +328,7 @@ enum Lanes {
     // fixtures compile against current coders; in --check mode stale coders fail
     // fast, before any lane runs. Kotlin-platform record skips this — the coder
     // files are the Swift flavor's.
-    if options.platform != "kotlin" {
+    if platform != "kotlin" {
       let regen = try CanonicalSumVerb.regenerate(
         repo: repo, manifest: manifest, check: options.check)
       if !regen.stale.isEmpty {
@@ -342,8 +349,8 @@ enum Lanes {
     // Stale artifacts from an earlier record pass must not re-materialize.
     RecordArtifacts.clear(repo)
     var results: [ProcessResult] = []
-    if options.platform == "kotlin" {
-      let task = feature?.gradleTestTask ?? "test"
+    if platform == "kotlin" {
+      let task = feature?.gradleTestTask ?? manifest.unscopedGradleTask
       results.append(
         finish(
           try launch(
@@ -407,7 +414,7 @@ enum Lanes {
       } else {
         print("duet record --check: FAIL — \(changed.count) stale fixture(s) regenerated:")
         for file in changed { print("  parity/fixtures/\(file)") }
-        print("commit the regenerated fixtures (R10: fixtures are build products)")
+        print("commit the regenerated fixtures (fixtures are build products — never hand-edit)")
       }
       return changed.isEmpty ? 0 : 1
     }

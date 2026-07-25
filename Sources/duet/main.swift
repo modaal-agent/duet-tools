@@ -88,7 +88,7 @@ let usage = """
         review summary of what changed. Fixtures are build products — review the
         diff like code. --platform kotlin records through the Kotlin runner: it
         emits compact artifacts and the CLI materializes the §6 files (one
-        writer). --check = CI regen gate: exit 1 if anything was stale (R10).
+        writer). --check = CI regen gate: exit 1 if anything was stale.
     duet explain [--json]
         re-render the last run's failures from parity/.runs (no logs, no re-run).
     duet materialize <fixture>#<step> --platform swift|kotlin [--json]

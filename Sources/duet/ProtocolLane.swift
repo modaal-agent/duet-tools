@@ -42,6 +42,9 @@ enum ProtocolLane {
     } else {
       guard let runnerHome = manifest.replayRunnerPackageDir else {
         print("protocol-run: FAIL — no manifest package root contains Sources/replay-runner")
+        print("  declare one (`replayRunner: <package dir>` in parity/manifest.yaml) or pass")
+        print("  a prebuilt conforming runner: --runner <path> (e.g. the Kotlin lane's")
+        print("  `:replay-runner:installDist` launcher)")
         return 1
       }
       let build = Lanes.finish(
