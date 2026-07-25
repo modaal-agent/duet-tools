@@ -37,10 +37,32 @@ swift run duet help
 - `duet scope <path>` — which gates govern a file, and the authoring loop for
   it (the module→gates map, both routing directions; derived from the
   manifest, no configuration).
+- `duet mcp` — the same verification verbs as a stdio MCP server
+  (`duet_verify`, `duet_record`, `duet_explain`, `duet_materialize`,
+  `duet_scope`); tool results are the verbs' `--json` reports. The authoring
+  verbs (scaffold/convert/audit) are not served — they are not part of the
+  open toolchain.
 
 Run from anywhere inside an adopter repo — the root is discovered via
 `parity/fixtures`, and the platform roots are derived from the repo's own
 parity manifest (no configuration).
+
+## Agent harness setup (MCP)
+
+One entry, launched with `cwd` inside the adopter repo:
+
+```json
+{
+  "mcpServers": {
+    "duet": { "command": "duet", "args": ["mcp"] }
+  }
+}
+```
+
+(Pre-publication, `command` is the adopter repo's `tools/duet` wrapper — same
+verbs, run from the local checkout.) The server is synchronous by design:
+every verb is seconds-fast on a warm tree, so there is no streaming and no
+cancel surface; results carry `structuredContent` alongside the text report.
 
 `CanonicalSumEmission` is exported for
 [duet-macros](https://github.com/modaal-agent/duet-macros): both ceremony-killer

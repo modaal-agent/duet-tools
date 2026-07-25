@@ -114,6 +114,11 @@ let usage = """
         module→gates map, derived from the manifest: fixture → its owning
         feature and the record loop; feature source → the feature's verify/
         record commands; app trees → "not governed" with a pointer.
+    duet mcp
+        serve the verification verbs as a stdio MCP server (duet_verify,
+        duet_record, duet_explain, duet_materialize, duet_scope) — one
+        mcpServers entry gives any agent harness the toolchain; tool results
+        are the verbs' --json reports. Launch with cwd inside the repo.
 
   Run from anywhere inside the repo (root is found via parity/fixtures).
   """
@@ -152,6 +157,8 @@ do {
     code = try CanonicalSumVerb.run(repo: repo, options: options)
   case "scope":
     code = try Scope.run(repo: repo, options: options)
+  case "mcp":
+    code = try Mcp.run(repo: repo, options: options)
   default:
     print("duet: unknown command '\(command)'\n")
     print(usage)

@@ -1,0 +1,30 @@
+# The toolchain's own gate (F4 CI templates). Committed while the family is
+# still private — first real run at the public flip; until then the same
+# commands are the local gate and the Modaal-free receipt runs them from clean
+# clones. Pre-publication the package resolves `duet` by SIBLING PATH
+# (../modaal-agent-duet), so the job checks both repos out side by side; at
+# publication the manifest flips to the URL dependency and the second checkout
+# (and its token) retires.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  swift:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: duet-tools
+      - uses: actions/checkout@v4
+        with:
+          repository: modaal-agent/duet
+          path: modaal-agent-duet
+          # Private phase only: cross-repo checkout of a private sibling needs a
+          # token with contents:read on modaal-agent/duet. Public: delete this.
+          token: ${{ secrets.DUET_FAMILY_TOKEN }}
+      - name: Build + test the CLI (sum-coder emission suites)
+        run: cd duet-tools && swift test
