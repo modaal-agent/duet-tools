@@ -34,6 +34,9 @@ swift run duet help
   every `CanonicalSumCodable` enum (normally implicit via `record`).
 - `duet write-fixtures` — materialize pending record artifacts into §6 fixture
   files (framework repos' own-corpus regen path).
+- `duet scope <path>` — which gates govern a file, and the authoring loop for
+  it (the module→gates map, both routing directions; derived from the
+  manifest, no configuration).
 
 Run from anywhere inside an adopter repo — the root is discovered via
 `parity/fixtures`, and the platform roots are derived from the repo's own

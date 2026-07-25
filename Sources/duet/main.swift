@@ -109,6 +109,11 @@ let usage = """
         CanonicalSumCodable (scans the package's Sources/**). Normally implicit:
         `duet record` regenerates first, and `record --check` gates coder drift
         — the standalone verb covers a first generation on a new type.
+    duet scope <path> [--json]
+        which gates govern a file (and the authoring loop for it) — the
+        module→gates map, derived from the manifest: fixture → its owning
+        feature and the record loop; feature source → the feature's verify/
+        record commands; app trees → "not governed" with a pointer.
 
   Run from anywhere inside the repo (root is found via parity/fixtures).
   """
@@ -145,6 +150,8 @@ do {
     code = try RecordArtifacts.run(repo: repo, options: options)
   case "canonical-sum":
     code = try CanonicalSumVerb.run(repo: repo, options: options)
+  case "scope":
+    code = try Scope.run(repo: repo, options: options)
   default:
     print("duet: unknown command '\(command)'\n")
     print(usage)
