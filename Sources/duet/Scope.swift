@@ -62,7 +62,7 @@ enum Scope {
   }
 
   static func classify(_ path: String, repo: Repo, manifest: Manifest) -> Verdict {
-    let swiftRoot = relative(manifest.swiftPackageDir, to: repo)
+    let swiftRoots = manifest.swiftPackageDirs.map { relative($0, to: repo) }
     let androidRoot = relative(manifest.androidDir, to: repo)
 
     // 1. A fixture file (or the fixtures directory): build products, owner-routed.
@@ -124,9 +124,9 @@ enum Scope {
     // 4. A feature's declared sources, or anything in its module directories.
     for feature in manifest.features {
       var owned = [feature.swiftSource, feature.kotlinSource]
-      if let module = feature.swiftModule {
-        owned.append("\(swiftRoot)/Sources/\(module)/")
-        owned.append("\(swiftRoot)/Tests/\(module)Tests/")
+      if let module = feature.swiftModule, let root = feature.swiftPackageRelative {
+        owned.append("\(root)/Sources/\(module)/")
+        owned.append("\(root)/Tests/\(module)Tests/")
       }
       if let modulePath = feature.kotlinModulePath {
         owned.append("\(androidRoot)/\(modulePath)/")
@@ -158,12 +158,12 @@ enum Scope {
         notes: ["every declared fixture must be mentioned here, backticked"])
     }
 
-    // 6. Inside the Swift features package, outside any single feature.
-    if path.hasPrefix(swiftRoot + "/") {
+    // 6. Inside a Swift package root, outside any single feature.
+    if let swiftRoot = swiftRoots.first(where: { path.hasPrefix($0 + "/") }) {
       return Verdict(
-        role: "features package (shared/shell code outside a single feature)",
+        role: "Swift package `\(swiftRoot)` (shared/shell code outside a single feature)",
         feature: nil,
-        gates: ["duet verify  (the full Swift lane runs this package's tests)"],
+        gates: ["duet verify  (the Swift lane runs every package root's tests)"],
         notes: ["chain scenarios record via an unscoped `duet record`"])
     }
 

@@ -40,10 +40,14 @@ enum ProtocolLane {
         return 1
       }
     } else {
+      guard let runnerHome = manifest.replayRunnerPackageDir else {
+        print("protocol-run: FAIL — no manifest package root contains Sources/replay-runner")
+        return 1
+      }
       let build = Lanes.finish(
         try Lanes.launch(
           ["swift", "build", "--product", "replay-runner"],
-          cwd: manifest.swiftPackageDir, logName: "replay-runner-build"))
+          cwd: runnerHome, logName: "replay-runner-build"))
       if build.exitCode != 0 {
         let log = (try? String(contentsOf: build.logURL, encoding: .utf8)) ?? ""
         print(log.split(separator: "\n").suffix(20).joined(separator: "\n"))
@@ -51,7 +55,7 @@ enum ProtocolLane {
         return 1
       }
       buildSeconds = build.seconds
-      executable = manifest.swiftPackageDir.appendingPathComponent(".build/debug/replay-runner")
+      executable = runnerHome.appendingPathComponent(".build/debug/replay-runner")
     }
 
     // 2. Spawn + handshake.

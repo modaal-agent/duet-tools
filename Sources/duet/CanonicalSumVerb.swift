@@ -22,19 +22,23 @@ enum CanonicalSumVerb {
   /// source's coder file. Paths in the result are repo-relative.
   static func regenerate(repo: Repo, manifest: Manifest, check: Bool) throws -> Regen {
     var regen = Regen()
-    let sourcesRoot = manifest.swiftPackageDir.appendingPathComponent("Sources")
-    for source in CanonicalSumGen.scan(sourcesRoot: sourcesRoot) {
-      guard let output = try CanonicalSumGen.generate(fromSource: source) else { continue }
-      let existing = (try? String(contentsOf: output.outputURL, encoding: .utf8)) ?? ""
-      let relative = output.outputURL.path.replacingOccurrences(
-        of: repo.root.path + "/", with: "")
-      if existing == output.content {
-        regen.upToDate += 1
-      } else if check {
-        regen.stale.append(relative)
-      } else {
-        try Data(output.content.utf8).write(to: output.outputURL)
-        regen.written.append(relative)
+    // Every package root is scanned — coder-bearing features live in more than
+    // one package since the subtree re-cuts (F5).
+    for packageDir in manifest.swiftPackageDirs {
+      let sourcesRoot = packageDir.appendingPathComponent("Sources")
+      for source in CanonicalSumGen.scan(sourcesRoot: sourcesRoot) {
+        guard let output = try CanonicalSumGen.generate(fromSource: source) else { continue }
+        let existing = (try? String(contentsOf: output.outputURL, encoding: .utf8)) ?? ""
+        let relative = output.outputURL.path.replacingOccurrences(
+          of: repo.root.path + "/", with: "")
+        if existing == output.content {
+          regen.upToDate += 1
+        } else if check {
+          regen.stale.append(relative)
+        } else {
+          try Data(output.content.utf8).write(to: output.outputURL)
+          regen.written.append(relative)
+        }
       }
     }
     return regen

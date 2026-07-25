@@ -49,6 +49,16 @@ struct Feature {
     return parts[index + 1]
   }
 
+  /// The prefix of `swift:` before /Sources/ — the feature's OWN package root,
+  /// repo-relative. Since the first subtree re-cut (F5) features live in more
+  /// than one package (`Subtrees/<Name>` beside the aggregator), so the root is
+  /// per-feature, not per-manifest.
+  var swiftPackageRelative: String? {
+    let parts = swiftSource.split(separator: "/").map(String.init)
+    guard let index = parts.firstIndex(of: "Sources"), index > 0 else { return nil }
+    return parts[..<index].joined(separator: "/")
+  }
+
   /// The feature's test target — the `swift test --filter` scope.
   var swiftTestTarget: String? { swiftModule.map { "\($0)Tests" } }
 
@@ -91,11 +101,29 @@ struct Manifest {
   /// Meta-check verdict from the same lockstep-lint run that produced the plan.
   let lintOK: Bool
   let lintErrors: [String]
-  /// The Swift package root (the prefix of any feature's `swift:` path before
-  /// /Sources/) and the Android build root (the first component of any feature's
-  /// `kotlin:` path) — derived, absolute.
-  let swiftPackageDir: URL
+  /// The Swift package roots (every distinct per-feature `swift:` prefix before
+  /// /Sources/ — more than one since the first subtree re-cut, F5) and the
+  /// Android build root (the first component of any feature's `kotlin:` path) —
+  /// derived, absolute. Sorted by path for stable lane ordering.
+  let swiftPackageDirs: [URL]
   let androidDir: URL
+  /// Repo root the relative paths resolve against (for per-feature lookups).
+  let repoRoot: URL
+
+  /// The package root a feature's own Swift lane runs from.
+  func swiftPackageDir(of feature: Feature) -> URL? {
+    feature.swiftPackageRelative.map { repoRoot.appendingPathComponent($0) }
+  }
+
+  /// The package that owns the `replay-runner` executable product (the protocol
+  /// lane's driver) — probed, because after a re-cut the aggregator hosting it
+  /// is just one root among several.
+  var replayRunnerPackageDir: URL? {
+    swiftPackageDirs.first {
+      FileManager.default.fileExists(
+        atPath: $0.appendingPathComponent("Sources/replay-runner").path)
+    }
+  }
 
   func feature(named name: String) -> Feature? {
     features.first { $0.name == name }
@@ -149,16 +177,10 @@ struct Manifest {
           fixtures: spec["fixtures"] as? [String] ?? [])
       }
       .sorted { $0.name < $1.name }
-    guard
-      let swiftRelative = features.lazy
-        .compactMap({ feature -> String? in
-          let parts = feature.swiftSource.split(separator: "/").map(String.init)
-          guard let index = parts.firstIndex(of: "Sources"), index > 0 else { return nil }
-          return parts[..<index].joined(separator: "/")
-        }).first
-    else {
+    let swiftRelatives = Set(features.compactMap(\.swiftPackageRelative)).sorted()
+    guard !swiftRelatives.isEmpty else {
       throw ManifestError.layoutUnderivable(
-        "no feature `swift:` path contains /Sources/ (needed for the package root)")
+        "no feature `swift:` path contains /Sources/ (needed for the package roots)")
     }
     guard
       let androidRelative = features.lazy
@@ -175,7 +197,8 @@ struct Manifest {
       chains: root["chains"] as? [String] ?? [],
       lintOK: (root["status"] as? String) == "ok",
       lintErrors: root["errors"] as? [String] ?? [],
-      swiftPackageDir: repo.root.appendingPathComponent(swiftRelative),
-      androidDir: repo.root.appendingPathComponent(androidRelative))
+      swiftPackageDirs: swiftRelatives.map(repo.root.appendingPathComponent),
+      androidDir: repo.root.appendingPathComponent(androidRelative),
+      repoRoot: repo.root)
   }
 }

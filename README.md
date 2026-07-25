@@ -32,7 +32,9 @@ swift run duet help
 
 - `duet verify [--feature <name>] [--swift-only|--kotlin-only]` — meta-checks
   (lockstep + fixture symmetry), then both platform lanes in parallel, with the
-  fixture coverage gate.
+  fixture coverage gate. The Swift lane runs one `swift test` per package root
+  (per-feature roots derived from the manifest — multi-package repos with
+  subtree packages are first-class; JSON: `lanes.swift` is an array).
 - `duet record [--feature <name>] [--platform swift|kotlin] [--check]` —
   scenario-driven fixture regeneration through the framework's ONE §6 writer;
   sum-coder regen is folded in; `--check` is the CI drift gate (R10).

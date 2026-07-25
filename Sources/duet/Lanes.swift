@@ -144,17 +144,35 @@ enum Lanes {
     let feature = try options.resolveFeature(in: manifest)
     clearReports(repo)
 
-    var swiftResult: ProcessResult?
+    var swiftResults: [(package: String, result: ProcessResult)] = []
     var kotlinResult: ProcessResult?
-    var swiftLaunch: (Process, URL, Date)?
+    var swiftLaunches: [(package: String, launch: (Process, URL, Date))] = []
     var kotlinLaunch: (Process, URL, Date)?
 
     if !options.kotlinOnly {
-      var arguments = ["swift", "test"]
-      if let target = feature?.swiftTestTarget {
-        arguments += ["--filter", target]
+      // One host lane per package root, all in parallel (F5: subtree re-cuts
+      // spread the features across packages); a scoped run needs only the
+      // feature's own root. Reports land in the shared parity/.runs dir, so the
+      // coverage gate below is package-agnostic.
+      let roots: [URL]
+      if let feature = feature {
+        guard let own = manifest.swiftPackageDir(of: feature) else {
+          print("duet verify: cannot derive the Swift package root for '\(feature.name)'")
+          return 1
+        }
+        roots = [own]
+      } else {
+        roots = manifest.swiftPackageDirs
       }
-      swiftLaunch = try launch(arguments, cwd: manifest.swiftPackageDir, logName: "swift")
+      for root in roots {
+        var arguments = ["swift", "test"]
+        if let target = feature?.swiftTestTarget {
+          arguments += ["--filter", target]
+        }
+        let package = relativePath(root, in: repo)
+        swiftLaunches.append(
+          (package, try launch(arguments, cwd: root, logName: "swift-\(root.lastPathComponent)")))
+      }
     }
     if !options.swiftOnly {
       let task = feature?.gradleTestTask ?? "test"
@@ -169,11 +187,11 @@ enum Lanes {
     // else a stalled lane is an undiagnosable blank screen.
     if !options.json {
       var running: [String] = []
-      if let launch = swiftLaunch { running.append("swift \(launch.1.path)") }
+      for entry in swiftLaunches { running.append("swift[\(entry.package)] \(entry.launch.1.path)") }
       if let launch = kotlinLaunch { running.append("kotlin \(launch.1.path)") }
       print("duet verify: lanes running — logs: \(running.joined(separator: " · "))")
     }
-    if let launch = swiftLaunch { swiftResult = finish(launch) }
+    for entry in swiftLaunches { swiftResults.append((entry.package, finish(entry.launch))) }
     if let launch = kotlinLaunch { kotlinResult = finish(launch) }
 
     let reports = readReports(repo)
@@ -200,14 +218,20 @@ enum Lanes {
     }
 
     let laneFailed =
-      (swiftResult.map { $0.exitCode != 0 } ?? false)
+      swiftResults.contains { $0.result.exitCode != 0 }
       || (kotlinResult.map { $0.exitCode != 0 } ?? false)
       || !missing.isEmpty
 
     if options.json {
       var lanes: [String: Any] = [:]
-      if let result = swiftResult {
-        lanes["swift"] = ["exit": Int(result.exitCode), "seconds": result.seconds, "log": result.logURL.path]
+      if !swiftResults.isEmpty {
+        // One entry per package root (an array since F5's multi-package layout).
+        lanes["swift"] = swiftResults.map { entry in
+          [
+            "package": entry.package, "exit": Int(entry.result.exitCode),
+            "seconds": entry.result.seconds, "log": entry.result.logURL.path,
+          ] as [String: Any]
+        }
       }
       if let result = kotlinResult {
         lanes["kotlin"] = ["exit": Int(result.exitCode), "seconds": result.seconds, "log": result.logURL.path]
@@ -222,13 +246,21 @@ enum Lanes {
       return laneFailed ? 1 : 0
     }
 
-    func laneLine(_ name: String, _ result: ProcessResult?) -> String {
-      guard let result = result else { return "  - \(name) lane skipped" }
-      let mark = result.exitCode == 0 ? "✓" : "✗"
-      return "  \(mark) \(name) lane (\(String(format: "%.1f", result.seconds))s)"
+    if swiftResults.isEmpty {
+      print("  - swift  lane skipped")
+    } else {
+      for entry in swiftResults {
+        let mark = entry.result.exitCode == 0 ? "✓" : "✗"
+        print(
+          "  \(mark) swift  \(entry.package) (\(String(format: "%.1f", entry.result.seconds))s)")
+      }
     }
-    print(laneLine("swift ", swiftResult))
-    print(laneLine("kotlin", kotlinResult))
+    if let result = kotlinResult {
+      let mark = result.exitCode == 0 ? "✓" : "✗"
+      print("  \(mark) kotlin lane (\(String(format: "%.1f", result.seconds))s)")
+    } else {
+      print("  - kotlin lane skipped")
+    }
 
     let passedCount = reports.count - failed.count
     print("duet verify: \(passedCount)/\(reports.count) fixture report(s) passed")
@@ -256,7 +288,8 @@ enum Lanes {
     // A red lane with zero failed fixture reports = infrastructure failure (compile
     // error, crashed suite) — surface the log tail since no report explains it.
     if laneFailed && failed.isEmpty {
-      for result in [swiftResult, kotlinResult].compactMap({ $0 }) where result.exitCode != 0 {
+      let redResults = swiftResults.map(\.result) + [kotlinResult].compactMap { $0 }
+      for result in redResults where result.exitCode != 0 {
         let log = (try? String(contentsOf: result.logURL, encoding: .utf8)) ?? ""
         print("--- log tail (\(result.logURL.path)) ---")
         print(log.split(separator: "\n").suffix(30).joined(separator: "\n"))
@@ -308,31 +341,52 @@ enum Lanes {
     }
     // Stale artifacts from an earlier record pass must not re-materialize.
     RecordArtifacts.clear(repo)
-    let result: ProcessResult
+    var results: [ProcessResult] = []
     if options.platform == "kotlin" {
       let task = feature?.gradleTestTask ?? "test"
-      result = finish(
-        try launch(
-          ["./gradlew", task, "--rerun", "-PregenFixtures=1", "--console=plain"],
-          cwd: manifest.androidDir, extraEnv: gradleEnvironment(), logName: "record"))
-    } else {
+      results.append(
+        finish(
+          try launch(
+            ["./gradlew", task, "--rerun", "-PregenFixtures=1", "--console=plain"],
+            cwd: manifest.androidDir, extraEnv: gradleEnvironment(), logName: "record")))
+    } else if let feature = feature {
+      guard let own = manifest.swiftPackageDir(of: feature) else {
+        print("duet record: cannot derive the Swift package root for '\(feature.name)'")
+        return 1
+      }
       var arguments = ["swift", "test"]
-      if let scenario = feature?.scenario {
+      if let scenario = feature.scenario {
         let className = URL(fileURLWithPath: scenario)
           .deletingPathExtension().lastPathComponent
         arguments += ["--filter", className]
       }
-      result = finish(
+      results.append(
+        finish(
+          try launch(
+            arguments, cwd: own, extraEnv: ["REGEN_FIXTURES": "1"], logName: "record")))
+    } else {
+      // Unscoped: every package root records its scenarios, in parallel — each
+      // feature's writer touches only its own fixture files, chains record from
+      // the aggregator, so concurrent lanes never contend on an output.
+      let launches = try manifest.swiftPackageDirs.map { root in
         try launch(
-          arguments, cwd: manifest.swiftPackageDir,
-          extraEnv: ["REGEN_FIXTURES": "1"], logName: "record"))
+          ["swift", "test"], cwd: root, extraEnv: ["REGEN_FIXTURES": "1"],
+          logName: "record-\(root.lastPathComponent)")
+      }
+      results = launches.map(finish)
     }
-    if result.exitCode != 0 {
-      let log = (try? String(contentsOf: result.logURL, encoding: .utf8)) ?? ""
+    if results.contains(where: { $0.exitCode != 0 }) {
+      var logs: [String] = []
+      for result in results where result.exitCode != 0 {
+        let log = (try? String(contentsOf: result.logURL, encoding: .utf8)) ?? ""
+        logs.append(log)
+        if !options.json {
+          print(log.split(separator: "\n").suffix(30).joined(separator: "\n"))
+        }
+      }
       if options.json {
-        emitJSON(["status": "failed", "log": log])
+        emitJSON(["status": "failed", "log": logs.joined(separator: "\n")])
       } else {
-        print(log.split(separator: "\n").suffix(30).joined(separator: "\n"))
         print("duet record: FAIL — fixtures not (fully) regenerated")
       }
       return 1
@@ -369,6 +423,13 @@ enum Lanes {
       }
     }
     return 0
+  }
+
+  /// Repo-root-relative rendering of an absolute path (for lane labels).
+  static func relativePath(_ url: URL, in repo: Repo) -> String {
+    let rootPath = repo.root.standardizedFileURL.path
+    let path = url.standardizedFileURL.path
+    return path.hasPrefix(rootPath + "/") ? String(path.dropFirst(rootPath.count + 1)) : path
   }
 
   private static func fixtureDigests(_ repo: Repo) -> [String: Int] {

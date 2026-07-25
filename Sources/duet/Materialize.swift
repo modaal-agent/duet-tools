@@ -104,12 +104,14 @@ enum Materialize {
     let file: URL
     let runHint: String
     if platform == "swift" {
-      guard let module = feature.swiftModule, let testTarget = feature.swiftTestTarget else {
+      guard let module = feature.swiftModule, let testTarget = feature.swiftTestTarget,
+        let packageDir = manifest.swiftPackageDir(of: feature)
+      else {
         print("duet materialize: cannot derive Swift module for '\(featureName)'")
         return 1
       }
       let className = "Materialized_\(sanitize(fixture))_step\(step)_Tests"
-      file = manifest.swiftPackageDir
+      file = packageDir
         .appendingPathComponent("Tests/\(testTarget)/\(className).swift")
       try swiftTest(
         className: className, module: module, feature: feature, fixture: fixture,
@@ -117,7 +119,7 @@ enum Materialize {
         action: action, expectedState: expectedState, expectedEffects: expectedEffects
       ).write(to: file, atomically: true, encoding: .utf8)
       runHint =
-        "cd \(manifest.swiftPackageDir.path) && swift test --filter \(className)"
+        "cd \(packageDir.path) && swift test --filter \(className)"
     } else {
       guard let task = feature.gradleTestTask, let modulePath = feature.kotlinModulePath,
         let package = feature.kotlinPackage
@@ -292,10 +294,9 @@ enum Materialize {
   /// Deletes every generated `Materialized_*` test on both platforms.
   static func clean(repo: Repo, manifest: Manifest) -> Int {
     var removed = 0
-    let roots = [
-      manifest.swiftPackageDir.appendingPathComponent("Tests"),
-      manifest.androidDir,
-    ]
+    let roots =
+      manifest.swiftPackageDirs.map { $0.appendingPathComponent("Tests") }
+      + [manifest.androidDir]
     for root in roots {
       guard
         let enumerator = FileManager.default.enumerator(
