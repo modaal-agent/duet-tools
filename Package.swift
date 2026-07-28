@@ -28,9 +28,11 @@ let package = Package(
     .library(name: "CanonicalSumEmission", targets: ["CanonicalSumEmission"]),
   ],
   dependencies: [
-    // Pre-publication: the sibling checkout. Published form:
-    // .package(url: "https://github.com/modaal-agent/duet.git", from: …)
-    .package(path: "../modaal-agent-duet"),
+    // The published framework, pinned EXACTLY: the CLI links DuetReplay — the
+    // byte-gate writer — so the toolchain rides a known framework tag, and
+    // pre-1.0 minors are breaking by family convention (upgrades are
+    // deliberate re-pin commits, never floating ranges).
+    .package(url: "https://github.com/modaal-agent/duet.git", exact: "0.1.0"),
     .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.0"..<"700.0.0"),
   ],
   targets: [
@@ -58,7 +60,7 @@ let package = Package(
       name: "DuetCLI",
       dependencies: [
         .target(name: "CanonicalSumGen"),
-        .product(name: "DuetReplay", package: "modaal-agent-duet"),
+        .product(name: "DuetReplay", package: "duet"),
       ],
       path: "Sources/duet"
     ),

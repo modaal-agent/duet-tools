@@ -1,6 +1,15 @@
 {
-  "originHash" : "5efff8cb9d0f339d1781d993643b0bb0c679ba8d0857900f5e045070645e4404",
+  "originHash" : "0c84af99b0e6c4508c8f19f7ad9ca03bb90e142a76a91efcb2c4f83f4cd67a6b",
   "pins" : [
+    {
+      "identity" : "duet",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/modaal-agent/duet.git",
+      "state" : {
+        "revision" : "2b6d9ef3040e56858fcc1c9c09c0cabd5203ff97",
+        "version" : "0.1.0"
+      }
+    },
     {
       "identity" : "swift-syntax",
       "kind" : "remoteSourceControl",
