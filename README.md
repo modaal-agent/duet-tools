@@ -8,7 +8,7 @@ verification, scenario-driven recording, the replay-protocol lane, and the
 Swift ceremony killer's codegen verb.
 
 The CI matrix (each job writes its toolchain and verdict to the run's job
-summary; both lanes build against the sibling `duet` checkout):
+summary; both lanes resolve `duet` from its published tag):
 
 | lane | toolchain | proves |
 | --- | --- | --- |
