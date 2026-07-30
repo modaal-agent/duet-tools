@@ -94,7 +94,7 @@ struct Feature {
     }
   }
 
-  /// Package of the Kotlin sources (`…/kotlin/com/wikimemory/x/File.kt` → com.wikimemory.x).
+  /// Package of the Kotlin sources (`…/kotlin/com/example/x/File.kt` → com.example.x).
   var kotlinPackage: String? {
     let parts = kotlinSource.split(separator: "/").map(String.init)
     guard let index = parts.firstIndex(of: "kotlin"), index + 1 < parts.count - 1 else {
