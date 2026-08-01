@@ -81,8 +81,10 @@ let usage = """
 
   usage:
     duet verify [--feature <name>] [--swift-only|--kotlin-only] [--json]
-        meta-checks (lockstep + fixture symmetry), then both platform lanes in
-        parallel; failures render with step label, JSON path, and scenario line.
+        meta-checks (lockstep + fixture symmetry + the host-lane rule: a gated
+        unit resolves the Duet family only, on both build systems), then both
+        platform lanes in parallel; failures render with step label, JSON
+        path, and scenario line.
     duet record [--feature <name>] [--platform swift|kotlin] [--check] [--json]
         recompile fixtures from scenarios (scoped when --feature given), then a
         review summary of what changed. Fixtures are build products — review the

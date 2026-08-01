@@ -140,6 +140,21 @@ enum Lanes {
       }
       return 1
     }
+    // The host-lane rule, toolchain-owned (HostLane.swift): what a gated unit
+    // RESOLVES, on both build systems — a lane result over a leaky graph is
+    // sitting on toolchain surface the gate does not test, so this stops the
+    // run exactly like a lint failure.
+    let hostLaneErrors = HostLane.check(repo: repo, manifest: manifest)
+    if !hostLaneErrors.isEmpty {
+      if options.json {
+        emitJSON(["status": "failed", "phase": "meta", "errors": hostLaneErrors])
+      } else {
+        print("host-lane check: FAIL")
+        for error in hostLaneErrors { print("  ✗ \(error)") }
+        print("duet verify: FAIL (meta-checks) — not running platform lanes")
+      }
+      return 1
+    }
     if !options.json { print("duet verify: meta-checks ok") }
     let feature = try options.resolveFeature(in: manifest)
     clearReports(repo)

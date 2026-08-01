@@ -31,10 +31,16 @@ swift run duet help
 ```
 
 - `duet verify [--feature <name>] [--swift-only|--kotlin-only]` — meta-checks
-  (lockstep + fixture symmetry), then both platform lanes in parallel, with the
-  fixture coverage gate. The Swift lane runs one `swift test` per package root
-  (per-feature roots derived from the manifest — multi-package repos with
-  subtree packages are first-class; JSON: `lanes.swift` is an array).
+  (lockstep + fixture symmetry + the host-lane rule), then both platform lanes
+  in parallel, with the fixture coverage gate. The Swift lane runs one
+  `swift test` per package root (per-feature roots derived from the manifest —
+  multi-package repos with subtree packages are first-class; JSON:
+  `lanes.swift` is an array). The host-lane rule (`HostLane.swift`,
+  toolchain-owned so no adopter copies a lint): a gated unit resolves the Duet
+  family only — Swift host-root lockfiles pin family identities only, gated
+  Kotlin modules declare the family plugin/dependency allowlist only
+  (recursing `project(...)` edges), and kernel-shape declarations (reducers,
+  State/Action/EffectPayload) live in gated packages only.
 - `duet record [--feature <name>] [--platform swift|kotlin] [--check]` —
   scenario-driven fixture regeneration through the framework's ONE §6 writer;
   sum-coder regen is folded in; `--check` is the CI drift gate.
