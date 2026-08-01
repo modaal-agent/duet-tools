@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.1] — 2026-08-02
+
+Gate semantics unchanged — a patch release.
+
+### Fixed — a red lane with no fixture failures now names what failed
+
+When a lane fails with zero failed fixture reports (a compile error, a crashed
+suite, a red non-fixture test), `verify` used to print only a fixed 30-line
+log tail — which can scroll past the one line naming the failing test, and
+did, in the first adopter CI run under the CLI shape: the output showed
+"Executed 97 tests, with 1 failure" with the failing row's name
+unrecoverable. `verify` now mines the red lane's log for failure-shaped lines
+and prints them above the tail: XCTest case + assertion lines, swift-testing
+issues, Swift traps, swiftc/kotlinc compile errors, and Gradle test-row /
+task / build failures, capped at 40 with an elision count (a looping test's
+repeated assertion details fill the cap — every such line still carries the
+test's name, and the count points at the log). `--json` lane entries (and so
+the MCP verbs' reports) carry the same lines as `failureLines`, present only
+on a red lane.
+
 ## [0.2.0] — 2026-08-01
 
 **Breaking per family convention** (pre-1.0 minors are the breaking lane): the

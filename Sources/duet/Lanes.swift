@@ -122,6 +122,40 @@ enum Lanes {
     reports.filter { ($0["status"] as? String) == "failed" }
   }
 
+  /// Failure lines mined from a red lane's log — the no-fixture-report path's
+  /// pointer to WHAT failed, not just where the log is. A fixed tail can scroll
+  /// past the one line that names the failing test (it did, in the first adopter
+  /// CI run under this shape: "97 tests, 1 failure" with the row's name
+  /// unrecoverable from the output). Matched per line, one shape per toolchain
+  /// the lanes run:
+  ///   XCTest row:      Test Case '-[Suite test]' failed (0.019 seconds).
+  ///   XCTest detail /
+  ///   swiftc error:    /path/File.swift:42: error: …
+  ///   swift-testing:   ✘ Test "x" recorded an issue …
+  ///   Swift trap:      Fatal error: …
+  ///   Gradle test row: com.example.FooTest > bar FAILED
+  ///   Gradle task /
+  ///   build:           > Task :x:test FAILED · FAILURE: Build failed · BUILD FAILED in …
+  ///   kotlinc:         e: file:///…/Foo.kt:12:3 …
+  /// Suite-level "failed at" lines are deliberately not matched — the case line
+  /// names the row; the suite line is noise. Capped: this is a pointer into the
+  /// log, not a replacement for it.
+  static func failureLines(inLogAt url: URL, cap: Int = 40) -> [String] {
+    guard let log = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+    let markers = ["' failed (", ": error:", "✘", "Fatal error", " FAILED", "FAILURE:"]
+    var found: [String] = []
+    var elided = 0
+    for line in log.split(separator: "\n") {
+      let text = String(line)
+      guard markers.contains(where: { text.contains($0) }) || text.hasPrefix("e: ") else {
+        continue
+      }
+      if found.count < cap { found.append(text) } else { elided += 1 }
+    }
+    if elided > 0 { found.append("… +\(elided) more failure line(s) — see the log") }
+    return found
+  }
+
   // MARK: - Commands
 
   /// `duet verify [--feature X] [--swift-only|--kotlin-only] [--json]`
@@ -246,14 +280,24 @@ enum Lanes {
       if !swiftResults.isEmpty {
         // One entry per package root (an array since F5's multi-package layout).
         lanes["swift"] = swiftResults.map { entry in
-          [
+          var lane: [String: Any] = [
             "package": entry.package, "exit": Int(entry.result.exitCode),
             "seconds": entry.result.seconds, "log": entry.result.logURL.path,
-          ] as [String: Any]
+          ]
+          if entry.result.exitCode != 0 {
+            lane["failureLines"] = failureLines(inLogAt: entry.result.logURL)
+          }
+          return lane
         }
       }
       if let result = kotlinResult {
-        lanes["kotlin"] = ["exit": Int(result.exitCode), "seconds": result.seconds, "log": result.logURL.path]
+        var lane: [String: Any] = [
+          "exit": Int(result.exitCode), "seconds": result.seconds, "log": result.logURL.path,
+        ]
+        if result.exitCode != 0 {
+          lane["failureLines"] = failureLines(inLogAt: result.logURL)
+        }
+        lanes["kotlin"] = lane
       }
       emitJSON([
         "status": laneFailed ? "failed" : "passed",
@@ -305,10 +349,17 @@ enum Lanes {
       }
     }
     // A red lane with zero failed fixture reports = infrastructure failure (compile
-    // error, crashed suite) — surface the log tail since no report explains it.
+    // error, crashed suite, a red non-fixture test) — no report explains it, so
+    // mine the log: the failure lines first (they name the row), then the tail
+    // for surrounding context.
     if laneFailed && failed.isEmpty {
       let redResults = swiftResults.map(\.result) + [kotlinResult].compactMap { $0 }
       for result in redResults where result.exitCode != 0 {
+        let mined = failureLines(inLogAt: result.logURL)
+        if !mined.isEmpty {
+          print("--- failure lines (\(result.logURL.path)) ---")
+          for line in mined { print(line) }
+        }
         let log = (try? String(contentsOf: result.logURL, encoding: .utf8)) ?? ""
         print("--- log tail (\(result.logURL.path)) ---")
         print(log.split(separator: "\n").suffix(30).joined(separator: "\n"))
