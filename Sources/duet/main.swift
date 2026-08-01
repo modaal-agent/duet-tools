@@ -67,6 +67,8 @@ struct Options {
         options.check = true
       case "--help", "-h":
         options.command = "help"
+      case "--version":
+        options.command = "version"
       default:
         if argument.hasPrefix("-") { return nil }
         options.target = argument
@@ -121,9 +123,16 @@ let usage = """
         duet_record, duet_explain, duet_materialize, duet_scope) — one
         mcpServers entry gives any agent harness the toolchain; tool results
         are the verbs' --json reports. Launch with cwd inside the repo.
+    duet version
+        print the toolchain version (matches the release tag), so gate
+        receipts can record which toolchain ran. Works outside a repo.
 
   Run from anywhere inside the repo (root is found via parity/fixtures).
   """
+
+/// Bumped with each release tag — the tag is the version of record (pre-1.0
+/// minors are breaking by family convention: a new or changed gate is a minor).
+let duetToolsVersion = "0.2.0"
 
 guard let options = Options.parse(CommandLine.arguments), let command = options.command
 else {
@@ -132,6 +141,11 @@ else {
 }
 if command == "help" {
   print(usage)
+  exit(0)
+}
+// Version resolves before repo discovery — receipts ask it from anywhere.
+if command == "version" {
+  print("duet \(duetToolsVersion)")
   exit(0)
 }
 guard let repo = Repo.discover() else {
