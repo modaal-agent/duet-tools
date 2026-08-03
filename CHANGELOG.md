@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 — 2026-08-03
+
+Pre-1.0 minor: a changed gate (the family's breaking lane).
+
+### Changed
+
+- **`verify`'s chain coverage follows participants.** A chain fixture expects
+  a Swift-lane report only while EVERY participant feature (the fixture's own
+  `initialStates` keys — the spec↔fixture meta-check's derivation) still has a
+  `swift:` twin. The aggregator's chain scenario cannot compile a retired
+  twin's reducer, so its authoring retires with the twin and the committed
+  fixture is frozen bytes — the Kotlin lane's chain replays and the protocol
+  lane keep gating it — until the chain corpus itself ports (spec-26 S9).
+  Falsifier pair on the adopter's first retired-participant chain
+  (`chain-invitecode-finish`): 0.3.0 red (`missing … [swift]`) vs 0.4.0 green;
+  negative control: an all-twin chain's dropped report still fails.
+  (`record --check` needs no twin change: an unrecorded chain's committed file
+  is untouched, so the digest comparison is naturally silent about it.)
+
 ## [0.3.0] — 2026-08-03
 
 **Breaking per family convention** (pre-1.0 minors are the breaking lane):

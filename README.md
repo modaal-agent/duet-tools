@@ -34,7 +34,10 @@ swift run duet help
   (lockstep + fixture symmetry + the host-lane rule + the spec↔fixture
   cross-reference when `parity/feature-specs/` exists: one-pager per feature,
   every declared fixture mentioned, chain participation claims true), then
-  both platform lanes in parallel, with the fixture coverage gate. The Swift lane runs one
+  both platform lanes in parallel, with the fixture coverage gate
+  (mid-migration coexistence: a feature with no `swift:` twin is expected
+  kotlin-only, and a CHAIN expects a Swift row only while every participant —
+  its fixture's `initialStates` keys — still has a twin). The Swift lane runs one
   `swift test` per package root (per-feature roots derived from the manifest —
   multi-package repos with subtree packages are first-class; JSON:
   `lanes.swift` is an array). The host-lane rule (`HostLane.swift`,

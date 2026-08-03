@@ -288,11 +288,24 @@ enum Lanes {
           continue
         }
         // Mid-migration coexistence: a fixture owned by a feature with no
-        // `swift:` twin reports from the Kotlin lane only. Chains keep the
-        // manifest-level rule above — they ride the aggregator's Swift lane
-        // until the chain corpus itself ports.
+        // `swift:` twin reports from the Kotlin lane only.
         if platform == "swift",
           let owner = manifest.feature(forFixture: fixture), owner.swiftSource.isEmpty
+        {
+          continue
+        }
+        // Chain rows follow their participants (0.4.0): a chain expects a
+        // Swift-lane row only while EVERY participant feature still has a
+        // `swift:` twin — the aggregator's chain scenario cannot compile a
+        // retired twin's reducer, so its authoring retires with the twin and
+        // the committed fixture is frozen bytes (Kotlin replay + the protocol
+        // lane keep gating it) until the chain corpus itself ports. The
+        // participant set is the fixture's own `initialStates` keys — the
+        // same derivation the spec↔fixture meta-check uses.
+        if platform == "swift", manifest.chains.contains(fixture),
+          chainParticipants(of: fixture, in: repo).contains(where: { participant in
+            manifest.features.first { $0.name == participant }?.swiftSource.isEmpty == true
+          })
         {
           continue
         }
@@ -604,6 +617,20 @@ enum Lanes {
   struct FixtureDigest {
     let whole: Data
     let behavioral: Data
+  }
+
+  /// The features a chain fixture spans — its `initialStates` keys (one store
+  /// per participant), the same derivation the spec↔fixture meta-check uses.
+  /// Unreadable fixture → empty set, which keeps the strict default (the
+  /// swift-lane row stays expected).
+  private static func chainParticipants(of chain: String, in repo: Repo) -> Set<String> {
+    guard
+      let data = try? Data(
+        contentsOf: repo.fixturesDir.appendingPathComponent("\(chain).fixture.json")),
+      let document = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let initialStates = document["initialStates"] as? [String: Any]
+    else { return [] }
+    return Set(initialStates.keys)
   }
 
   private static func fixtureDigests(_ repo: Repo) -> [String: FixtureDigest] {
