@@ -21,41 +21,87 @@ enum ProtocolLane {
     let total = Date()
     let manifest = try Manifest.load(repo: repo)
     if !manifest.lintOK {
-      print("lockstep-lint: FAIL — not driving the protocol lane")
-      for error in manifest.lintErrors { print("  ✗ \(error)") }
+      if options.json {
+        Lanes.emitJSON(["status": "failed", "phase": "meta", "errors": manifest.lintErrors])
+      } else {
+        print("lockstep-lint: FAIL — not driving the protocol lane")
+        for error in manifest.lintErrors { print("  ✗ \(error)") }
+      }
+      return 1
+    }
+
+    func fail(_ lines: [String], log: URL? = nil) -> Int32 {
+      if options.json {
+        var report: [String: Any] = ["status": "failed", "error": lines.joined(separator: "\n")]
+        if let log { report["log"] = log.path }
+        Lanes.emitJSON(report)
+      } else {
+        if let log, let text = try? String(contentsOf: log, encoding: .utf8) {
+          print(text.split(separator: "\n").suffix(20).joined(separator: "\n"))
+        }
+        for line in lines { print(line) }
+      }
       return 1
     }
 
     // 1. Ensure the runner is current (the lane's fixed cost — measured, not
     // hidden). `--runner <path>` overrides with a prebuilt executable — the
     // protocol is flavor-neutral (contracts/replay-protocol-v1.md), so any
-    // conforming runner (e.g. the Kotlin lane's `:replay-runner:installDist`
-    // output) drives the same gate; the caller owns keeping it current.
+    // conforming runner drives the same gate. Without an override the CLI
+    // builds a flavor's own runner itself: the Swift `replay-runner` product
+    // when the manifest has a package for it, else the Kotlin lane's
+    // `:replay-runner:installDist` (the single-source flavor's conforming
+    // runner — a KMP repo has no Swift runner package to probe, and the
+    // caller shouldn't have to hand-build installDist). `--platform` forces
+    // the choice on repos that carry both.
     var buildSeconds = 0.0
     let executable: URL
     if let override = options.runner {
       executable = URL(fileURLWithPath: override)
       guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-        print("protocol-run: FAIL — --runner '\(override)' is not an executable")
-        return 1
+        return fail(["protocol-run: FAIL — --runner '\(override)' is not an executable"])
+      }
+    } else if options.platform == "kotlin"
+      || (options.platform == nil && manifest.replayRunnerPackageDir == nil)
+    {
+      let module = manifest.androidDir.appendingPathComponent("replay-runner")
+      guard FileManager.default.fileExists(atPath: module.path) else {
+        return fail([
+          "protocol-run: FAIL — no `replay-runner` Gradle module at \(module.path)",
+          "  (the Kotlin lane's conforming runner; --runner <path> drives any prebuilt one)",
+        ])
+      }
+      let build = Lanes.finish(
+        try Lanes.launch(
+          ["./gradlew", ":replay-runner:installDist", "--console=plain"],
+          cwd: manifest.androidDir, extraEnv: Lanes.gradleEnvironment(),
+          logName: "replay-runner-installdist"))
+      if build.exitCode != 0 {
+        return fail(
+          ["protocol-run: FAIL — :replay-runner:installDist did not build"], log: build.logURL)
+      }
+      buildSeconds = build.seconds
+      executable = module.appendingPathComponent("build/install/replay-runner/bin/replay-runner")
+      guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+        return fail([
+          "protocol-run: FAIL — installDist produced no launcher at \(executable.path)"
+        ])
       }
     } else {
       guard let runnerHome = manifest.replayRunnerPackageDir else {
-        print("protocol-run: FAIL — no manifest package root contains Sources/replay-runner")
-        print("  declare one (`replayRunner: <package dir>` in parity/manifest.yaml) or pass")
-        print("  a prebuilt conforming runner: --runner <path> (e.g. the Kotlin lane's")
-        print("  `:replay-runner:installDist` launcher)")
-        return 1
+        return fail([
+          "protocol-run: FAIL — no manifest package root contains Sources/replay-runner",
+          "  declare one (`replayRunner: <package dir>` in parity/manifest.yaml) or pass",
+          "  a prebuilt conforming runner: --runner <path> (e.g. the Kotlin lane's",
+          "  `:replay-runner:installDist` launcher)",
+        ])
       }
       let build = Lanes.finish(
         try Lanes.launch(
           ["swift", "build", "--product", "replay-runner"],
           cwd: runnerHome, logName: "replay-runner-build"))
       if build.exitCode != 0 {
-        let log = (try? String(contentsOf: build.logURL, encoding: .utf8)) ?? ""
-        print(log.split(separator: "\n").suffix(20).joined(separator: "\n"))
-        print("protocol-run: FAIL — replay-runner did not build")
-        return 1
+        return fail(["protocol-run: FAIL — replay-runner did not build"], log: build.logURL)
       }
       buildSeconds = build.seconds
       executable = runnerHome.appendingPathComponent(".build/debug/replay-runner")
@@ -68,8 +114,7 @@ enum ProtocolLane {
       (handshake["protocol"] as? String) == "duet-replay",
       let version = handshake["version"] as? Int
     else {
-      print("protocol-run: FAIL — no valid handshake from the replay runner")
-      return 1
+      return fail(["protocol-run: FAIL — no valid handshake from the replay runner"])
     }
     let advertised = Set(handshake["features"] as? [String] ?? [])
     let spawnSeconds = Date().timeIntervalSince(spawn)
@@ -192,6 +237,24 @@ enum ProtocolLane {
     let replaySeconds = Date().timeIntervalSince(replayStart)
 
     // 4. Report.
+    let elapsed = Date().timeIntervalSince(total)
+    if options.json {
+      Lanes.emitJSON([
+        "status": failures.isEmpty ? "passed" : "failed",
+        "runner": executable.path,
+        "protocolVersion": version,
+        "advertised": advertised.sorted(),
+        "leafFixtures": fixturesRun,
+        "chainFixtures": chainsRun,
+        "steps": stepsRun,
+        "failures": failures,
+        "runnerBuildSeconds": buildSeconds,
+        "spawnSeconds": spawnSeconds,
+        "replaySeconds": replaySeconds,
+        "elapsedSeconds": elapsed,
+      ])
+      return failures.isEmpty ? 0 : 1
+    }
     print("protocol-run: duet-replay v\(version), \(advertised.count) feature(s) advertised")
     print(
       "  runner build \(String(format: "%.2f", buildSeconds))s · spawn+handshake "
@@ -201,7 +264,6 @@ enum ProtocolLane {
       "  \(fixturesRun) leaf + \(chainsRun) chain fixture(s), \(stepsRun) step(s) "
         + "byte-gated CLI-side (hop-derivation authoring checks stay in-process)")
     for failure in failures { print("  ✗ \(failure)") }
-    let elapsed = Date().timeIntervalSince(total)
     print(
       failures.isEmpty
         ? "protocol-run: PASS in \(String(format: "%.1f", elapsed))s"

@@ -31,8 +31,10 @@ swift run duet help
 ```
 
 - `duet verify [--feature <name>] [--swift-only|--kotlin-only]` — meta-checks
-  (lockstep + fixture symmetry + the host-lane rule), then both platform lanes
-  in parallel, with the fixture coverage gate. The Swift lane runs one
+  (lockstep + fixture symmetry + the host-lane rule + the spec↔fixture
+  cross-reference when `parity/feature-specs/` exists: one-pager per feature,
+  every declared fixture mentioned, chain participation claims true), then
+  both platform lanes in parallel, with the fixture coverage gate. The Swift lane runs one
   `swift test` per package root (per-feature roots derived from the manifest —
   multi-package repos with subtree packages are first-class; JSON:
   `lanes.swift` is an array). The host-lane rule (`HostLane.swift`,
@@ -43,11 +45,17 @@ swift run duet help
   State/Action/EffectPayload) live in gated packages only.
 - `duet record [--feature <name>] [--platform swift|kotlin] [--check]` —
   scenario-driven fixture regeneration through the framework's ONE §6 writer;
-  sum-coder regen is folded in; `--check` is the CI drift gate.
+  sum-coder regen is folded in; `--check` is the CI drift gate: red on
+  behavioral drift (the replay protocol's field set), green through
+  metadata-only churn (scenario.source, step label/line — the admissible
+  diff of a scenario-language port).
 - `duet explain` / `duet materialize <fixture>#<step> --platform <p>` — render
   the last run's failures; emit a standalone failing unit test for one step.
-- `duet protocol-run [--runner <path>]` — byte-gate the full corpus through any
-  conforming replay-protocol runner (flavor-neutral).
+- `duet protocol-run [--platform swift|kotlin] [--runner <path>]` — byte-gate
+  the full corpus through any conforming replay-protocol runner
+  (flavor-neutral). Builds the repo's own runner itself: the Swift
+  `replay-runner` product when the manifest has one, else the Kotlin lane's
+  `:replay-runner:installDist`; `--platform` forces the choice.
 - `duet canonical-sum [--check]` — (re)generate the committed sum coders for
   every `CanonicalSumCodable` enum (normally implicit via `record`).
 - `duet write-fixtures` — materialize pending record artifacts into §6 fixture
@@ -57,9 +65,10 @@ swift run duet help
   manifest, no configuration).
 - `duet mcp` — the same verification verbs as a stdio MCP server
   (`duet_verify`, `duet_record`, `duet_explain`, `duet_materialize`,
-  `duet_scope`); tool results are the verbs' `--json` reports. The authoring
-  verbs (scaffold/convert/audit) are not served — they are not part of the
-  open toolchain.
+  `duet_protocol_run`, `duet_scope`); tool results are the verbs' `--json`
+  reports, each stamped with the toolchain version that produced it. The
+  authoring verbs (scaffold/convert/audit) are not served — they are not part
+  of the open toolchain.
 
 Run from anywhere inside an adopter repo — the root is discovered via
 `parity/fixtures`, and the platform roots are derived from the repo's own

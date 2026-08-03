@@ -139,12 +139,19 @@ struct Manifest {
     feature.swiftPackageRelative.map { repoRoot.appendingPathComponent($0) }
   }
 
-  /// The unscoped Gradle lane task: `test` for JVM modules; `jvmTest` when every
-  /// feature is KMP-shaped (a KMP module has no aggregate `test` task — running
-  /// `test` there silently replays nothing, which the coverage gate would catch
-  /// but record would not).
-  var unscopedGradleTask: String {
-    !features.isEmpty && features.allSatisfy(\.isKmpSourceSet) ? "jvmTest" : "test"
+  /// The unscoped Gradle lane tasks. An unqualified task name runs in every
+  /// project that HAS it — Gradle matches per module — so the manifest's
+  /// source-set knowledge selects the SET of names: `test` for JVM modules,
+  /// `jvmTest` for KMP modules (which have no aggregate `test` task — running
+  /// `test` there silently replays nothing), and BOTH on a mixed tree. The
+  /// earlier all-or-nothing pick (`jvmTest` only when EVERY feature was
+  /// KMP-shaped) silently skipped every migrated module for as long as one
+  /// unmigrated twin remained — the whole span of a per-feature migration.
+  var unscopedGradleTasks: [String] {
+    let kmp = features.contains(where: \.isKmpSourceSet)
+    let jvm = features.contains { !$0.isKmpSourceSet }
+    if kmp && jvm { return ["test", "jvmTest"] }
+    return kmp ? ["jvmTest"] : ["test"]
   }
 
   /// The package that owns the `replay-runner` executable product (the protocol

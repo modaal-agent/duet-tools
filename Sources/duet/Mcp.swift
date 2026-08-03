@@ -75,8 +75,10 @@ enum Mcp {
         Loop: duet_verify → on failure duet_explain (structured failure report) → \
         duet_materialize for a standalone failing test of one step. Behavior \
         changes: author the scenario, run duet_record, then review the fixture \
-        diff like code. duet_record with check=true is the CI drift gate. \
-        duet_scope reports which gates govern a file.
+        diff like code. duet_record with check=true is the CI drift gate (red on \
+        behavioral drift; metadata-only churn passes). duet_protocol_run \
+        byte-gates the corpus through a flavor's replay runner. duet_scope \
+        reports which gates govern a file.
         """,
     ]
   }
@@ -98,13 +100,13 @@ enum Mcp {
       ],
       [
         "name": "duet_record",
-        "description": "Recompile fixtures from their scenarios (fixtures are build products — review the resulting git diff like code). `check: true` = CI drift gate: fails if any committed fixture or generated coder is stale, writing nothing.",
+        "description": "Recompile fixtures from their scenarios (fixtures are build products — review the resulting git diff like code). `check: true` = CI drift gate: fails on BEHAVIORAL drift (the replay protocol's field set) or a stale generated coder; metadata-only churn (scenario.source, step label/line — a scenario port's admissible diff) passes, reported as `metadataOnly`.",
         "inputSchema": [
           "type": "object",
           "properties": [
             "feature": ["type": "string", "description": "feature name (omit = everything)"],
             "platform": ["type": "string", "enum": ["swift", "kotlin"], "description": "record through one platform's runner (default swift)"],
-            "check": ["type": "boolean", "description": "drift gate only — no writes"],
+            "check": ["type": "boolean", "description": "drift gate — red on behavioral drift only"],
           ] as [String: Any],
         ] as [String: Any],
       ],
@@ -123,6 +125,17 @@ enum Mcp {
             "platform": ["type": "string", "enum": ["swift", "kotlin"]],
           ] as [String: Any],
           "required": ["target", "platform"],
+        ] as [String: Any],
+      ],
+      [
+        "name": "duet_protocol_run",
+        "description": "Byte-gate the FULL corpus (leaves and chains) through a replay-protocol runner subprocess — the flavor-neutral lane: the runner exposes only decode→reduce→encode, and the CLI drives fixtures and compares bytes. Default: build+drive the repo's own runner (the Swift replay-runner product when the manifest has one, else the Kotlin lane's :replay-runner:installDist); `platform` forces a flavor's runner on repos carrying both, `runner` a prebuilt executable path.",
+        "inputSchema": [
+          "type": "object",
+          "properties": [
+            "platform": ["type": "string", "enum": ["swift", "kotlin"], "description": "build+drive this flavor's own runner"],
+            "runner": ["type": "string", "description": "path to a prebuilt conforming runner (overrides platform)"],
+          ] as [String: Any],
         ] as [String: Any],
       ],
       [
@@ -168,6 +181,16 @@ enum Mcp {
         return ([], "duet_materialize needs `target` (<fixture>#<step>) and `platform` — duet_explain reports both")
       }
       return (["materialize", target, "--platform", platform, "--json"], nil)
+    case "duet_protocol_run":
+      var args = ["protocol-run", "--json"]
+      if let runner = arguments["runner"] as? String { args += ["--runner", runner] }
+      if let platform = arguments["platform"] as? String {
+        guard platform == "swift" || platform == "kotlin" else {
+          return ([], "platform must be \"swift\" or \"kotlin\"")
+        }
+        args += ["--platform", platform]
+      }
+      return (args, nil)
     case "duet_scope":
       guard let path = arguments["path"] as? String else {
         return ([], "duet_scope needs `path`")

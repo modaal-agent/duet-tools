@@ -189,6 +189,21 @@ enum Lanes {
       }
       return 1
     }
+    // The spec↔fixture cross-reference (graduated spec-fixture-lint): the
+    // prose one-pagers must track the corpus. Applies only to repos carrying
+    // parity/feature-specs/ — the adopter's opt-in to the prose discipline.
+    if let specErrors = SpecFixtureLint.check(repo: repo, manifest: manifest),
+      !specErrors.isEmpty
+    {
+      if options.json {
+        emitJSON(["status": "failed", "phase": "meta", "errors": specErrors])
+      } else {
+        print("spec-fixture check: FAIL")
+        for error in specErrors { print("  ✗ \(error)") }
+        print("duet verify: FAIL (meta-checks) — not running platform lanes")
+      }
+      return 1
+    }
     if !options.json { print("duet verify: meta-checks ok") }
     let feature = try options.resolveFeature(in: manifest)
     clearReports(repo)
@@ -205,11 +220,17 @@ enum Lanes {
       // coverage gate below is package-agnostic.
       let roots: [URL]
       if let feature = feature {
-        guard let own = manifest.swiftPackageDir(of: feature) else {
+        if feature.swiftSource.isEmpty {
+          // Mid-migration coexistence: a migrated feature declares no `swift:`
+          // twin — its only host lane is the Kotlin one, so a scoped run skips
+          // the Swift lane instead of failing to derive a root for it.
+          roots = []
+        } else if let own = manifest.swiftPackageDir(of: feature) {
+          roots = [own]
+        } else {
           print("duet verify: cannot derive the Swift package root for '\(feature.name)'")
           return 1
         }
-        roots = [own]
       } else {
         roots = manifest.swiftPackageDirs
       }
@@ -224,12 +245,17 @@ enum Lanes {
       }
     }
     if !options.swiftOnly {
-      let task = feature?.gradleTestTask ?? manifest.unscopedGradleTask
+      let tasks = feature?.gradleTestTask.map { [$0] } ?? manifest.unscopedGradleTasks
       // --rerun: an up-to-date Gradle test task would silently skip the replays and
       // write no reports — a "PASS" that verified nothing (caught by the coverage
       // check below, but rerunning is the correct behavior for a verification tool).
+      // It is a TASK option (binds to the task named right before it), not a build
+      // flag — a mixed tree names one lane task per module shape, and each needs
+      // its own --rerun or the earlier one stays UP-TO-DATE and writes no reports
+      // into the parity/.runs directory this run just wiped.
       kotlinLaunch = try launch(
-        ["./gradlew", task, "--rerun", "--console=plain"], cwd: manifest.androidDir,
+        ["./gradlew"] + tasks.flatMap { [$0, "--rerun"] } + ["--console=plain"],
+        cwd: manifest.androidDir,
         extraEnv: gradleEnvironment(), logName: "kotlin")
     }
     // Lanes stream to their log files, not the console — say so before waiting,
@@ -259,6 +285,15 @@ enum Lanes {
         // A single-source (KMP-flavor) repo has no Swift lane at all — the swift
         // half of the gate doesn't apply, flag or no flag.
         if platform == "swift" && (options.kotlinOnly || manifest.swiftPackageDirs.isEmpty) {
+          continue
+        }
+        // Mid-migration coexistence: a fixture owned by a feature with no
+        // `swift:` twin reports from the Kotlin lane only. Chains keep the
+        // manifest-level rule above — they ride the aggregator's Swift lane
+        // until the chain corpus itself ports.
+        if platform == "swift",
+          let owner = manifest.feature(forFixture: fixture), owner.swiftSource.isEmpty
+        {
           continue
         }
         if platform == "kotlin" && options.swiftOnly { continue }
@@ -384,8 +419,13 @@ enum Lanes {
     let manifest = try Manifest.load(repo: repo)
     let feature = try options.resolveFeature(in: manifest)
     // A single-source (KMP-flavor) repo records through its only lane — the
-    // Kotlin runner — without the caller having to say so.
-    let platform = options.platform ?? (manifest.swiftPackageDirs.isEmpty ? "kotlin" : nil)
+    // Kotlin runner — without the caller having to say so; likewise a scoped
+    // record of a migrated feature on a mixed tree (no `swift:` twin means its
+    // scenario lives in Kotlin — there is no Swift lane to record from).
+    let platform =
+      options.platform
+      ?? ((manifest.swiftPackageDirs.isEmpty || feature?.swiftSource.isEmpty == true)
+        ? "kotlin" : nil)
     // Snapshot fixture bytes so the summary lists what THIS run rewrote (git diff
     // would also show unrelated uncommitted fixture changes).
     let before = fixtureDigests(repo)
@@ -416,11 +456,14 @@ enum Lanes {
     RecordArtifacts.clear(repo)
     var results: [ProcessResult] = []
     if platform == "kotlin" {
-      let task = feature?.gradleTestTask ?? manifest.unscopedGradleTask
+      let tasks = feature?.gradleTestTask.map { [$0] } ?? manifest.unscopedGradleTasks
+      // Per-task --rerun: same note as verify — it binds to the task named
+      // right before it, and a mixed tree names one lane task per module shape.
       results.append(
         finish(
           try launch(
-            ["./gradlew", task, "--rerun", "-PregenFixtures=1", "--console=plain"],
+            ["./gradlew"] + tasks.flatMap { [$0, "--rerun"] }
+              + ["-PregenFixtures=1", "--console=plain"],
             cwd: manifest.androidDir, extraEnv: gradleEnvironment(), logName: "record")))
     } else if let feature = feature {
       guard let own = manifest.swiftPackageDir(of: feature) else {
@@ -441,10 +484,27 @@ enum Lanes {
       // Unscoped: every package root records its scenarios, in parallel — each
       // feature's writer touches only its own fixture files, chains record from
       // the aggregator, so concurrent lanes never contend on an output.
-      let launches = try manifest.swiftPackageDirs.map { root in
+      var launches = try manifest.swiftPackageDirs.map { root in
         try launch(
           ["swift", "test"], cwd: root, extraEnv: ["REGEN_FIXTURES": "1"],
           logName: "record-\(root.lastPathComponent)")
+      }
+      // Mid-migration coexistence: a migrated feature's scenario lives in
+      // Kotlin (its `swift:` twin is gone), so the Swift roots cannot
+      // regenerate its fixtures — without this leg the unscoped drift gate
+      // would silently stop covering every ported feature for the whole
+      // sweep. One extra Gradle launch records exactly those features'
+      // scoped lane tasks, in parallel with the Swift roots (per-feature
+      // writers never contend on an output).
+      let migratedTasks = manifest.features
+        .filter(\.swiftSource.isEmpty).compactMap(\.gradleTestTask)
+      if !migratedTasks.isEmpty {
+        launches.append(
+          try launch(
+            ["./gradlew"] + migratedTasks.flatMap { [$0, "--rerun"] }
+              + ["-PregenFixtures=1", "--console=plain"],
+            cwd: manifest.androidDir, extraEnv: gradleEnvironment(),
+            logName: "record-kotlin"))
       }
       results = launches.map(finish)
     }
@@ -470,28 +530,51 @@ enum Lanes {
     _ = try RecordArtifacts.materialize(repo)
     let after = fixtureDigests(repo)
     let changed = after
-      .filter { name, digest in before[name] != digest }
+      .filter { name, digest in before[name]?.whole != digest.whole }
       .keys.sorted()
+    // The drift gate's split (the wave oracle): a scenario-language port
+    // rewrites fixture METADATA (scenario.source, step label/line) by design —
+    // the sole admissible diff — while a behavioral rewrite is a port defect.
+    // `--check` gates the replay protocol's field set only and reports the
+    // metadata half as admissible churn.
+    let behavioralChanged = changed.filter { before[$0]?.behavioral != after[$0]?.behavioral }
+    let metadataOnly = changed.filter { !behavioralChanged.contains($0) }
     if options.check {
       if options.json {
-        emitJSON(["status": changed.isEmpty ? "passed" : "failed", "stale": Array(changed)])
+        emitJSON([
+          "status": behavioralChanged.isEmpty ? "passed" : "failed",
+          "stale": behavioralChanged, "metadataOnly": metadataOnly,
+        ])
       } else if changed.isEmpty {
         print("duet record --check: fixtures are up to date with their scenarios")
+      } else if behavioralChanged.isEmpty {
+        print(
+          "duet record --check: metadata-only churn in \(metadataOnly.count) fixture(s) "
+            + "(admissible — behavioral fields unchanged):")
+        for file in metadataOnly { print("  parity/fixtures/\(file)") }
+        print("commit the refreshed metadata with the change that moved the scenario")
       } else {
-        print("duet record --check: FAIL — \(changed.count) stale fixture(s) regenerated:")
-        for file in changed { print("  parity/fixtures/\(file)") }
+        print(
+          "duet record --check: FAIL — behavioral drift in \(behavioralChanged.count) fixture(s):")
+        for file in behavioralChanged { print("  parity/fixtures/\(file)") }
+        if !metadataOnly.isEmpty {
+          print("  (+ \(metadataOnly.count) metadata-only rewrite(s) — admissible)")
+        }
         print("commit the regenerated fixtures (fixtures are build products — never hand-edit)")
       }
-      return changed.isEmpty ? 0 : 1
+      return behavioralChanged.isEmpty ? 0 : 1
     }
     if options.json {
-      emitJSON(["status": "passed", "regenerated": Array(changed)])
+      emitJSON(["status": "passed", "regenerated": changed, "metadataOnly": metadataOnly])
     } else {
       if changed.isEmpty {
         print("duet record: no fixture changes (recorded output identical)")
       } else {
         print("duet record: rewrote \(changed.count) fixture(s):")
-        for file in changed { print("  parity/fixtures/\(file)") }
+        for file in changed {
+          let tag = metadataOnly.contains(file) ? "   (metadata-only)" : ""
+          print("  parity/fixtures/\(file)\(tag)")
+        }
         print("review the diff (git diff -- parity/fixtures), then run `duet verify` for both lanes")
       }
     }
@@ -505,20 +588,64 @@ enum Lanes {
     return path.hasPrefix(rootPath + "/") ? String(path.dropFirst(rootPath.count + 1)) : path
   }
 
-  private static func fixtureDigests(_ repo: Repo) -> [String: Int] {
-    var digests: [String: Int] = [:]
+  /// Per-fixture snapshots, split for the drift gate: the whole file, and the
+  /// BEHAVIORAL subset — the replay protocol's field set (leaves:
+  /// `initialState` + each step's `action`/`expectedState`/`expectedEffects`;
+  /// chains: `initialStates` + the step's `node` as well). Everything else
+  /// (`scenario.source`, step `label`/`line`, `description`) is authoring
+  /// metadata: a scenario-language port rewrites it by design, so
+  /// `record --check` gates only the behavioral half.
+  ///
+  /// Full BYTES, deliberately not `Data.hashValue`: Foundation's Data hash
+  /// considers only the first ~80 bytes plus the length (NSData `-hash`
+  /// bridging, verified empirically), so a same-length change past the header
+  /// hashes EQUAL — the earlier hash-based gate could read green over real
+  /// drift. A corpus of fixtures is small; hold the bytes and compare them.
+  struct FixtureDigest {
+    let whole: Data
+    let behavioral: Data
+  }
+
+  private static func fixtureDigests(_ repo: Repo) -> [String: FixtureDigest] {
+    var digests: [String: FixtureDigest] = [:]
     for file in
       (try? FileManager.default.contentsOfDirectory(atPath: repo.fixturesDir.path)) ?? []
     where file.hasSuffix(".json") {
-      let data = try? Data(contentsOf: repo.fixturesDir.appendingPathComponent(file))
-      digests[file] = data?.hashValue ?? 0
+      let data =
+        (try? Data(contentsOf: repo.fixturesDir.appendingPathComponent(file))) ?? Data()
+      digests[file] = FixtureDigest(whole: data, behavioral: behavioralSubset(of: data))
     }
     return digests
   }
 
+  /// Canonical serialization of the behavioral field subset. An unparseable
+  /// document keeps whole-file identity — there is no metadata to except.
+  static func behavioralSubset(of data: Data) -> Data {
+    guard let document = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      return data
+    }
+    var subset: [String: Any] = [:]
+    for key in ["initialState", "initialStates"] {
+      if let value = document[key] { subset[key] = value }
+    }
+    if let steps = document["steps"] as? [[String: Any]] {
+      let kept: Set<String> = ["node", "action", "expectedState", "expectedEffects"]
+      subset["steps"] = steps.map { step in step.filter { kept.contains($0.key) } }
+    }
+    guard
+      let canonical = try? JSONSerialization.data(withJSONObject: subset, options: [.sortedKeys])
+    else { return data }
+    return canonical
+  }
+
   static func emitJSON(_ object: [String: Any]) {
+    var stamped = object
+    // Receipts record which toolchain produced them without hand-assembly:
+    // every --json report carries the version (the MCP tool results inherit
+    // it via structuredContent).
+    if stamped["toolchain"] == nil { stamped["toolchain"] = duetToolsVersion }
     if let data = try? JSONSerialization.data(
-      withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+      withJSONObject: stamped, options: [.prettyPrinted, .sortedKeys]),
       let text = String(data: data, encoding: .utf8)
     {
       print(text)

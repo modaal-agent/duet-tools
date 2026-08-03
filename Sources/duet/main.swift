@@ -84,26 +84,31 @@ let usage = """
   usage:
     duet verify [--feature <name>] [--swift-only|--kotlin-only] [--json]
         meta-checks (lockstep + fixture symmetry + the host-lane rule: a gated
-        unit resolves the Duet family only, on both build systems), then both
-        platform lanes in parallel; failures render with step label, JSON
-        path, and scenario line.
+        unit resolves the Duet family only, on both build systems + the
+        spec↔fixture cross-reference when parity/feature-specs/ exists), then
+        both platform lanes in parallel; failures render with step label,
+        JSON path, and scenario line.
     duet record [--feature <name>] [--platform swift|kotlin] [--check] [--json]
         recompile fixtures from scenarios (scoped when --feature given), then a
         review summary of what changed. Fixtures are build products — review the
         diff like code. --platform kotlin records through the Kotlin runner: it
         emits compact artifacts and the CLI materializes the §6 files (one
-        writer). --check = CI regen gate: exit 1 if anything was stale.
+        writer). --check = CI regen gate: exit 1 on BEHAVIORAL drift (the
+        replay protocol's field set); metadata-only churn (scenario.source,
+        step label/line — a scenario port's admissible diff) reports green.
     duet explain [--json]
         re-render the last run's failures from parity/.runs (no logs, no re-run).
     duet materialize <fixture>#<step> --platform swift|kotlin [--json]
         emit a standalone failing unit test for one fixture step on one platform.
     duet materialize --clean
         delete every generated Materialized_* test.
-    duet protocol-run [--runner <path>]
+    duet protocol-run [--platform swift|kotlin] [--runner <path>] [--json]
         byte-gate the full corpus through a replay-protocol runner
-        (contracts/replay-protocol-v1.md). Default: build + drive the repo's own
-        Swift `replay-runner` product; --runner drives any conforming flavor's
-        prebuilt runner (e.g. the Kotlin lane's installDist output).
+        (contracts/replay-protocol-v1.md). Default: build + drive the repo's
+        own runner — the Swift `replay-runner` product when the manifest has
+        a package for it, else the Kotlin lane's `:replay-runner:installDist`
+        (built by the CLI). --platform forces a flavor's runner on repos
+        carrying both; --runner drives any conforming prebuilt runner.
     duet write-fixtures [--json]
         materialize pending record artifacts (parity/.runs/record/**) into §6
         fixture files — the framework repos' own-corpus regen path; adopter
@@ -120,9 +125,10 @@ let usage = """
         record commands; app trees → "not governed" with a pointer.
     duet mcp
         serve the verification verbs as a stdio MCP server (duet_verify,
-        duet_record, duet_explain, duet_materialize, duet_scope) — one
-        mcpServers entry gives any agent harness the toolchain; tool results
-        are the verbs' --json reports. Launch with cwd inside the repo.
+        duet_record, duet_explain, duet_materialize, duet_protocol_run,
+        duet_scope) — one mcpServers entry gives any agent harness the
+        toolchain; tool results are the verbs' --json reports (each stamped
+        with the toolchain version). Launch with cwd inside the repo.
     duet version
         print the toolchain version (matches the release tag), so gate
         receipts can record which toolchain ran. Works outside a repo.
@@ -132,7 +138,7 @@ let usage = """
 
 /// Bumped with each release tag — the tag is the version of record (pre-1.0
 /// minors are breaking by family convention: a new or changed gate is a minor).
-let duetToolsVersion = "0.2.1"
+let duetToolsVersion = "0.3.0"
 
 guard let options = Options.parse(CommandLine.arguments), let command = options.command
 else {
