@@ -12,7 +12,7 @@ Pre-1.0 minor: a changed gate (the family's breaking lane).
   `swift:` twin. The aggregator's chain scenario cannot compile a retired
   twin's reducer, so its authoring retires with the twin and the committed
   fixture is frozen bytes — the Kotlin lane's chain replays and the protocol
-  lane keep gating it — until the chain corpus itself ports (spec-26 S9).
+  lane keep gating it — until the chain corpus itself ports.
   Falsifier pair on the adopter's first retired-participant chain
   (`chain-invitecode-finish`): 0.3.0 red (`missing … [swift]`) vs 0.4.0 green;
   negative control: an all-twin chain's dropped report still fails.
@@ -25,11 +25,11 @@ Pre-1.0 minor: a changed gate (the family's breaking lane).
 gate semantics move — `record --check`'s red narrows to behavioral drift,
 the unscoped Kotlin lane's task set widens on mixed trees, and `verify`
 grows a meta-check (the spec↔fixture cross-reference) on repos that carry
-`parity/feature-specs/`. This is the pre-S4 toolchain minor a per-feature
+`parity/feature-specs/`. This is the toolchain minor a per-feature
 twin→single-source migration needs, folded with the approved graduation
-rows (spec-26 §13.10/§13.11/§15.6): landed before the first port wave so
-the wave oracle, the mixed-tree lane, and the graduated checks are
-toolchain-owned, not per-repo scripts and aliases.
+rows: landed before the first port wave so the wave oracle, the
+mixed-tree lane, and the graduated checks are toolchain-owned, not
+per-repo scripts and aliases.
 
 ### Changed — `record --check` gates behavioral drift only (metadata-aware)
 
@@ -85,7 +85,7 @@ Mixed-tree coexistence rides the same change end-to-end (a feature with no
 ### Added — the spec↔fixture cross-reference joins `verify`'s meta-checks
 
 Graduated from the adopter repos' `parity/scripts/spec-fixture-lint.py`
-(spec-26 §13.6 row 2 — "the one meta-check the CLI does not own"), checks
+(until now the one meta-check the CLI did not own), checks
 verbatim: every manifest feature has a one-pager in `parity/feature-specs/`,
 every declared leaf fixture is mentioned in its feature's spec (backticked
 id or the `family.*` + `.slug` shorthand), every backticked `chain-*` token
@@ -102,7 +102,7 @@ and retires its copy of the lint plus the separate CI step.
 The flavor-neutral byte gate could not build its own runner on the
 single-source flavor (no Swift `replay-runner` package to probe — the caller
 had to hand-build `installDist` and pass `--runner`), and was absent from
-the MCP catalog (spec-26 §13.6 row 6). Now: with no `--runner` override the
+the MCP catalog. Now: with no `--runner` override the
 CLI builds the repo's own runner — the Swift `replay-runner` product when
 the manifest has a package for it, else the Kotlin lane's
 `:replay-runner:installDist` (convention: the `replay-runner` Gradle module
@@ -115,7 +115,7 @@ structured report, and `duet_protocol_run` serves it over MCP.
 
 `toolchain: "<version>"` rides every `--json` report (and so every MCP tool
 result via `structuredContent`), so gate receipts record which toolchain ran
-without hand-assembly (spec-26 §13.6 row 6).
+without hand-assembly.
 
 ## [0.2.1] — 2026-08-02
 
