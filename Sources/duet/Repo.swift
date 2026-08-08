@@ -94,6 +94,11 @@ struct Feature {
     }
   }
 
+  /// Whether any Kotlin lane can replay this feature: false for an empty
+  /// `kotlin:` (a Swift-only manifest) and for `kotlin: pending` (declared
+  /// single-sided, port not landed) — both derive no Gradle module.
+  var hasKotlinLane: Bool { gradleTestTask != nil }
+
   /// Package of the Kotlin sources (`…/kotlin/com/example/x/File.kt` → com.example.x).
   var kotlinPackage: String? {
     let parts = kotlinSource.split(separator: "/").map(String.init)
@@ -121,11 +126,13 @@ struct Manifest {
   /// The Swift package roots (every distinct per-feature `swift:` prefix before
   /// /Sources/ — more than one since the first subtree re-cut, F5) and the
   /// Android build root (the first component of any feature's `kotlin:` path) —
-  /// derived, absolute. Sorted by path for stable lane ordering. EMPTY for a
-  /// single-source (KMP-flavor) repo, whose manifest declares no `swift:` twins —
-  /// the Swift lane and the swift half of the coverage gate then don't apply.
+  /// derived, absolute. Sorted by path for stable lane ordering. Single-source
+  /// manifests carry ONE of the two: a KMP-flavor repo declares no `swift:`
+  /// twins (swiftPackageDirs EMPTY — the Swift lane and the swift half of the
+  /// coverage gate don't apply), and a Swift-only repo declares no `kotlin:`
+  /// paths (androidDir NIL — the Kotlin lane and its gate half don't apply).
   let swiftPackageDirs: [URL]
-  let androidDir: URL
+  let androidDir: URL?
   /// Optional manifest override (`replayRunner:` top-level key): the Swift package
   /// root owning the `Sources/replay-runner` executable, for repos whose replay
   /// glue lives outside every feature package (a scaffolded all-subtrees layout
@@ -220,19 +227,20 @@ struct Manifest {
           fixtures: spec["fixtures"] as? [String] ?? [])
       }
       .sorted { $0.name < $1.name }
-    // Empty is legal: a single-source (KMP-flavor) manifest declares no `swift:`
-    // twins — the CLI then runs kotlin-shaped lanes only. (The Android root stays
-    // required: both flavors carry a Kotlin/Gradle lane.)
+    // Either side may be empty — a single-source manifest declares one lane's
+    // paths only (no `swift:` twins on the KMP flavor; no `kotlin:` paths on the
+    // Swift-only flavor) and the CLI runs the lanes the manifest derives. BOTH
+    // empty derives no lane at all, which no lane flag can repair — named here.
     let swiftRelatives = Set(features.compactMap(\.swiftPackageRelative)).sorted()
-    guard
-      let androidRelative = features.lazy
-        .compactMap({ feature -> String? in
-          let parts = feature.kotlinSource.split(separator: "/")
-          return parts.count > 1 ? String(parts[0]) : nil
-        }).first
-    else {
+    let androidRelative = features.lazy
+      .compactMap({ feature -> String? in
+        let parts = feature.kotlinSource.split(separator: "/")
+        return parts.count > 1 ? String(parts[0]) : nil
+      }).first
+    guard !swiftRelatives.isEmpty || androidRelative != nil else {
       throw ManifestError.layoutUnderivable(
-        "no feature `kotlin:` path names the Android root directory")
+        "no feature declares a `swift:` or `kotlin:` source path — the manifest"
+          + " derives no platform lane at all")
     }
     return Manifest(
       features: features,
@@ -240,7 +248,7 @@ struct Manifest {
       lintOK: (root["status"] as? String) == "ok",
       lintErrors: root["errors"] as? [String] ?? [],
       swiftPackageDirs: swiftRelatives.map(repo.root.appendingPathComponent),
-      androidDir: repo.root.appendingPathComponent(androidRelative),
+      androidDir: androidRelative.map(repo.root.appendingPathComponent),
       replayRunnerRelative: root["replayRunner"] as? String,
       repoRoot: repo.root)
   }

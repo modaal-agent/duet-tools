@@ -63,7 +63,7 @@ enum Scope {
 
   static func classify(_ path: String, repo: Repo, manifest: Manifest) -> Verdict {
     let swiftRoots = manifest.swiftPackageDirs.map { relative($0, to: repo) }
-    let androidRoot = relative(manifest.androidDir, to: repo)
+    let androidRoot = manifest.androidDir.map { relative($0, to: repo) }
 
     // 1. A fixture file (or the fixtures directory): build products, owner-routed.
     if path.hasPrefix("parity/fixtures") {
@@ -123,15 +123,25 @@ enum Scope {
 
     // 4. A feature's declared sources, or anything in its module directories.
     for feature in manifest.features {
+      // Single-source manifests declare one side only — the undeclared side is
+      // "" (or `pending`), and an empty string prefix-matches EVERY path, which
+      // would classify the whole repo as this feature.
       var owned = [feature.swiftSource, feature.kotlinSource]
+        .filter { !$0.isEmpty && $0 != "pending" }
       if let module = feature.swiftModule, let root = feature.swiftPackageRelative {
         owned.append("\(root)/Sources/\(module)/")
         owned.append("\(root)/Tests/\(module)Tests/")
       }
-      if let modulePath = feature.kotlinModulePath {
+      if let modulePath = feature.kotlinModulePath, let androidRoot {
         owned.append("\(androidRoot)/\(modulePath)/")
       }
       if owned.contains(where: { path == $0 || path.hasPrefix($0) }) {
+        let lockstepNote =
+          feature.swiftSource.isEmpty || !feature.hasKotlinLane
+          ? "single-source reducer: "
+            + (feature.swiftSource.isEmpty ? feature.kotlinSource : feature.swiftSource)
+          : "reducer twins move in lockstep: "
+            + "\(feature.swiftSource) ↔ \(feature.kotlinSource)"
         return Verdict(
           role: "feature module source (`\(feature.name)`)",
           feature: feature.name,
@@ -140,10 +150,7 @@ enum Scope {
             "duet record --feature \(feature.name)  (only if the behavior change is intended)",
             "duet verify  (full, before landing)",
           ],
-          notes: [
-            "reducer twins move in lockstep: "
-              + "\(feature.swiftSource) ↔ \(feature.kotlinSource)",
-          ])
+          notes: [lockstepNote])
       }
     }
 
@@ -168,7 +175,7 @@ enum Scope {
     }
 
     // 7. Inside the Android build, outside any feature module.
-    if path.hasPrefix(androidRoot + "/") {
+    if let androidRoot, path.hasPrefix(androidRoot + "/") {
       return Verdict(
         role: "Android build tree (outside any parity feature module)",
         feature: nil,

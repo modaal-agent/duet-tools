@@ -206,6 +206,23 @@ enum Lanes {
     }
     if !options.json { print("duet verify: meta-checks ok") }
     let feature = try options.resolveFeature(in: manifest)
+    // A lane flag naming a lane the manifest does not derive is a meta-error,
+    // not a silent green: with both lanes skipped, the coverage gate below
+    // expects nothing and the run would report PASS having replayed nothing.
+    let flagMismatch: String? =
+      options.kotlinOnly && manifest.androidDir == nil
+      ? "--kotlin-only: the manifest declares no `kotlin:` paths — there is no Kotlin lane to run"
+      : options.swiftOnly && manifest.swiftPackageDirs.isEmpty
+        ? "--swift-only: the manifest declares no `swift:` paths — there is no Swift lane to run"
+        : nil
+    if let flagMismatch {
+      if options.json {
+        emitJSON(["status": "failed", "phase": "meta", "errors": [flagMismatch]])
+      } else {
+        print("duet verify: FAIL — \(flagMismatch)")
+      }
+      return 1
+    }
     clearReports(repo)
 
     var swiftResults: [(package: String, result: ProcessResult)] = []
@@ -244,7 +261,9 @@ enum Lanes {
           (package, try launch(arguments, cwd: root, logName: "swift-\(root.lastPathComponent)")))
       }
     }
-    if !options.swiftOnly {
+    // A Swift-only manifest derives no Kotlin lane (androidDir nil) — the
+    // mirror of the empty-roots skip above.
+    if !options.swiftOnly, let androidDir = manifest.androidDir {
       let tasks = feature?.gradleTestTask.map { [$0] } ?? manifest.unscopedGradleTasks
       // --rerun: an up-to-date Gradle test task would silently skip the replays and
       // write no reports — a "PASS" that verified nothing (caught by the coverage
@@ -255,7 +274,7 @@ enum Lanes {
       // into the parity/.runs directory this run just wiped.
       kotlinLaunch = try launch(
         ["./gradlew"] + tasks.flatMap { [$0, "--rerun"] } + ["--console=plain"],
-        cwd: manifest.androidDir,
+        cwd: androidDir,
         extraEnv: gradleEnvironment(), logName: "kotlin")
     }
     // Lanes stream to their log files, not the console — say so before waiting,
@@ -282,15 +301,25 @@ enum Lanes {
     var missing: [String] = []
     for fixture in expectedFixtures {
       for platform in ["swift", "kotlin"] {
-        // A single-source (KMP-flavor) repo has no Swift lane at all — the swift
-        // half of the gate doesn't apply, flag or no flag.
+        // A single-source repo has one lane: no `swift:` twins (KMP flavor)
+        // means the swift half of the gate doesn't apply; no `kotlin:` paths
+        // (Swift-only flavor) means the kotlin half doesn't — flag or no flag.
         if platform == "swift" && (options.kotlinOnly || manifest.swiftPackageDirs.isEmpty) {
           continue
         }
-        // Mid-migration coexistence: a fixture owned by a feature with no
-        // `swift:` twin reports from the Kotlin lane only.
+        if platform == "kotlin" && (options.swiftOnly || manifest.androidDir == nil) {
+          continue
+        }
+        // Mid-migration coexistence: a fixture owned by a feature with only one
+        // declared side reports from that side's lane only (no `swift:` twin →
+        // Kotlin lane; no Kotlin lane — empty or `pending` — → Swift lane).
         if platform == "swift",
           let owner = manifest.feature(forFixture: fixture), owner.swiftSource.isEmpty
+        {
+          continue
+        }
+        if platform == "kotlin",
+          let owner = manifest.feature(forFixture: fixture), !owner.hasKotlinLane
         {
           continue
         }
@@ -309,7 +338,15 @@ enum Lanes {
         {
           continue
         }
-        if platform == "kotlin" && options.swiftOnly { continue }
+        // The kotlin mirror of the participant rule: a chain expects a
+        // kotlin-lane row only while every participant has a Kotlin lane.
+        if platform == "kotlin", manifest.chains.contains(fixture),
+          chainParticipants(of: fixture, in: repo).contains(where: { participant in
+            manifest.features.first { $0.name == participant }?.hasKotlinLane == false
+          })
+        {
+          continue
+        }
         if !reports.contains(where: {
           ($0["fixture"] as? String) == fixture && ($0["platform"] as? String) == platform
         }) {
@@ -469,6 +506,19 @@ enum Lanes {
     RecordArtifacts.clear(repo)
     var results: [ProcessResult] = []
     if platform == "kotlin" {
+      // Reachable only by explicit --platform kotlin on a Swift-only manifest —
+      // the defaulting above never picks kotlin without a Kotlin root.
+      guard let androidDir = manifest.androidDir else {
+        let message =
+          "--platform kotlin: the manifest declares no `kotlin:` paths — "
+          + "there is no Kotlin runner to record through"
+        if options.json {
+          emitJSON(["status": "failed", "phase": "meta", "errors": [message]])
+        } else {
+          print("duet record: FAIL — \(message)")
+        }
+        return 1
+      }
       let tasks = feature?.gradleTestTask.map { [$0] } ?? manifest.unscopedGradleTasks
       // Per-task --rerun: same note as verify — it binds to the task named
       // right before it, and a mixed tree names one lane task per module shape.
@@ -477,7 +527,7 @@ enum Lanes {
           try launch(
             ["./gradlew"] + tasks.flatMap { [$0, "--rerun"] }
               + ["-PregenFixtures=1", "--console=plain"],
-            cwd: manifest.androidDir, extraEnv: gradleEnvironment(), logName: "record")))
+            cwd: androidDir, extraEnv: gradleEnvironment(), logName: "record")))
     } else if let feature = feature {
       guard let own = manifest.swiftPackageDir(of: feature) else {
         print("duet record: cannot derive the Swift package root for '\(feature.name)'")
@@ -511,12 +561,14 @@ enum Lanes {
       // writers never contend on an output).
       let migratedTasks = manifest.features
         .filter(\.swiftSource.isEmpty).compactMap(\.gradleTestTask)
-      if !migratedTasks.isEmpty {
+      // A non-empty task list implies a derivable Kotlin root (the tasks come
+      // from `kotlin:` paths) — the binding is for the optional, not a branch.
+      if !migratedTasks.isEmpty, let androidDir = manifest.androidDir {
         launches.append(
           try launch(
             ["./gradlew"] + migratedTasks.flatMap { [$0, "--rerun"] }
               + ["-PregenFixtures=1", "--console=plain"],
-            cwd: manifest.androidDir, extraEnv: gradleEnvironment(),
+            cwd: androidDir, extraEnv: gradleEnvironment(),
             logName: "record-kotlin"))
       }
       results = launches.map(finish)

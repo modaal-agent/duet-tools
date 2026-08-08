@@ -86,8 +86,10 @@ let usage = """
         meta-checks (lockstep + fixture symmetry + the host-lane rule: a gated
         unit resolves the Duet family only, on both build systems + the
         spec↔fixture cross-reference when parity/feature-specs/ exists), then
-        both platform lanes in parallel; failures render with step label,
-        JSON path, and scenario line.
+        the manifest's platform lanes in parallel (a single-source manifest —
+        `swift:` or `kotlin:` paths only — runs its one lane; a lane flag
+        naming the missing lane is a meta-error); failures render with step
+        label, JSON path, and scenario line.
     duet record [--feature <name>] [--platform swift|kotlin] [--check] [--json]
         recompile fixtures from scenarios (scoped when --feature given), then a
         review summary of what changed. Fixtures are build products — review the
@@ -138,7 +140,7 @@ let usage = """
 
 /// Bumped with each release tag — the tag is the version of record (pre-1.0
 /// minors are breaking by family convention: a new or changed gate is a minor).
-let duetToolsVersion = "0.4.0"
+let duetToolsVersion = "0.5.0"
 
 guard let options = Options.parse(CommandLine.arguments), let command = options.command
 else {

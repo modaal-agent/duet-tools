@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.0 — 2026-08-08
+
+Pre-1.0 minor: manifest representation widens (a Swift-only manifest becomes
+legal), and two silent-green holes become named meta-errors — gate semantics
+move, the family's breaking lane.
+
+### Changed — Swift-only manifests are legal (the KMP mirror)
+
+A manifest with no `kotlin:` paths (the single-lane `duet-swift-ios` shape)
+used to die in `Manifest.load` — `layoutUnderivable: no feature kotlin: path
+names the Android root directory` — before any verb ran. The Android root is
+now derived as optional, the exact mirror of the `swift:` side the KMP flavor
+already enjoys: `verify` runs the Swift lanes only and the kotlin half of the
+coverage gate doesn't apply; `record` / `record --check` default to the Swift
+runner; `protocol-run` builds the Swift `replay-runner` product; `scope`
+classifies without an Android tree. Kotlin-rooted repos are unaffected — the
+lane derivation reads the same manifest fields it always did. The only
+remaining `layoutUnderivable` is a manifest declaring NEITHER side, which no
+lane flag can repair.
+
+Mid-migration coexistence gets the mirror too: a fixture owned by a feature
+with no Kotlin lane (`kotlin:` empty or `pending`) expects no kotlin-lane
+report, and a chain expects one only while every participant has a Kotlin
+lane — the participant rule from 0.4.0, applied in both directions.
+
+### Changed — lane flags that name a missing lane are meta-errors
+
+`verify --swift-only` on a KMP-flavor repo (no `swift:` twins) used to skip
+BOTH lanes and report PASS having replayed nothing — the coverage gate
+expects nothing when both halves are excused. That run, `verify
+--kotlin-only` on a Swift-only repo, `record --platform kotlin` without a
+Kotlin root, and `protocol-run --platform kotlin` without one now fail with
+named errors (exit 1) instead of a silent green or a crash.
+
+### Fixed — `scope` misclassified every path on single-source repos
+
+Rule 4 matched paths against each feature's declared sources with
+`hasPrefix`; a single-source feature's undeclared side is the empty string,
+and every path has the empty prefix — so on a KMP-flavor repo any path
+outside rules 1–3 classified as the alphabetically first feature's module
+source. Undeclared sides (empty or `pending`) are now excluded from the
+match, and the lockstep note renders as `single-source reducer: <path>` when
+only one side exists.
+
 ## 0.4.0 — 2026-08-03
 
 Pre-1.0 minor: a changed gate (the family's breaking lane).

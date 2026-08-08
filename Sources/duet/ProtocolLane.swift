@@ -61,10 +61,18 @@ enum ProtocolLane {
       guard FileManager.default.isExecutableFile(atPath: executable.path) else {
         return fail(["protocol-run: FAIL — --runner '\(override)' is not an executable"])
       }
-    } else if options.platform == "kotlin"
-      || (options.platform == nil && manifest.replayRunnerPackageDir == nil)
+    } else if options.platform == "kotlin", manifest.androidDir == nil {
+      // Forcing the Kotlin runner on a Swift-only manifest: there is no Gradle
+      // tree to build it in — a named refusal, not a crash.
+      return fail([
+        "protocol-run: FAIL — --platform kotlin: the manifest declares no `kotlin:` paths",
+        "  (--runner <path> drives any prebuilt conforming runner)",
+      ])
+    } else if let androidDir = manifest.androidDir,
+      options.platform == "kotlin"
+        || (options.platform == nil && manifest.replayRunnerPackageDir == nil)
     {
-      let module = manifest.androidDir.appendingPathComponent("replay-runner")
+      let module = androidDir.appendingPathComponent("replay-runner")
       guard FileManager.default.fileExists(atPath: module.path) else {
         return fail([
           "protocol-run: FAIL — no `replay-runner` Gradle module at \(module.path)",
@@ -74,7 +82,7 @@ enum ProtocolLane {
       let build = Lanes.finish(
         try Lanes.launch(
           ["./gradlew", ":replay-runner:installDist", "--console=plain"],
-          cwd: manifest.androidDir, extraEnv: Lanes.gradleEnvironment(),
+          cwd: androidDir, extraEnv: Lanes.gradleEnvironment(),
           logName: "replay-runner-installdist"))
       if build.exitCode != 0 {
         return fail(

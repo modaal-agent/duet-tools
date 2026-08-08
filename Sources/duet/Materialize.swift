@@ -122,14 +122,14 @@ enum Materialize {
         "cd \(packageDir.path) && swift test --filter \(className)"
     } else {
       guard let task = feature.gradleTestTask, let modulePath = feature.kotlinModulePath,
-        let package = feature.kotlinPackage
+        let package = feature.kotlinPackage, let androidDir = manifest.androidDir
       else {
         print("duet materialize: cannot derive Gradle module for '\(featureName)'")
         return 1
       }
       let className = "Materialized_\(sanitize(fixture))_step\(step)_Test"
       let packagePath = package.replacingOccurrences(of: ".", with: "/")
-      file = manifest.androidDir
+      file = androidDir
         .appendingPathComponent("\(modulePath)/src/test/kotlin/\(packagePath)/\(className).kt")
       try kotlinTest(
         className: className, package: package, feature: feature, fixture: fixture,
@@ -137,7 +137,7 @@ enum Materialize {
         action: action, expectedState: expectedState, expectedEffects: expectedEffects
       ).write(to: file, atomically: true, encoding: .utf8)
       runHint =
-        "cd \(manifest.androidDir.path) && ./gradlew \(task) --tests '*\(className)*'"
+        "cd \(androidDir.path) && ./gradlew \(task) --tests '*\(className)*'"
     }
     if options.json {
       Lanes.emitJSON(["status": "written", "file": file.path, "run": runHint])
@@ -296,7 +296,7 @@ enum Materialize {
     var removed = 0
     let roots =
       manifest.swiftPackageDirs.map { $0.appendingPathComponent("Tests") }
-      + [manifest.androidDir]
+      + (manifest.androidDir.map { [$0] } ?? [])
     for root in roots {
       guard
         let enumerator = FileManager.default.enumerator(
