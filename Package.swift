@@ -72,5 +72,16 @@ let package = Package(
       ],
       path: "Tests/CanonicalSumGenTests"
     ),
+    // Tests the CLI's pure derivations (summary parsing, lane-task lint, the
+    // dual-writer predicate, settings parsing) by importing the executable
+    // module directly — SwiftPM links it into the test bundle without running
+    // its top-level code.
+    .testTarget(
+      name: "DuetCLITests",
+      dependencies: [
+        .target(name: "DuetCLI")
+      ],
+      path: "Tests/DuetCLITests"
+    ),
   ]
 )

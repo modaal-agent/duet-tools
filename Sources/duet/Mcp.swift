@@ -78,7 +78,8 @@ enum Mcp {
         diff like code. duet_record with check=true is the CI drift gate (red on \
         behavioral drift; metadata-only churn passes). duet_protocol_run \
         byte-gates the corpus through a flavor's replay runner. duet_scope \
-        reports which gates govern a file.
+        reports which gates govern a file. duet_lanes reports the lane \
+        inventory the manifest derives — and what verify does NOT cover.
         """,
     ]
   }
@@ -105,10 +106,16 @@ enum Mcp {
           "type": "object",
           "properties": [
             "feature": ["type": "string", "description": "feature name (omit = everything)"],
+            "chain": ["type": "string", "description": "chain fixture name — records exactly the test sources that mention it (the mid-migration scope)"],
             "platform": ["type": "string", "enum": ["swift", "kotlin"], "description": "record through one platform's runner (default swift)"],
-            "check": ["type": "boolean", "description": "drift gate — red on behavioral drift only"],
+            "check": ["type": "boolean", "description": "drift gate — red on behavioral drift only; a failing check leaves parity/fixtures untouched (rewrite lands in parity/.runs/record-check/)"],
           ] as [String: Any],
         ] as [String: Any],
+      ],
+      [
+        "name": "duet_lanes",
+        "description": "The lane inventory as data: every lane task, package root, and filter the manifest derives (what duet_verify runs), chains with participants, and what verify does NOT cover (gradle modules and Swift packages outside the manifest, the protocol lane). Generate workflows or fallback runners from this instead of re-deriving lane sets by hand.",
+        "inputSchema": ["type": "object", "properties": [String: Any]()] as [String: Any],
       ],
       [
         "name": "duet_explain",
@@ -169,9 +176,12 @@ enum Mcp {
     case "duet_record":
       var args = ["record", "--json"]
       if let feature = arguments["feature"] as? String { args += ["--feature", feature] }
+      if let chain = arguments["chain"] as? String { args += ["--chain", chain] }
       if let platform = arguments["platform"] as? String { args += ["--platform", platform] }
       if arguments["check"] as? Bool == true { args.append("--check") }
       return (args, nil)
+    case "duet_lanes":
+      return (["lanes", "--json"], nil)
     case "duet_explain":
       return (["explain", "--json"], nil)
     case "duet_materialize":

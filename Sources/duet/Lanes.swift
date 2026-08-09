@@ -204,7 +204,14 @@ enum Lanes {
       }
       return 1
     }
-    if !options.json { print("duet verify: meta-checks ok") }
+    // The lane-task shape lint (A29 R4) — advisory, never a failure: a repo's
+    // own automation naming fewer lane tasks than the manifest derives is how
+    // a migration silently stops running migrated modules' suites.
+    let laneTaskWarnings = LaneTaskLint.warnings(repo: repo, manifest: manifest)
+    if !options.json {
+      print("duet verify: meta-checks ok")
+      for warning in laneTaskWarnings { print("  ⚠ lane-task shape: \(warning)") }
+    }
     let feature = try options.resolveFeature(in: manifest)
     // A lane flag naming a lane the manifest does not derive is a meta-error,
     // not a silent green: with both lanes skipped, the coverage gate below
@@ -360,6 +367,12 @@ enum Lanes {
       || (kotlinResult.map { $0.exitCode != 0 } ?? false)
       || !missing.isEmpty
 
+    // What this run makes NO claim about (A29 R2) — silence reads as coverage,
+    // so the gate names its own boundary: build units outside the manifest and
+    // the protocol lane. Scoped runs state their scope instead.
+    let coverage: Inventory.Coverage? = feature == nil
+      ? Inventory.coverage(repo: repo, manifest: manifest) : nil
+
     if options.json {
       var lanes: [String: Any] = [:]
       if !swiftResults.isEmpty {
@@ -384,13 +397,22 @@ enum Lanes {
         }
         lanes["kotlin"] = lane
       }
-      emitJSON([
+      var payload: [String: Any] = [
         "status": laneFailed ? "failed" : "passed",
         "elapsedSeconds": elapsed,
         "lanes": lanes,
         "missingReports": missing,
         "reports": reports,
-      ])
+        "warnings": laneTaskWarnings,
+      ]
+      if let coverage {
+        payload["notCovered"] = [
+          "gradleModules": coverage.gradleModulesOutsideManifest,
+          "swiftPackages": coverage.swiftPackagesOutsideManifest,
+          "lanes": ["the protocol lane (duet protocol-run)"],
+        ] as [String: Any]
+      }
+      emitJSON(payload)
       return laneFailed ? 1 : 0
     }
 
@@ -450,6 +472,21 @@ enum Lanes {
         print(log.split(separator: "\n").suffix(30).joined(separator: "\n"))
       }
     }
+    if let coverage {
+      var outside: [String] = []
+      if !coverage.gradleModulesOutsideManifest.isEmpty {
+        outside.append(
+          "gradle modules \(coverage.gradleModulesOutsideManifest.joined(separator: " "))")
+      }
+      if !coverage.swiftPackagesOutsideManifest.isEmpty {
+        outside.append(
+          "swift package(s) \(coverage.swiftPackagesOutsideManifest.joined(separator: " "))")
+      }
+      outside.append("the protocol lane (run `duet protocol-run`)")
+      print("not covered by verify — run these in your workflow: \(outside.joined(separator: " · "))")
+    } else {
+      print("coverage: scoped run — the landing gate is unscoped `duet verify`")
+    }
     print(
       laneFailed
         ? "duet verify: FAIL in \(String(format: "%.1f", elapsed))s"
@@ -468,13 +505,54 @@ enum Lanes {
   static func record(repo: Repo, options: Options) throws -> Int32 {
     let manifest = try Manifest.load(repo: repo)
     let feature = try options.resolveFeature(in: manifest)
+    if feature != nil, options.chain != nil {
+      let message = "scope with --feature or --chain, not both"
+      if options.json {
+        emitJSON(["status": "failed", "phase": "meta", "errors": [message]])
+      } else {
+        print("duet record: FAIL — \(message)")
+      }
+      return 1
+    }
+    if let chain = options.chain, !manifest.chains.contains(chain) {
+      let message = "unknown chain '\(chain)' (not in parity/manifest.yaml chains)"
+      if options.json {
+        emitJSON(["status": "failed", "phase": "meta", "errors": [message]])
+      } else {
+        print("duet record: FAIL — \(message)")
+      }
+      return 1
+    }
+    // The dual-writer guard (A30 R3): while a feature declares BOTH a `swift:`
+    // twin and a Kotlin `scenario:`, two writers exist for its fixture files.
+    // Unscoped record runs every Swift root under REGEN, so the retiring twin
+    // would re-record fixtures the Kotlin scenario owns — refuse, with the
+    // scoped verbs as the in-window recording paths.
+    let dualWriters = manifest.features.filter(\.isDualWriter).map(\.name)
+    if feature == nil, options.chain == nil, !dualWriters.isEmpty {
+      let message =
+        "dual-writer feature(s) in the manifest: \(dualWriters.joined(separator: ", "))"
+        + " — a `swift:` twin plus a Kotlin `scenario:` is two writers for the same"
+        + " fixtures, and an unscoped pass re-records through the retiring Swift twin."
+        + " Record scoped inside the window: `duet record --feature <name>` (the writer"
+        + " follows the manifest's scenario) or `duet record --chain <name>`."
+      if options.json {
+        emitJSON(["status": "failed", "phase": "meta", "errors": [message]])
+      } else {
+        print("duet record: REFUSED — \(message)")
+      }
+      return 1
+    }
     // A single-source (KMP-flavor) repo records through its only lane — the
     // Kotlin runner — without the caller having to say so; likewise a scoped
-    // record of a migrated feature on a mixed tree (no `swift:` twin means its
-    // scenario lives in Kotlin — there is no Swift lane to record from).
+    // record of a feature whose scenario is Kotlin-authored (a migrated feature
+    // has no `swift:` twin at all; a dual-writer feature mid-port still
+    // declares one, but the manifest's ONE scenario is the writer of record and
+    // it runs in the Gradle lane).
     let platform =
       options.platform
-      ?? ((manifest.swiftPackageDirs.isEmpty || feature?.swiftSource.isEmpty == true)
+      ?? ((manifest.swiftPackageDirs.isEmpty || feature?.swiftSource.isEmpty == true
+        || feature?.hasKotlinScenario == true)
         ? "kotlin" : nil)
     // Snapshot fixture bytes so the summary lists what THIS run rewrote (git diff
     // would also show unrelated uncommitted fixture changes).
@@ -504,8 +582,56 @@ enum Lanes {
     }
     // Stale artifacts from an earlier record pass must not re-materialize.
     RecordArtifacts.clear(repo)
+    if options.check {
+      try? FileManager.default.removeItem(
+        at: repo.runsDir.appendingPathComponent("record-check"))
+    }
     var results: [ProcessResult] = []
-    if platform == "kotlin" {
+    if let chain = options.chain {
+      // `record --chain <name>` (A30 R1): the manifest declares chains as
+      // fixture names only — no per-chain module entry — so the recording
+      // scope is DISCOVERED: the test sources that mention the fixture by
+      // name (quoted), grouped into runnable scopes. That covers a chain
+      // whose participants share no aggregator module, the case a --feature
+      // scope cannot reach and the two-writers rule forbids reaching
+      // unscoped.
+      let hosts = chainHosts(of: chain, repo: repo, manifest: manifest)
+      if hosts.gradleTaskStems.isEmpty && hosts.swiftRootStems.isEmpty {
+        let message =
+          "no test source under the manifest's roots mentions \"\(chain)\" — the chain"
+          + " has no discoverable recording path; add its scenario (and replay test) first"
+        if options.json {
+          emitJSON(["status": "failed", "phase": "meta", "errors": [message]])
+        } else {
+          print("duet record: FAIL — \(message)")
+        }
+        return 1
+      }
+      var launches: [(Process, URL, Date)] = []
+      if !hosts.gradleTaskStems.isEmpty, let androidDir = manifest.androidDir {
+        var arguments = ["./gradlew"]
+        for (task, stems) in hosts.gradleTaskStems.sorted(by: { $0.key < $1.key }) {
+          arguments.append(task)
+          // --tests binds to the task named right before it, like --rerun.
+          for stem in stems.sorted() { arguments += ["--tests", "*.\(stem)"] }
+          arguments.append("--rerun")
+        }
+        arguments += ["-PregenFixtures=1", "--console=plain"]
+        launches.append(
+          try launch(
+            arguments, cwd: androidDir, extraEnv: gradleEnvironment(),
+            logName: "record-chain"))
+      }
+      for (root, stems) in hosts.swiftRootStems.sorted(by: { $0.key.path < $1.key.path }) {
+        var arguments = ["swift", "test"]
+        for stem in stems.sorted() { arguments += ["--filter", stem] }
+        launches.append(
+          try launch(
+            arguments, cwd: root, extraEnv: ["REGEN_FIXTURES": "1"],
+            logName: "record-chain-\(root.lastPathComponent)"))
+      }
+      results = launches.map(finish)
+    } else if platform == "kotlin" {
       // Reachable only by explicit --platform kotlin on a Swift-only manifest —
       // the defaulting above never picks kotlin without a Kotlin root.
       guard let androidDir = manifest.androidDir else {
@@ -574,6 +700,10 @@ enum Lanes {
       results = launches.map(finish)
     }
     if results.contains(where: { $0.exitCode != 0 }) {
+      // A red lane may have written a partial rewrite already (the Swift
+      // runners write directly) — a failing --check leaves the fixture tree
+      // byte-identical (A30 R2), on this path too.
+      if options.check, !options.write { restoreFixtures(repo, to: before) }
       var logs: [String] = []
       for result in results where result.exitCode != 0 {
         let log = (try? String(contentsOf: result.logURL, encoding: .utf8)) ?? ""
@@ -605,11 +735,26 @@ enum Lanes {
     let behavioralChanged = changed.filter { before[$0]?.behavioral != after[$0]?.behavioral }
     let metadataOnly = changed.filter { !behavioralChanged.contains($0) }
     if options.check {
+      // A failing --check must not materialize its rewrite (A30 R2): the
+      // recorded output moves to parity/.runs/record-check/ and the committed
+      // tree is restored byte-identically, so a drift control needs a source
+      // restore only, never a fixture-tree one. --write keeps the rewrite in
+      // the tree (the inspect-in-place repair path).
+      var rewriteDir: String?
+      if !behavioralChanged.isEmpty, !options.write {
+        rewriteDir = saveRecordCheckRewrite(repo, changed: changed)
+        restoreFixtures(repo, to: before)
+      }
       if options.json {
-        emitJSON([
+        var payload: [String: Any] = [
           "status": behavioralChanged.isEmpty ? "passed" : "failed",
           "stale": behavioralChanged, "metadataOnly": metadataOnly,
-        ])
+        ]
+        if let rewriteDir {
+          payload["fixtureTree"] = "untouched"
+          payload["rewriteDir"] = rewriteDir
+        }
+        emitJSON(payload)
       } else if changed.isEmpty {
         print("duet record --check: fixtures are up to date with their scenarios")
       } else if behavioralChanged.isEmpty {
@@ -625,7 +770,12 @@ enum Lanes {
         if !metadataOnly.isEmpty {
           print("  (+ \(metadataOnly.count) metadata-only rewrite(s) — admissible)")
         }
-        print("commit the regenerated fixtures (fixtures are build products — never hand-edit)")
+        if let rewriteDir {
+          print("parity/fixtures is untouched — the would-be rewrite is under \(rewriteDir)/")
+          print("materialize it with `duet record` (fixtures are build products — never hand-edit)")
+        } else {
+          print("commit the regenerated fixtures (fixtures are build products — never hand-edit)")
+        }
       }
       return behavioralChanged.isEmpty ? 0 : 1
     }
@@ -675,7 +825,7 @@ enum Lanes {
   /// per participant), the same derivation the spec↔fixture meta-check uses.
   /// Unreadable fixture → empty set, which keeps the strict default (the
   /// swift-lane row stays expected).
-  private static func chainParticipants(of chain: String, in repo: Repo) -> Set<String> {
+  static func chainParticipants(of chain: String, in repo: Repo) -> Set<String> {
     guard
       let data = try? Data(
         contentsOf: repo.fixturesDir.appendingPathComponent("\(chain).fixture.json")),
@@ -683,6 +833,106 @@ enum Lanes {
       let initialStates = document["initialStates"] as? [String: Any]
     else { return [] }
     return Set(initialStates.keys)
+  }
+
+  /// The runnable scopes hosting a chain's tests: Gradle lane task → test-class
+  /// stems, Swift package root → test-class stems.
+  struct ChainHosts {
+    var gradleTaskStems: [String: Set<String>] = [:]
+    var swiftRootStems: [URL: Set<String>] = [:]
+  }
+
+  /// Test sources that mention the chain fixture by name (quoted — the replay
+  /// convention passes the fixture name as a string literal), grouped into
+  /// runnable scopes. Only test source sets are searched: they are the only
+  /// files a lane task can run, and deriving the task needs the source set
+  /// anyway (`commonTest` runs on the JVM as `jvmTest`).
+  private static func chainHosts(of chain: String, repo: Repo, manifest: Manifest)
+    -> ChainHosts
+  {
+    var hosts = ChainHosts()
+    let needle = "\"\(chain)\""
+    if let androidDir = manifest.androidDir,
+      let enumerator = FileManager.default.enumerator(
+        at: androidDir, includingPropertiesForKeys: nil)
+    {
+      for case let url as URL in enumerator {
+        let name = url.lastPathComponent
+        if ["build", ".gradle", ".git", ".kotlin"].contains(name) {
+          enumerator.skipDescendants()
+          continue
+        }
+        guard name.hasSuffix(".kt") else { continue }
+        let androidPath = androidDir.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        guard path.hasPrefix(androidPath + "/") else { continue }
+        let parts = path.dropFirst(androidPath.count + 1).split(separator: "/")
+          .map(String.init)
+        guard let srcIndex = parts.firstIndex(of: "src"), srcIndex > 0,
+          srcIndex + 1 < parts.count
+        else { continue }
+        let taskName: String
+        switch parts[srcIndex + 1] {
+        case "test": taskName = "test"
+        case "jvmTest", "commonTest": taskName = "jvmTest"
+        default: continue
+        }
+        guard let content = try? String(contentsOf: url, encoding: .utf8),
+          content.contains(needle)
+        else { continue }
+        let module = parts[..<srcIndex].joined(separator: ":")
+        let task = ":\(module):\(taskName)"
+        let stem = URL(fileURLWithPath: name).deletingPathExtension().lastPathComponent
+        hosts.gradleTaskStems[task, default: []].insert(stem)
+      }
+    }
+    for root in manifest.swiftPackageDirs {
+      let testsDir = root.appendingPathComponent("Tests")
+      guard
+        let enumerator = FileManager.default.enumerator(
+          at: testsDir, includingPropertiesForKeys: nil)
+      else { continue }
+      for case let url as URL in enumerator where url.lastPathComponent.hasSuffix(".swift") {
+        guard let content = try? String(contentsOf: url, encoding: .utf8),
+          content.contains(needle)
+        else { continue }
+        let stem = url.deletingPathExtension().lastPathComponent
+        hosts.swiftRootStems[root, default: []].insert(stem)
+      }
+    }
+    return hosts
+  }
+
+  /// Restores parity/fixtures to a byte snapshot: files whose bytes differ are
+  /// rewritten from it, files it does not know are deleted, files it holds that
+  /// vanished are re-created.
+  private static func restoreFixtures(_ repo: Repo, to before: [String: FixtureDigest]) {
+    let current = fixtureDigests(repo)
+    for (name, digest) in current where before[name]?.whole != digest.whole {
+      let url = repo.fixturesDir.appendingPathComponent(name)
+      if let original = before[name] {
+        try? original.whole.write(to: url)
+      } else {
+        try? FileManager.default.removeItem(at: url)
+      }
+    }
+    for (name, digest) in before where current[name] == nil {
+      try? digest.whole.write(to: repo.fixturesDir.appendingPathComponent(name))
+    }
+  }
+
+  /// Copies the freshly recorded fixture files (before restore) into
+  /// parity/.runs/record-check/ — the inspectable would-be rewrite.
+  private static func saveRecordCheckRewrite(_ repo: Repo, changed: [String]) -> String {
+    let dir = repo.runsDir.appendingPathComponent("record-check")
+    try? FileManager.default.removeItem(at: dir)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    for name in changed {
+      try? FileManager.default.copyItem(
+        at: repo.fixturesDir.appendingPathComponent(name),
+        to: dir.appendingPathComponent(name))
+    }
+    return "parity/.runs/record-check"
   }
 
   private static func fixtureDigests(_ repo: Repo) -> [String: FixtureDigest] {

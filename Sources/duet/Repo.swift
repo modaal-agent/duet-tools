@@ -99,6 +99,19 @@ struct Feature {
   /// single-sided, port not landed) — both derive no Gradle module.
   var hasKotlinLane: Bool { gradleTestTask != nil }
 
+  /// The scenario is Kotlin-authored (the writer runs in the Gradle lane).
+  var hasKotlinScenario: Bool { scenario?.hasSuffix(".kt") == true }
+
+  /// The dual-writer window (A30): a `swift:` twin still declared while the
+  /// scenario is already Kotlin-authored — the span of a per-feature migration
+  /// in which BOTH platforms hold a writer for the same fixture files. Unscoped
+  /// `record` refuses while any feature is in this state: the Swift roots run
+  /// every scenario under REGEN, so the retiring twin would re-record fixtures
+  /// the Kotlin scenario owns.
+  var isDualWriter: Bool {
+    !swiftSource.isEmpty && swiftSource != "pending" && hasKotlinScenario
+  }
+
   /// Package of the Kotlin sources (`…/kotlin/com/example/x/File.kt` → com.example.x).
   var kotlinPackage: String? {
     let parts = kotlinSource.split(separator: "/").map(String.init)

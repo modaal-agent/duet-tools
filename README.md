@@ -46,12 +46,34 @@ swift run duet help
   Kotlin modules declare the family plugin/dependency allowlist only
   (recursing `project(...)` edges), and kernel-shape declarations (reducers,
   State/Action/EffectPayload) live in gated packages only.
-- `duet record [--feature <name>] [--platform swift|kotlin] [--check]` —
-  scenario-driven fixture regeneration through the framework's ONE §6 writer;
-  sum-coder regen is folded in; `--check` is the CI drift gate: red on
-  behavioral drift (the replay protocol's field set), green through
-  metadata-only churn (scenario.source, step label/line — the admissible
-  diff of a scenario-language port).
+- `duet record [--feature <name>|--chain <name>] [--platform swift|kotlin]
+  [--check [--write]]` — scenario-driven fixture regeneration through the
+  framework's ONE §6 writer; sum-coder regen is folded in; `--check` is the
+  CI drift gate: red on behavioral drift (the replay protocol's field set),
+  green through metadata-only churn (scenario.source, step label/line — the
+  admissible diff of a scenario-language port). A failing `--check` leaves
+  `parity/fixtures` byte-identical: the would-be rewrite lands in
+  `parity/.runs/record-check/` (`--write` materializes it into the tree
+  anyway). `--chain` scopes to one chain fixture — the CLI finds the test
+  sources that mention it (quoted) and runs exactly those, so a chain whose
+  participants share no module records mid-migration without an unscoped
+  pass. While any feature is dual-writer (a `swift:` twin plus a Kotlin
+  `scenario:`), unscoped record refuses with the feature named — record per
+  feature or per chain inside that window (the writer follows the manifest's
+  scenario).
+- `duet lanes` — the lane inventory as data: every lane task, package root,
+  and filter the manifest derives (what `verify` runs), the chains and their
+  participants, the protocol lane's runner, and what `verify` does NOT cover
+  (gradle modules and Swift packages outside the manifest). Generate
+  workflows and fallback runners from this instead of re-deriving lane sets
+  by hand — `verify` prints the same non-coverage on every unscoped run.
+- `duet assert-replayed <log|-> [--min <n>]` — the empty-pass gate for
+  hand-written lane scripts: fail unless the log shows at least `--min`
+  (default 1) executed tests, taking the MAXIMUM across runner summaries
+  (XCTest's `Executed N tests`, swift-testing's `Test run with N tests`,
+  Gradle's `N tests completed`) — `swift test` always prints both Swift
+  summaries, so a zero line is normal on a green run. Works outside a parity
+  repo (it reads a log, not a manifest).
 - `duet explain` / `duet materialize <fixture>#<step> --platform <p>` — render
   the last run's failures; emit a standalone failing unit test for one step.
 - `duet protocol-run [--platform swift|kotlin] [--runner <path>]` — byte-gate
@@ -68,8 +90,9 @@ swift run duet help
   manifest, no configuration).
 - `duet mcp` — the same verification verbs as a stdio MCP server
   (`duet_verify`, `duet_record`, `duet_explain`, `duet_materialize`,
-  `duet_protocol_run`, `duet_scope`); tool results are the verbs' `--json`
-  reports, each stamped with the toolchain version that produced it. The
+  `duet_protocol_run`, `duet_scope`, `duet_lanes`); tool results are the
+  verbs' `--json` reports, each stamped with the toolchain version that
+  produced it. The
   authoring verbs (scaffold/convert/audit) are not served — they are not part
   of the open toolchain.
 

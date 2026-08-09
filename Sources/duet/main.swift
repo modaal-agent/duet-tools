@@ -8,14 +8,17 @@ import Foundation
 struct Options {
   var command: String?
   var feature: String?
+  var chain: String?
   var platform: String?
   var runner: String?
   var target: String?
+  var min: Int?
   var json = false
   var swiftOnly = false
   var kotlinOnly = false
   var clean = false
   var check = false
+  var write = false
 
   enum OptionsError: Error, CustomStringConvertible {
     case unknownFeature(String)
@@ -49,6 +52,12 @@ struct Options {
       case "--feature":
         guard let value = iterator.next() else { return nil }
         options.feature = value
+      case "--chain":
+        guard let value = iterator.next() else { return nil }
+        options.chain = value
+      case "--min":
+        guard let value = iterator.next(), let number = Int(value) else { return nil }
+        options.min = number
       case "--platform":
         guard let value = iterator.next() else { return nil }
         options.platform = value
@@ -65,6 +74,10 @@ struct Options {
         options.clean = true
       case "--check":
         options.check = true
+      case "--write":
+        options.write = true
+      case "-":
+        options.target = "-"
       case "--help", "-h":
         options.command = "help"
       case "--version":
@@ -90,14 +103,36 @@ let usage = """
         `swift:` or `kotlin:` paths only — runs its one lane; a lane flag
         naming the missing lane is a meta-error); failures render with step
         label, JSON path, and scenario line.
-    duet record [--feature <name>] [--platform swift|kotlin] [--check] [--json]
-        recompile fixtures from scenarios (scoped when --feature given), then a
-        review summary of what changed. Fixtures are build products — review the
-        diff like code. --platform kotlin records through the Kotlin runner: it
-        emits compact artifacts and the CLI materializes the §6 files (one
-        writer). --check = CI regen gate: exit 1 on BEHAVIORAL drift (the
-        replay protocol's field set); metadata-only churn (scenario.source,
-        step label/line — a scenario port's admissible diff) reports green.
+    duet record [--feature <name>|--chain <name>] [--platform swift|kotlin]
+                [--check [--write]] [--json]
+        recompile fixtures from scenarios (scoped when --feature or --chain
+        given), then a review summary of what changed. Fixtures are build
+        products — review the diff like code. --chain scopes to one chain
+        fixture: the CLI finds the test sources that mention it and runs
+        exactly those, so a chain records mid-migration without an unscoped
+        pass. --platform kotlin records through the Kotlin runner: it emits
+        compact artifacts and the CLI materializes the §6 files (one writer).
+        --check = CI regen gate: exit 1 on BEHAVIORAL drift (the replay
+        protocol's field set); metadata-only churn (scenario.source, step
+        label/line — a scenario port's admissible diff) reports green. A
+        failing --check leaves parity/fixtures byte-identical — the would-be
+        rewrite lands in parity/.runs/record-check/ instead (--write
+        materializes it into the tree anyway). While any feature is
+        dual-writer (a `swift:` twin plus a Kotlin `scenario:`), unscoped
+        record refuses — record per feature or per chain inside that window.
+    duet lanes [--json]
+        the lane inventory as data: every lane task, package root, and filter
+        the manifest derives (what `verify` runs), the chains and their
+        participants, and what verify does NOT cover (gradle modules and
+        Swift packages outside the manifest, the protocol lane) — generate
+        workflows and fallback runners from this instead of re-deriving.
+    duet assert-replayed <log|-> [--min <n>] [--json]
+        fail unless a lane log shows at least --min (default 1) executed
+        tests — the empty-pass gate for hand-written lane scripts (`swift
+        test` exits 0 on a target that discovers zero tests). Counts the
+        MAXIMUM across runner summaries (XCTest "Executed N tests",
+        swift-testing "Test run with N tests", Gradle "N tests completed") —
+        both Swift summaries print on every run, so a zero line is normal.
     duet explain [--json]
         re-render the last run's failures from parity/.runs (no logs, no re-run).
     duet materialize <fixture>#<step> --platform swift|kotlin [--json]
@@ -140,7 +175,7 @@ let usage = """
 
 /// Bumped with each release tag — the tag is the version of record (pre-1.0
 /// minors are breaking by family convention: a new or changed gate is a minor).
-let duetToolsVersion = "0.5.0"
+let duetToolsVersion = "0.6.0"
 
 guard let options = Options.parse(CommandLine.arguments), let command = options.command
 else {
@@ -155,6 +190,11 @@ if command == "help" {
 if command == "version" {
   print("duet \(duetToolsVersion)")
   exit(0)
+}
+// So does assert-replayed: it reads a log, not a repo — lane scripts outside
+// any parity tree (a framework repo's own CI) get the empty-pass gate too.
+if command == "assert-replayed" {
+  exit(AssertReplayed.run(options: options))
 }
 guard let repo = Repo.discover() else {
   FileHandle.standardError.write(
@@ -179,6 +219,8 @@ do {
     code = try RecordArtifacts.run(repo: repo, options: options)
   case "canonical-sum":
     code = try CanonicalSumVerb.run(repo: repo, options: options)
+  case "lanes":
+    code = try Inventory.run(repo: repo, options: options)
   case "scope":
     code = try Scope.run(repo: repo, options: options)
   case "mcp":

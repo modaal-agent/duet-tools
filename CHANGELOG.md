@@ -1,5 +1,90 @@
 # Changelog
 
+## 0.6.0 — 2026-08-09
+
+Pre-1.0 minor: two new verbs, a new advisory meta-check, and changed `record`
+semantics (a failing `--check` no longer mutates the fixture tree, unscoped
+`record` refuses in the dual-writer window) — gate semantics move, the
+family's breaking lane.
+
+### Added — `duet lanes`: the lane inventory as a queryable contract
+
+`verify` computes which Gradle task each module's lane needs, which package
+roots resolve, and which fixture×platform pairs must report — and none of it
+was reachable from outside the process, so every consumer around the CLI (a
+workflow, a fallback runner, a doc) re-derived the lane set by hand.
+`duet lanes [--json]` exposes the same derivation: per-feature lane tasks and
+filters, the unscoped task set, chains with participants, the protocol lane's
+runner, and what `verify` does NOT cover (gradle modules and Swift packages
+outside the manifest). Generate workflows from this instead of re-deriving.
+Also served over MCP as `duet_lanes`.
+
+### Added — `verify` reports its non-coverage
+
+Silence read as coverage twice: a fallback runner's `./gradlew test` reached
+no feature module after a KMP conversion, and a CI comment asserted the host
+lane covered every module's JVM battery while `jvmTest` and `test` reach
+disjoint module sets. Every unscoped `verify` now ends with the units it makes
+no claim about — gradle modules and Swift packages outside the manifest, and
+the protocol lane — as a printed footer and a `notCovered` object in `--json`.
+Scoped runs state their scope instead.
+
+### Added — `duet assert-replayed`: the empty-pass gate as a verb
+
+`swift test` exits 0 on a target that discovers zero tests, so every
+hand-written lane script re-acquires the empty-pass hole the coverage gate
+closes inside `verify`. `duet assert-replayed <log|-> [--min <n>]` fails
+unless the log shows at least `--min` (default 1) executed tests, taking the
+MAXIMUM across runner summaries — XCTest's `Executed N tests`, swift-testing's
+`Test run with N tests`, and Gradle's `N tests completed`; `swift test` always
+prints both Swift summaries, so a zero line is normal on a green run. Runs
+outside a parity repo (it reads a log, not a manifest) — usable from any CI.
+
+### Added — lane-task shape lint (advisory) in `verify`'s meta phase
+
+A KMP migration swaps a module's lane task from `test` to `jvmTest`; the CLI
+models that in the unscoped task set while the repo's own automation keeps its
+old task list and silently stops reaching migrated modules. `verify` now scans
+`.github/workflows/*.yml` and `parity/scripts/*.sh` for `gradlew` lines whose
+unqualified lane-family tasks name FEWER tasks than the manifest derives, and
+warns with file, line, and the missing task. Module-qualified tasks
+(`:app:test`), extra tasks (a superset runs more, not less), and comment lines
+stay silent. Warnings never fail the run; `--json` carries them as `warnings`.
+
+### Added — `record --chain <name>`: a chain's own recording scope
+
+The manifest declares chains as fixture names only, so a chain had no scoped
+recording path — `--feature` reaches it only when the chain's tests happen to
+live in a feature's module, and unscoped `record` is exactly what the
+dual-writer window forbids. `record --chain <name>` discovers the test sources
+that mention the fixture by name (quoted), derives their lane scopes (Gradle
+task + `--tests` filter per module, `swift test --filter` per package root),
+and runs exactly those under the regen flag.
+
+### Changed — a failing `record --check` leaves the fixture tree byte-identical
+
+`record --check` used to materialize its rewrite before reporting failure, so
+every scenario-drift control needed a fixture-tree restore, not just a source
+restore. The rewrite now lands in `parity/.runs/record-check/` and
+`parity/fixtures` is restored byte-identically on every failing path —
+behavioral drift AND a red lane (Swift runners write directly, so a crashed
+pass could leave a partial rewrite). `--write` keeps the rewrite in the tree
+(the inspect-in-place repair path, exit code unchanged). Green paths are
+unchanged: metadata-only churn still materializes for committing.
+
+### Changed — unscoped `record` refuses in the dual-writer window
+
+A feature declaring BOTH a `swift:` twin and a Kotlin `scenario:` has two
+writers for the same fixture files, and an unscoped pass runs every Swift root
+under REGEN — the retiring twin re-records fixtures the Kotlin scenario owns.
+The CLI can see the condition exactly and now refuses unscoped `record`
+(including `--check`) with the dual-writer features named; `--feature` and
+`--chain` are the in-window recording paths. Scoped record on a dual-writer
+feature now follows the manifest's scenario: a Kotlin `scenario:` records
+through the Gradle lane even while the `swift:` twin is still declared
+(previously the platform default picked the Swift branch and filtered on a
+Kotlin class name — zero tests).
+
 ## 0.5.0 — 2026-08-08
 
 Pre-1.0 minor: manifest representation widens (a Swift-only manifest becomes
