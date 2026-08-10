@@ -24,7 +24,11 @@ import Foundation
 /// Three checks:
 ///  1. Every Swift host-lane root's `Package.resolved` pins the Duet family
 ///     only (a local-path family dependency resolves nothing remotely — a repo
-///     with no remote deps legitimately has no lockfile).
+///     with no remote deps legitimately has no lockfile). With no lockfile the
+///     manifest TREE is the receipt instead: the root's manifest and every
+///     `.package(path:` child, recursed, must declare no `.package(url:` —
+///     this check runs before the lanes, so on a fresh checkout a remote dep
+///     behind a path dep has no lockfile to show up in.
 ///  2. Every gated Kotlin module declares the family plugin/dependency
 ///     allowlist only, recursing through `project(...)` edges — Gradle resolves
 ///     per-configuration so the SwiftPM leak class cannot arise the same way,
@@ -106,18 +110,15 @@ enum HostLane {
       // No lockfile is legal exactly when nothing resolves remotely (the
       // private phase's local-path family dep). A manifest that declares a
       // remote dependency without a committed lock is the gap the check
-      // exists for — the resolved set IS the receipt.
-      let manifestURL = rootURL.appendingPathComponent("Package.swift")
-      let source = (try? String(contentsOf: manifestURL, encoding: .utf8)) ?? ""
-      let uncommented = source.split(separator: "\n", omittingEmptySubsequences: false)
-        .map { $0.components(separatedBy: "//")[0] }
-        .joined(separator: "\n")
-      if uncommented.contains(".package(url:") {
-        errors.append(
-          "[host-lane] host-lane root `\(root)` declares remote dependencies but has no"
-            + " committed Package.resolved — the resolved set IS the receipt: run"
-            + " `swift package resolve` there and commit the lock")
-      }
+      // exists for — the resolved set IS the receipt. The sweep recurses
+      // through `.package(path:` edges — the mirror of the Gradle
+      // `project(...)` recursion — because path deps never enter a lockfile
+      // and this check runs BEFORE the lanes: a remote artifact declared
+      // behind a path dep would otherwise stay invisible until a resolution
+      // materializes the root's lockfile, which a fresh checkout (every CI
+      // run) never has.
+      var seen: Set<String> = []
+      checkManifestTree(rootURL, root: root, repo: repo, via: [], seen: &seen, errors: &errors)
       return
     }
     guard let data = try? Data(contentsOf: lockURL),
@@ -141,6 +142,80 @@ enum HostLane {
           + " family only. App-layer libraries (and the build-tool plugins they drag in)"
           + " belong in the sibling node package, not behind a `condition:` — conditions"
           + " gate linking, not resolution.")
+    }
+  }
+
+  /// The lockless half of check 1: walks a package's manifest and every
+  /// `.package(path:` child (cycle-guarded), flagging any `.package(url:`
+  /// declaration in the tree — with no lockfile, the manifests ARE the only
+  /// receipt of what a resolution would fetch.
+  private static func checkManifestTree(
+    _ packageDir: URL, root: String, repo: Repo, via: [String], seen: inout Set<String>,
+    errors: inout [String]
+  ) {
+    let canonical = packageDir.standardizedFileURL.resolvingSymlinksInPath().path
+    if seen.contains(canonical) { return }
+    seen.insert(canonical)
+    let manifestURL = packageDir.appendingPathComponent("Package.swift")
+    guard let source = try? String(contentsOf: manifestURL, encoding: .utf8) else {
+      // The root's own manifest problems surface through the lanes; a CHILD
+      // the root declares but the sweep cannot read is named here — the fix
+      // belongs at the declaring edge.
+      if !via.isEmpty {
+        errors.append(
+          "[host-lane] host-lane root `\(root)` declares a path dependency with no"
+            + " readable Package.swift: \(via.joined(separator: " → "))")
+      }
+      return
+    }
+    let uncommented = strippedOfLineComments(source)
+    if uncommented.contains(".package(url:") {
+      if via.isEmpty {
+        errors.append(
+          "[host-lane] host-lane root `\(root)` declares remote dependencies but has no"
+            + " committed Package.resolved — the resolved set IS the receipt: run"
+            + " `swift package resolve` there and commit the lock")
+      } else {
+        errors.append(
+          "[host-lane] host-lane root `\(root)` reaches remote dependencies through a"
+            + " path dependency (\(via.joined(separator: " → "))) and has no committed"
+            + " Package.resolved — the resolved set IS the receipt: run"
+            + " `swift package resolve` at the root and commit the lock, and expect the"
+            + " resolved-set rule to gate what appears there")
+      }
+    }
+    for path in pathDependencyPaths(inManifest: uncommented) {
+      let child =
+        path.hasPrefix("/")
+        ? URL(fileURLWithPath: path) : packageDir.appendingPathComponent(path)
+      // Label repo-local children repo-relative; the family checkout (an
+      // absolute path during the private phase) keeps its declared spelling.
+      let childPath = child.standardizedFileURL.path
+      let rootPath = repo.root.standardizedFileURL.path
+      let label =
+        childPath.hasPrefix(rootPath + "/")
+        ? String(childPath.dropFirst(rootPath.count + 1)) : path
+      checkManifestTree(
+        child, root: root, repo: repo, via: via + [label], seen: &seen, errors: &errors)
+    }
+  }
+
+  /// A manifest source with `//` line comments removed (the same stripping the
+  /// Gradle half applies before matching).
+  static func strippedOfLineComments(_ source: String) -> String {
+    source.split(separator: "\n", omittingEmptySubsequences: false)
+      .map { $0.components(separatedBy: "//")[0] }
+      .joined(separator: "\n")
+  }
+
+  /// The `path:` values of `.package(path:)` / `.package(name:, path:)`
+  /// declarations. Pass comment-stripped source.
+  static func pathDependencyPaths(inManifest uncommented: String) -> [String] {
+    let pattern = #"\.package\(\s*(?:name:\s*"[^"]*"\s*,\s*)?path:\s*"([^"]+)""#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+    let range = NSRange(uncommented.startIndex..., in: uncommented)
+    return regex.matches(in: uncommented, range: range).compactMap { match in
+      Range(match.range(at: 1), in: uncommented).map { String(uncommented[$0]) }
     }
   }
 

@@ -586,6 +586,31 @@ enum Lanes {
       try? FileManager.default.removeItem(
         at: repo.runsDir.appendingPathComponent("record-check"))
     }
+    // Scoped Kotlin record pre-deletes the feature's declared fixtures: the
+    // Kotlin FixtureRunner regenerates MISSING files only, and the lane task
+    // also runs the feature's golden replays — so against a behavioral change
+    // the committed files fail their own replay before the writer ever runs,
+    // and the writer would skip them anyway. Deleting first turns both into
+    // the regeneration path (bless-by-git makes the delete safe). `--check`
+    // asks whether the committed files are stale, so it must replay them —
+    // never pre-delete there. The Swift writer overwrites under REGEN and the
+    // scoped Swift record filters to the scenario class, so the Swift path
+    // needs none of this.
+    var preDeleted: [String] = []
+    if let feature = feature, platform == "kotlin", !options.check {
+      for fixture in feature.fixtures {
+        let file = "\(fixture).fixture.json"
+        let url = repo.fixturesDir.appendingPathComponent(file)
+        guard FileManager.default.fileExists(atPath: url.path) else { continue }
+        try? FileManager.default.removeItem(at: url)
+        preDeleted.append(file)
+      }
+      if !preDeleted.isEmpty, !options.json {
+        print(
+          "duet record: pre-deleted \(preDeleted.count) committed fixture(s) so the"
+            + " Kotlin writer regenerates them (it skips existing files)")
+      }
+    }
     var results: [ProcessResult] = []
     if let chain = options.chain {
       // `record --chain <name>` (A30 R1): the manifest declares chains as
@@ -704,6 +729,15 @@ enum Lanes {
       // runners write directly) — a failing --check leaves the fixture tree
       // byte-identical (A30 R2), on this path too.
       if options.check, !options.write { restoreFixtures(repo, to: before) }
+      // A failed record must not leave the tree with fewer fixtures than it
+      // found: put back what the pre-delete removed and the run did not
+      // rewrite (partial rewrites stay, as on every non-check failure).
+      for file in preDeleted {
+        let url = repo.fixturesDir.appendingPathComponent(file)
+        if !FileManager.default.fileExists(atPath: url.path), let original = before[file] {
+          try? original.whole.write(to: url)
+        }
+      }
       var logs: [String] = []
       for result in results where result.exitCode != 0 {
         let log = (try? String(contentsOf: result.logURL, encoding: .utf8)) ?? ""
@@ -779,16 +813,33 @@ enum Lanes {
       }
       return behavioralChanged.isEmpty ? 0 : 1
     }
+    // A pre-deleted fixture the run did not regenerate is a REMOVAL, invisible
+    // to the changed-vs-before diff (the file is simply absent from `after`) —
+    // report it, or "no fixture changes" would read over a vanished file.
+    let removed = preDeleted.filter { after[$0] == nil }
     if options.json {
-      emitJSON(["status": "passed", "regenerated": changed, "metadataOnly": metadataOnly])
+      var payload: [String: Any] = [
+        "status": "passed", "regenerated": changed, "metadataOnly": metadataOnly,
+      ]
+      if !removed.isEmpty { payload["removed"] = removed }
+      emitJSON(payload)
     } else {
-      if changed.isEmpty {
+      if changed.isEmpty, removed.isEmpty {
         print("duet record: no fixture changes (recorded output identical)")
       } else {
-        print("duet record: rewrote \(changed.count) fixture(s):")
-        for file in changed {
-          let tag = metadataOnly.contains(file) ? "   (metadata-only)" : ""
-          print("  parity/fixtures/\(file)\(tag)")
+        if !changed.isEmpty {
+          print("duet record: rewrote \(changed.count) fixture(s):")
+          for file in changed {
+            let tag = metadataOnly.contains(file) ? "   (metadata-only)" : ""
+            print("  parity/fixtures/\(file)\(tag)")
+          }
+        }
+        if !removed.isEmpty {
+          print(
+            "duet record: \(removed.count) fixture(s) deleted and NOT regenerated —"
+              + " the scenario no longer records them:")
+          for file in removed { print("  parity/fixtures/\(file)") }
+          print("retire them from parity/manifest.yaml, or restore via git if this is a defect")
         }
         print("review the diff (git diff -- parity/fixtures), then run `duet verify` for both lanes")
       }

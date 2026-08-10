@@ -175,7 +175,7 @@ let usage = """
 
 /// Bumped with each release tag — the tag is the version of record (pre-1.0
 /// minors are breaking by family convention: a new or changed gate is a minor).
-let duetToolsVersion = "0.6.0"
+let duetToolsVersion = "0.7.0"
 
 guard let options = Options.parse(CommandLine.arguments), let command = options.command
 else {

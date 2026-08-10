@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.7.0 — 2026-08-10
+
+Pre-1.0 minor: changed `record --feature` semantics on the Kotlin path and a
+widened host-lane check — gate semantics move, the family's breaking lane.
+
+### Changed — the lockless host-lane check sweeps path dependencies
+
+With no committed `Package.resolved` at a Swift host-lane root, the check used
+to grep the ROOT manifest alone for `.package(url:` — a remote dependency
+declared in a `.package(path:` child was invisible until a resolution wrote
+the root's lockfile, and the meta-check runs before the lanes, so a fresh
+checkout (every CI run) passed green with an outside artifact one build away.
+The no-lockfile branch now walks the manifest tree: `.package(path:` edges
+recursed (both declaration forms, cycle-guarded, comments stripped), any
+`.package(url:` in the tree flagged with the path chain that reaches it — the
+mirror of the Gradle half's `project(...)` recursion. A path dependency whose
+manifest cannot be read is flagged at the declaring edge. Roots with a
+committed lockfile are unaffected: the resolved set is already the receipt,
+and path-dep growth still needs no allowlist entry.
+
+### Changed — `record --feature` pre-deletes the feature's committed fixtures on the Kotlin path
+
+A behavioral re-record of an EXISTING feature through the Kotlin runner used
+to require hand-deleting its fixture files first: the Kotlin writer
+regenerates MISSING files only, and the feature's lane task also runs its
+golden replays — so the committed files failed their own replay before the
+writer ran, and the writer would have skipped them anyway. `record --feature
+<name>` now deletes the feature's manifest-declared fixture files before the
+lane runs (the recording is bless-by-git; the delete is part of the rewrite),
+prints what it pre-deleted, and turns both paths into regeneration.
+
+Boundaries, unchanged on purpose:
+
+- `--check` never pre-deletes: it asks whether the committed files are stale,
+  so it must replay them.
+- The scoped Swift path needs none of this — the Swift writer overwrites
+  under REGEN and the scoped run filters to the scenario class.
+- A failed record restores whatever the pre-delete removed and the run did
+  not rewrite, so a red lane leaves no fixture missing.
+- A pre-deleted fixture the run does NOT regenerate is reported as a removal
+  (`removed` in `--json`) instead of disappearing behind "no fixture
+  changes" — the manifest still declares it, so retire it from the manifest
+  or restore it via git.
+
 ## 0.6.0 — 2026-08-09
 
 Pre-1.0 minor: two new verbs, a new advisory meta-check, and changed `record`
