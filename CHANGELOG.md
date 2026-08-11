@@ -1,5 +1,64 @@
 # Changelog
 
+## 0.9.0 — 2026-08-11
+
+Pre-1.0 minor: `duet doctor` gains a third row, so a repo can no longer hold
+a test target that nothing runs.
+
+### Added — `doctor` row 3: tests that have never run
+
+`verify` has printed every build unit outside the manifest since 0.6.0 (A29
+R2, the coverage-honesty requirement). Measured outcome on the reference
+repo: the list named a package with a test target for months, on every run,
+and nobody acted on it. The list is long and mixes packages another lane
+genuinely covers with packages nothing runs at all, so it reads as
+inventory, not as a defect.
+
+This row is its narrow half. **A Swift package with no `Package.resolved`
+has never been resolved as a root** — a package acquires one the first time
+anything builds it standalone (`swift test`, `xcodebuild` against its
+scheme) and never from being consumed as a dependency, because the
+consumer's lock is the one that gets written. So a test target in such a
+package has never run anywhere, and that is a finding.
+
+Two conditions keep it from over-firing, both measured rather than guessed:
+
+- **A test target must be declared.** A library no lane builds standalone is
+  the normal case.
+- **A remote dependency must be declared.** SwiftPM writes no lock for a
+  package whose dependencies are all local paths, however often it is built.
+  The reference repo's boundary-lane package runs on every push and has no
+  lock for exactly this reason; without the condition it is a false positive.
+
+- **No aggregate `.xcworkspace` may list the package.** A workspace that
+  gathers several packages so one scheme runs them all — the "AllTests"
+  shape — is a resolution root for its members and writes ONE lock, at
+  `<workspace>/xcshareddata/swiftpm/Package.resolved`. Its members' own
+  roots stay empty however often their tests run. Measured on a probe
+  workspace over a single package, and the shape is in use: a sibling repo
+  runs its whole suite this way and has no per-package lock anywhere.
+  Membership alone is the exemption, whether or not the workspace's lock is
+  committed — the signal cannot see through a workspace, so it must not
+  claim through one either. A project's own `project.xcworkspace` is not an
+  aggregate: the packages it lists are the project's dependencies, not
+  roots.
+
+Both spellings of a remote dependency are recognised (`url:` first, or after
+`name:`), across line breaks, and `//` comments are stripped first — with
+string literals tracked, so the `//` in an `https://` URL is not mistaken
+for one.
+
+Scope is packages OUTSIDE the manifest; the ones inside it are what `verify`
+itself runs. The signal is existence on disk, which in CI — a fresh
+checkout, where this gates — is exactly "committed". A local tree holding an
+untracked lock from a one-off build makes the check silent there: it
+under-reports rather than misreports.
+
+Also exposed, unchanged in meaning, for a workflow that generates its steps:
+`duet lanes` prints the list under the existing outside-the-manifest block,
+and both `lanes --json` and `verify --json` carry it as
+`swiftPackagesWithUnrunTests`.
+
 ## 0.8.0 — 2026-08-11
 
 Pre-1.0 minor: a new verb — `duet doctor` joins the gate surface.

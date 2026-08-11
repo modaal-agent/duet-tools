@@ -409,6 +409,7 @@ enum Lanes {
         payload["notCovered"] = [
           "gradleModules": coverage.gradleModulesOutsideManifest,
           "swiftPackages": coverage.swiftPackagesOutsideManifest,
+          "swiftPackagesWithUnrunTests": coverage.swiftPackagesWithUnrunTests,
           "lanes": ["the protocol lane (duet protocol-run)"],
         ] as [String: Any]
       }
@@ -484,6 +485,14 @@ enum Lanes {
       }
       outside.append("the protocol lane (run `duet protocol-run`)")
       print("not covered by verify — run these in your workflow: \(outside.joined(separator: " · "))")
+      // Narrow enough to act on, unlike the list above: these declare tests and
+      // have never been resolved as a root, so nothing has ever run them.
+      if !coverage.swiftPackagesWithUnrunTests.isEmpty {
+        print(
+          "  of those, tests that have never run anywhere: "
+            + coverage.swiftPackagesWithUnrunTests.joined(separator: " ")
+            + " — `duet doctor` fails on these")
+      }
     } else {
       print("coverage: scoped run — the landing gate is unscoped `duet verify`")
     }

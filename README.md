@@ -96,7 +96,13 @@ swift run duet help
   via a refining protocol, or via a superclass) declared
   `@unchecked Sendable` in non-test sources. The compiler accepts that stamp
   with no diagnostic even under complete concurrency checking, so only a
-  lint can hold the rule. Read-only; exit 1 lists findings.
+  lint can hold the rule. Third row: a Swift package outside the manifest
+  that declares a test target and has no `Package.resolved` — nothing has
+  ever resolved it as a root, so those tests have never run anywhere. Two
+  shapes are exempt because for them the missing lock means nothing: a
+  package whose dependencies are all local paths (SwiftPM writes it no lock
+  ever), and a member of an aggregate `.xcworkspace` (the workspace holds
+  the one lock for all its members). Read-only; exit 1 lists findings.
 - `duet mcp` — the same verification verbs as a stdio MCP server
   (`duet_verify`, `duet_record`, `duet_explain`, `duet_materialize`,
   `duet_protocol_run`, `duet_scope`, `duet_lanes`, `duet_doctor`); tool
