@@ -160,12 +160,25 @@ let usage = """
         module→gates map, derived from the manifest: fixture → its owning
         feature and the record loop; feature source → the feature's verify/
         record commands; app trees → "not governed" with a pointer.
+    duet doctor [--json]
+        cross-check the repo's declaration layer against what is on disk.
+        Row 1: every target in .modaal/project.json — platform present,
+        template one this toolchain models, pair members agreeing on
+        template, an iOS target's xcodegen.yml present, and the template's
+        implied shape matching the manifest's derived lanes ("this repo
+        says duet-kmp; the manifest derives no Kotlin lane" is a finding).
+        Row 2: the worker-isolation lint — a Working conformer (direct,
+        via a refining protocol, or via a superclass) declared
+        '@unchecked Sendable' in non-test sources; the compiler accepts
+        that stamp with no diagnostic even under complete concurrency
+        checking, so only a lint can hold the rule. Never rewrites.
     duet mcp
         serve the verification verbs as a stdio MCP server (duet_verify,
         duet_record, duet_explain, duet_materialize, duet_protocol_run,
-        duet_scope) — one mcpServers entry gives any agent harness the
-        toolchain; tool results are the verbs' --json reports (each stamped
-        with the toolchain version). Launch with cwd inside the repo.
+        duet_scope, duet_doctor) — one mcpServers entry gives any agent
+        harness the toolchain; tool results are the verbs' --json reports
+        (each stamped with the toolchain version). Launch with cwd inside
+        the repo.
     duet version
         print the toolchain version (matches the release tag), so gate
         receipts can record which toolchain ran. Works outside a repo.
@@ -175,7 +188,7 @@ let usage = """
 
 /// Bumped with each release tag — the tag is the version of record (pre-1.0
 /// minors are breaking by family convention: a new or changed gate is a minor).
-let duetToolsVersion = "0.7.0"
+let duetToolsVersion = "0.8.0"
 
 guard let options = Options.parse(CommandLine.arguments), let command = options.command
 else {
@@ -223,6 +236,8 @@ do {
     code = try Inventory.run(repo: repo, options: options)
   case "scope":
     code = try Scope.run(repo: repo, options: options)
+  case "doctor":
+    code = try Doctor.run(repo: repo, options: options)
   case "mcp":
     code = try Mcp.run(repo: repo, options: options)
   default:

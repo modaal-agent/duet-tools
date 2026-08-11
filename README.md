@@ -88,9 +88,19 @@ swift run duet help
 - `duet scope <path>` — which gates govern a file, and the authoring loop for
   it (the module→gates map, both routing directions; derived from the
   manifest, no configuration).
+- `duet doctor` — the declaration-vs-disk cross-check: every target declared
+  in `.modaal/project.json` (platform present, template one the toolchain
+  models, pair members agreeing on template, an iOS target's `xcodegen.yml`
+  present, the template's implied shape matching the manifest's derived
+  lanes), plus the worker-isolation lint — a `Working` conformer (direct,
+  via a refining protocol, or via a superclass) declared
+  `@unchecked Sendable` in non-test sources. The compiler accepts that stamp
+  with no diagnostic even under complete concurrency checking, so only a
+  lint can hold the rule. Read-only; exit 1 lists findings.
 - `duet mcp` — the same verification verbs as a stdio MCP server
   (`duet_verify`, `duet_record`, `duet_explain`, `duet_materialize`,
-  `duet_protocol_run`, `duet_scope`, `duet_lanes`); tool results are the
+  `duet_protocol_run`, `duet_scope`, `duet_lanes`, `duet_doctor`); tool
+  results are the
   verbs' `--json` reports, each stamped with the toolchain version that
   produced it. The
   authoring verbs (scaffold/convert/audit) are not served — they are not part

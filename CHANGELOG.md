@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.8.0 — 2026-08-11
+
+Pre-1.0 minor: a new verb — `duet doctor` joins the gate surface.
+
+### Added — `duet doctor`: the declaration-vs-disk cross-check
+
+A repo carries a declaration layer the byte gates never read:
+`.modaal/project.json` names the app targets, their platform, the template
+each was emitted from, and the cross-platform pair they belong to. Nothing
+validated it — a target claiming a template whose shape the repo does not
+have, or a template name nothing models, stayed green through every lane.
+`duet doctor` reads the declarations and answers: this repo says X; here is
+what X implies; here is what is on disk.
+
+Row 1 — declarations. Findings for: a missing or unparseable
+`.modaal/project.json`; a target without `platform`; a `template` the
+toolchain does not model (models: `duet-kmp`, `duet-swift-ios`,
+`duet-swift-scene`); `pair` without `template`; pair members disagreeing on
+`template`; an iOS target whose `xcodegen.yml` is absent at the declared (or
+default) `xcodegen_root`; and a template whose implied shape contradicts the
+manifest — `duet-kmp` on a repo whose manifest derives no Kotlin lane, a
+single-core swift template on a repo whose manifest derives one, an Android
+target on a template with no Android arm. Targets that declare no `template`
+are outside the row's jurisdiction — absence of the marker marks nothing.
+
+Row 2 — the worker-isolation lint. A `Working` conformer declared
+`@unchecked Sendable` in non-test sources is a finding, at file:line.
+Conformance is closed transitively over the scanned declarations — a seam
+protocol refining `Working`, a superclass, or an `extension` adding the
+conformance all count, because that is how workers actually conform. The
+compiler cannot hold this rule: under complete concurrency checking a
+`@MainActor` class is already implicitly `Sendable`, so the redundant
+`@unchecked` stamp compiles with no diagnostic while silencing the checking
+on a worker that is not isolated. Test sources are out of scope — a double
+conforming to a `@MainActor` protocol infers isolation whatever `Sendable`
+conformance it declares, so linting it buys nothing.
+
+Boundaries, on purpose: doctor is read-only and rewrites nothing; gate
+derivation stays manifest-only — this is the CLI's only `.modaal` consumer;
+the source scan is textual (the lint runs on repos whose sources need not
+compile on this host) and skips build products, checkouts, and any directory
+component ending in `Tests`. Served over MCP as `duet_doctor`.
+
 ## 0.7.0 — 2026-08-10
 
 Pre-1.0 minor: changed `record --feature` semantics on the Kotlin path and a
