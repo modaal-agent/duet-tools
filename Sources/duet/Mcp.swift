@@ -81,8 +81,10 @@ enum Mcp {
         reports which gates govern a file. duet_lanes reports the lane \
         inventory the manifest derives — and what verify does NOT cover. \
         duet_doctor cross-checks the repo's target declarations \
-        (.modaal/project.json) against the manifest's derived shape and \
-        lints Working conformers stamped '@unchecked Sendable'.
+        (.modaal/project.json) against the manifest's derived shape, \
+        lints Working conformers stamped '@unchecked Sendable', and \
+        flags Swift packages whose declared tests have never run \
+        anywhere (no lane has ever resolved them as a root).
         """,
     ]
   }
@@ -161,7 +163,7 @@ enum Mcp {
       ],
       [
         "name": "duet_doctor",
-        "description": "Cross-check the repo's declaration layer against what is on disk: every target in .modaal/project.json (platform present, template one this toolchain models, pair members agreeing on template, an iOS target's xcodegen.yml present, the template's implied shape matching the manifest's derived lanes), plus the worker-isolation lint — a Working conformer declared '@unchecked Sendable' in non-test sources, which compiles with no diagnostic even under complete concurrency checking. Read-only.",
+        "description": "Cross-check the repo's declaration layer against what is on disk: every target in .modaal/project.json (platform present, template one this toolchain models, pair members agreeing on template, an iOS target's xcodegen.yml present, the template's implied shape matching the manifest's derived lanes), plus the worker-isolation lint — a Working conformer declared '@unchecked Sendable' in non-test sources, which compiles with no diagnostic even under complete concurrency checking — plus the unrun-tests row: a Swift package outside the manifest with a test target, a remote dependency, and no Package.resolved has never been resolved as a root, so those tests have never run (path-only-dependency packages and aggregate-.xcworkspace members are exempt). Read-only.",
         "inputSchema": ["type": "object", "properties": [String: Any]()] as [String: Any],
       ],
     ]

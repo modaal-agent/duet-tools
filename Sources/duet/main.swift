@@ -171,7 +171,13 @@ let usage = """
         via a refining protocol, or via a superclass) declared
         '@unchecked Sendable' in non-test sources; the compiler accepts
         that stamp with no diagnostic even under complete concurrency
-        checking, so only a lint can hold the rule. Never rewrites.
+        checking, so only a lint can hold the rule.
+        Row 3: tests that have never run — a Swift package outside the
+        manifest that declares a test target, names a remote dependency,
+        and has no Package.resolved has never been resolved as a root.
+        Path-only-dependency packages and members of an aggregate
+        .xcworkspace are exempt (for them the missing lock means
+        nothing). Never rewrites.
     duet mcp
         serve the verification verbs as a stdio MCP server (duet_verify,
         duet_record, duet_explain, duet_materialize, duet_protocol_run,
