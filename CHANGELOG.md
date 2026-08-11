@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.10.0 — 2026-08-11
+
+Pre-1.0 minor: the worker-isolation lint reads three shapes it used to read
+wrong. Two of them change what the gate reports, which is what makes this a
+minor rather than a patch.
+
+### Fixed — attribute order on a `Sendable` conformance
+
+`@retroactive @unchecked Sendable` declares the same conformance as
+`@unchecked Sendable`, and the lint matched only the second spelling, so a
+worker stamped the first way passed. The inheritance clause is now parsed
+attribute-by-attribute in any order, with attribute arguments consumed
+alongside the attribute (`@available(*, deprecated) Foo`), so
+`extension Worker: @retroactive Working` also registers as the conformance
+it is. No repo in the family stamps its own types with `@retroactive` — it
+applies to conformances a module adds to another module's type — so this
+widens what the gate catches without changing any current repo's result.
+
+### Fixed — `extension Outer.Inner` attributed to `Outer`
+
+The declaration regex captured the first identifier, so a conformance added
+to a nested type marked its enclosing type instead: a stamped `Outer` was a
+finding on the strength of `Inner`'s conformance, and a stamped `Inner` was
+not. Dotted paths are now captured whole and attributed to their last
+component, which is the type the conformance is added to.
+
+### Changed — a worker finding carries its evidence
+
+The finding named the stamped type and left the reader to find the
+conformance. It now names the protocol or superclass the conformance came
+through and, when that declaration is in another file, its path and line.
+
+The lint resolves names textually: matching declarations by bare name across
+the whole scan is what carries a conformance from the file declaring a seam
+protocol to the file declaring the worker, and no textual parser can tell
+two unrelated same-named types apart. When a name is declared in more than
+one place the finding now says so and lists the declarations, so a false
+positive from a name collision is read off the message instead of
+reconstructed by hand.
+
+### Fixed — doctor's own surfaces name all three rows
+
+0.9.0 added the third row and left `duet doctor`'s usage text and both MCP
+descriptions (the server instructions and the `duet_doctor` tool) describing
+two. All three now name it.
+
 ## 0.9.0 — 2026-08-11
 
 Pre-1.0 minor: `duet doctor` gains a third row, so a repo can no longer hold

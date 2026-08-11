@@ -176,6 +176,74 @@ final class DoctorTests: XCTestCase {
       files: [("Sources/App/Seam.swift", seam), ("Sources/App/Worker.swift", worker)])
     XCTAssertEqual(findings.count, 1)
     XCTAssertTrue(findings[0].contains("'LocationWorker'"))
+    // The seam is named, so the reader does not re-derive the chain.
+    XCTAssertTrue(findings[0].contains("via 'LocationWorking'"))
+  }
+
+  func testRetroactiveUncheckedStampIsAFinding() {
+    // Attribute order is the author's choice; both spellings are the same
+    // conformance.
+    let source = """
+      final class AudioWorker: Working {
+        func run() async {}
+      }
+
+      extension AudioWorker: @retroactive @unchecked Sendable {}
+      """
+    let findings = Doctor.workerFindings(files: [("Sources/App/AudioWorker.swift", source)])
+    XCTAssertEqual(findings.count, 1)
+    XCTAssertTrue(findings[0].contains("AudioWorker.swift:5"))
+  }
+
+  func testNestedExtensionAttributesToTheInnerType() {
+    // `extension Outer.Inner` adds the conformance to Inner. Outer carries
+    // the stamp and is NOT a worker.
+    let source = """
+      final class Outer: @unchecked Sendable {
+        final class Inner {}
+      }
+
+      extension Outer.Inner: Working {}
+      """
+    XCTAssertEqual(Doctor.workerFindings(files: [("Sources/App/Outer.swift", source)]), [])
+  }
+
+  func testStampedInnerTypeIsAFinding() {
+    // The positive control for the case above: move the stamp to Inner and
+    // the same extension marks it.
+    let source = """
+      final class Outer {
+        final class Inner: @unchecked Sendable {}
+      }
+
+      extension Outer.Inner: Working {}
+      """
+    let findings = Doctor.workerFindings(files: [("Sources/App/Outer.swift", source)])
+    XCTAssertEqual(findings.count, 1)
+    XCTAssertTrue(findings[0].contains("'Inner'"))
+  }
+
+  func testANameDeclaredTwiceIsReportedAsSuch() {
+    // Two unrelated types sharing a name share their inheritance clauses —
+    // textual name resolution is what carries a seam protocol across files.
+    // The finding says where the conformance came from and that the name is
+    // not unique, which is what makes it triageable.
+    let worker = """
+      final class Freshness: Working {
+        func run() async {}
+      }
+      """
+    let unrelated = """
+      final class Freshness: @unchecked Sendable {
+        let cache = NSCache<NSString, NSData>()
+      }
+      """
+    let findings = Doctor.workerFindings(
+      files: [("Sources/App/Freshness.swift", worker), ("Sources/Net/Freshness.swift", unrelated)])
+    XCTAssertEqual(findings.count, 1)
+    XCTAssertTrue(findings[0].contains("Sources/Net/Freshness.swift:1"))
+    XCTAssertTrue(findings[0].contains("declared at Sources/App/Freshness.swift:1"))
+    XCTAssertTrue(findings[0].contains("declared in 2 places"))
   }
 
   func testExtensionAddedStampIsAFinding() {

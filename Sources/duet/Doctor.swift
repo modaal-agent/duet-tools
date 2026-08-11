@@ -25,6 +25,15 @@ import Foundation
 /// double conforming to a `@MainActor` protocol infers isolation whatever
 /// `Sendable` conformance it declares.
 ///
+/// The lint reads text, not types, so its name resolution is textual:
+/// declarations are matched by bare name across the whole scan (which is
+/// what carries a conformance from the file declaring the seam protocol to
+/// the file declaring the worker), and `extension Outer.Inner` attributes
+/// to `Inner`. Two unrelated types sharing a name therefore share their
+/// inheritance clauses; the finding names the file and line the `Working`
+/// conformance came from, and says so outright when the name is declared
+/// in more than one place.
+///
 /// **[lanes]** — a Swift package declaring a test target that no lane has
 /// ever built. `verify` already prints every build unit outside the
 /// manifest, but that list is long and mixes packages another lane covers
@@ -183,17 +192,25 @@ enum Doctor {
   /// keyword and the body's `{`, with the generic parameter list and any
   /// `where` clause stripped.
   struct Declaration {
+    /// The declared type's own name: the last component of a dotted path,
+    /// so `extension Outer.Inner` is `Inner` — the type the conformance is
+    /// actually being added to.
     var name: String
     var line: Int
     /// Top-level entries of the inheritance clause, each reduced to its
-    /// last dotted identifier with generic arguments stripped
-    /// (`DuetShells.Working` → `Working`, `Store<S>` → `Store`).
+    /// last dotted identifier with generic arguments and leading attributes
+    /// stripped (`DuetShells.Working` → `Working`, `Store<S>` → `Store`,
+    /// `@retroactive @unchecked Sendable` → `Sendable`).
     var conformances: [String]
     var declaresUncheckedSendable: Bool
+    /// `extension` bodies add conformances to a type declared elsewhere, so
+    /// they are not counted when reporting how many types share a name.
+    var isExtension: Bool
   }
 
   private static let declarationRegex = try! NSRegularExpression(
-    pattern: #"\b(class|struct|actor|enum|protocol|extension)\s+([A-Za-z_][A-Za-z0-9_]*)"#)
+    pattern: #"\b(class|struct|actor|enum|protocol|extension)\s+"#
+      + #"([A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*)"#)
 
   /// Parses declaration headers out of one source file. Textual on purpose
   /// — the lint runs on repos whose sources need not compile on this host.
@@ -213,7 +230,8 @@ enum Doctor {
     for match in declarationRegex.matches(
       in: stripped, range: NSRange(location: 0, length: ns.length))
     {
-      let name = ns.substring(with: match.range(at: 2))
+      let introducer = ns.substring(with: match.range(at: 1))
+      let name = lastComponent(ns.substring(with: match.range(at: 2)))
       let headerStart = match.range.location + match.range.length
       // Header runs to the body's `{` (or a `;`/end for bodiless protocols
       // in principle — every real declaration this lint targets has a body).
@@ -234,29 +252,64 @@ enum Doctor {
       var conformances: [String] = []
       var unchecked = false
       for part in splitTopLevelCommas(clause) {
-        let entry = part.trimmingCharacters(in: .whitespacesAndNewlines)
-          .replacingOccurrences(of: "\n", with: " ")
-        if entry.replacingOccurrences(
+        let entry = part.replacingOccurrences(
           of: #"\s+"#, with: " ", options: .regularExpression
-        ).hasPrefix("@unchecked Sendable") {
-          unchecked = true
-          conformances.append("Sendable")
-          continue
-        }
-        let base = entry.split(separator: "<").first.map(String.init) ?? entry
-        if let last = base.split(separator: ".").last {
-          let identifier = last.trimmingCharacters(in: .whitespacesAndNewlines)
-          if !identifier.isEmpty { conformances.append(identifier) }
-        }
+        ).trimmingCharacters(in: .whitespaces)
+        // Attributes lead the entry in any order: `@unchecked Sendable` and
+        // `@retroactive @unchecked Sendable` are the same conformance.
+        let (attributes, type) = splittingLeadingAttributes(entry)
+        let identifier = lastComponent(type.split(separator: "<").first.map(String.init) ?? type)
+        guard !identifier.isEmpty else { continue }
+        if identifier == "Sendable" && attributes.contains("unchecked") { unchecked = true }
+        conformances.append(identifier)
       }
       let line = ns.substring(to: match.range.location)
         .reduce(into: 1) { if $1 == "\n" { $0 += 1 } }
       results.append(
         Declaration(
           name: name, line: line, conformances: conformances,
-          declaresUncheckedSendable: unchecked))
+          declaresUncheckedSendable: unchecked, isExtension: introducer == "extension"))
     }
     return results
+  }
+
+  /// The last dotted component of a type reference, whitespace trimmed:
+  /// `DuetShells.Working` → `Working`, `Outer . Inner` → `Inner`.
+  private static func lastComponent(_ reference: String) -> String {
+    let last = reference.split(separator: ".").last.map(String.init) ?? reference
+    return last.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  /// Splits `@retroactive @unchecked Sendable` into (`["retroactive",
+  /// "unchecked"]`, `"Sendable"`). Attribute arguments are consumed with the
+  /// attribute (`@available(*, deprecated) Foo`), so what remains is the
+  /// type reference.
+  private static func splittingLeadingAttributes(
+    _ entry: String
+  ) -> (attributes: Set<String>, type: String) {
+    var attributes: Set<String> = []
+    var rest = Substring(entry)
+    while rest.hasPrefix("@") {
+      let afterAt = rest.dropFirst()
+      let name = afterAt.prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+      guard !name.isEmpty else { break }
+      attributes.insert(String(name))
+      rest = afterAt.dropFirst(name.count).drop { $0 == " " }
+      if rest.hasPrefix("(") {
+        var depth = 0
+        var index = rest.startIndex
+        while index < rest.endIndex {
+          if rest[index] == "(" { depth += 1 }
+          if rest[index] == ")" {
+            depth -= 1
+            if depth == 0 { index = rest.index(after: index); break }
+          }
+          index = rest.index(after: index)
+        }
+        rest = rest[index...].drop { $0 == " " }
+      }
+    }
+    return (attributes, String(rest).trimmingCharacters(in: .whitespaces))
   }
 
   private static func strippingGenericParameters(_ header: String) -> String {
@@ -317,17 +370,51 @@ enum Doctor {
       }
     }
 
+    // Where each name's Working conformance was declared, and how many
+    // types carry the name — both go into the finding, so a reader never
+    // has to re-derive the chain or guess at a name collision.
+    var conformanceSites: [String: [(base: String, path: String, line: Int)]] = [:]
+    var typeSites: [String: [String]] = [:]
+    for (path, decls) in declarationsByFile {
+      for decl in decls {
+        if !decl.isExtension { typeSites[decl.name, default: []].append("\(path):\(decl.line)") }
+        guard let base = decl.conformances.first(where: { workingImplying.contains($0) })
+        else { continue }
+        conformanceSites[decl.name, default: []].append((base, path, decl.line))
+      }
+    }
+    for name in conformanceSites.keys {
+      conformanceSites[name]?.sort { ($0.path, $0.line) < ($1.path, $1.line) }
+    }
+    for name in typeSites.keys { typeSites[name]?.sort() }
+
     var findings: [String] = []
     for (path, decls) in declarationsByFile {
       for decl in decls
       where decl.declaresUncheckedSendable && workingImplying.contains(decl.name)
         && decl.name != "Working"
       {
+        let sites = conformanceSites[decl.name] ?? []
+        let here = sites.first { $0.path == path && $0.line == decl.line }
+        var via = ""
+        if let here {
+          via = " (via '\(here.base)')"
+        } else if let elsewhere = sites.first {
+          via = " (via '\(elsewhere.base)', declared at \(elsewhere.path):\(elsewhere.line))"
+        }
+        var collision = ""
+        let declarations = typeSites[decl.name] ?? []
+        if declarations.count > 1 {
+          collision =
+            " '\(decl.name)' is declared in \(declarations.count) places "
+            + "(\(declarations.joined(separator: ", "))); this lint matches declarations by "
+            + "bare name, so confirm the conformance above is this one's."
+        }
         findings.append(
-          "[workers] \(path):\(decl.line): '\(decl.name)' conforms to Working and is declared "
-            + "'@unchecked Sendable' — the stamp silences the isolation checking the worker "
-            + "rule relies on (see docs/workers.md in the duet framework); isolate the worker "
-            + "(@MainActor, or prove Sendable) instead")
+          "[workers] \(path):\(decl.line): '\(decl.name)' conforms to Working\(via) and is "
+            + "declared '@unchecked Sendable' — the stamp silences the isolation checking the "
+            + "worker rule relies on (see docs/workers.md in the duet framework); isolate the "
+            + "worker (@MainActor, or prove Sendable) instead.\(collision)")
       }
     }
     return findings.sorted()
