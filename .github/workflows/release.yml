@@ -1,0 +1,214 @@
+# Publishes the prebuilt `duet` binary for a tag.
+#
+# A repo consumes the toolchain by pinning a version, so installing that
+# version must not require a Swift toolchain or a source checkout. This job
+# owes four things: a binary that runs on the adopter floor, a stable asset
+# URL, a checksum an installer can verify without a human reading it, and a
+# binary whose `duet version` matches the tag it was published under.
+#
+# The asset is macOS **arm64**, named for its architecture:
+#
+#   https://github.com/modaal-agent/duet-tools/releases/download/<tag>/duet-macos-arm64.zip
+#   https://github.com/modaal-agent/duet-tools/releases/download/<tag>/duet-macos-arm64.zip.sha256
+#
+# An installer resolves the URL from the pinned tag, so it must check
+# `uname -m` first and fall back to building from source on any other
+# architecture. The `.sha256` sidecar is `shasum -a 256` output, so verifying
+# is `shasum -a 256 -c duet-macos-arm64.zip.sha256` — no parsing.
+name: release
+
+on:
+  push:
+    # Bare semver tags: 0.11.0, not v0.11.0.
+    tags: ["[0-9]*.[0-9]*.[0-9]*"]
+  # Publishes the binary for a tag that already exists — how an earlier
+  # release gets its asset without cutting a new version.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (must already exist)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  binary:
+    name: macOS arm64 binary
+    # The GA floor from the `ci` matrix — the binary is built by the toolchain
+    # the adopter floor runs, not by the newest line. The package's platform
+    # floor (macOS 13) is what the binary itself requires.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Select Xcode 26.6
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.6"
+
+      - name: Resolve the tag
+        id: tag
+        run: echo "name=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      # A release cut sets the version in the commit that gets tagged, and
+      # every report the CLI writes is stamped with it. A binary published
+      # under a tag it does not report is skew that surfaces later, in a
+      # receipt nobody is reading closely.
+      - name: Check the source version matches the tag
+        run: |
+          set -euo pipefail
+          DECLARED=$(grep -o 'duetToolsVersion = "[^"]*"' Sources/duet/main.swift | cut -d'"' -f2)
+          if [ "$DECLARED" != "${{ steps.tag.outputs.name }}" ]; then
+            echo "tag ${{ steps.tag.outputs.name }} does not match" \
+                 "duetToolsVersion = $DECLARED in Sources/duet/main.swift" >&2
+            exit 1
+          fi
+
+      # While the framework repository is private, SwiftPM cannot resolve it
+      # anonymously. SwiftPM has no credential store of its own — it invokes
+      # `git` — so a global insteadOf rewrite is how the resolver gets read
+      # access. Scoped to the org URL prefix so the token never travels to
+      # swift-syntax (or any other host). Guarded on the secret: with none
+      # set, this step reports and exits 0.
+      - name: Authenticate SwiftPM against the framework
+        env:
+          DUET_FAMILY_TOKEN: ${{ secrets.DUET_FAMILY_TOKEN }}
+        run: |
+          if [ -z "$DUET_FAMILY_TOKEN" ]; then
+            echo "No DUET_FAMILY_TOKEN set — resolving modaal-agent/duet anonymously."
+            exit 0
+          fi
+          git config --global \
+            url."https://x-access-token:${DUET_FAMILY_TOKEN}@github.com/modaal-agent/".insteadOf \
+            "https://github.com/modaal-agent/"
+
+      - name: Test before shipping
+        run: swift test
+
+      # Resolves the product path here, while credentials are still in place,
+      # so no later step can re-enter SwiftPM after the rewrite is dropped.
+      - name: Build release
+        id: build
+        run: |
+          set -euo pipefail
+          swift build -c release --arch arm64
+          echo "bin=$(swift build -c release --arch arm64 --show-bin-path)/duet" >> "$GITHUB_OUTPUT"
+
+      # The config KEY embeds the token (`url.<rewritten>.insteadof`), so it
+      # cannot be unset by naming the matched URL — enumerate the insteadOf
+      # keys and drop them. The runner is ephemeral; this is load-bearing the
+      # day the job runs on a self-hosted box.
+      - name: Drop the credential rewrite
+        if: always()
+        run: |
+          git config --global --name-only --get-regexp '^url\..*\.insteadof$' \
+            | while read -r key; do git config --global --unset-all "$key"; done
+
+      - name: Stage the archive
+        id: stage
+        run: |
+          set -euo pipefail
+          BIN="${{ steps.build.outputs.bin }}"
+          [ -x "$BIN" ] || { echo "no executable at $BIN" >&2; exit 1; }
+
+          # The asset claims arm64 in its name; assert the file agrees before
+          # anything downloads it on that promise.
+          lipo -archs "$BIN"
+          lipo -archs "$BIN" | grep -qw arm64
+
+          # A single bare executable at the archive root, so unpacking it
+          # needs no knowledge of an internal layout.
+          mkdir -p dist
+          cp "$BIN" dist/duet
+          strip -rSTx dist/duet
+          (cd dist && zip -qj duet-macos-arm64.zip duet)
+
+          # The integrity gate is over the *archive*. `shasum -c` reads this
+          # file directly, which is what lets an installer verify without
+          # parsing anything.
+          (cd dist && shasum -a 256 duet-macos-arm64.zip > duet-macos-arm64.zip.sha256)
+          SHA=$(cut -d' ' -f1 dist/duet-macos-arm64.zip.sha256)
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Archive SHA-256: $SHA"
+
+      # Proves the shipped artifact, not the build tree: the staged binary
+      # reports the tag, answers `help`, and its own checksum file verifies.
+      - name: Smoke-test the staged binary
+        run: |
+          set -euo pipefail
+          REPORTED=$(./dist/duet version)
+          [ "$REPORTED" = "duet ${{ steps.tag.outputs.name }}" ] || {
+            echo "staged binary reports '$REPORTED'," \
+                 "expected 'duet ${{ steps.tag.outputs.name }}'" >&2
+            exit 1
+          }
+          ./dist/duet help > /dev/null
+          (cd dist && shasum -a 256 -c duet-macos-arm64.zip.sha256)
+
+      - name: Publish
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.name }}"
+          SHA="${{ steps.stage.outputs.sha256 }}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
+
+          cat > /tmp/notes.md <<EOF
+          \`duet\` $TAG — prebuilt CLI for macOS on Apple silicon (macOS 13+).
+
+          **Install**
+
+          \`\`\`sh
+          curl -fsSLO $BASE/duet-macos-arm64.zip
+          curl -fsSLO $BASE/duet-macos-arm64.zip.sha256
+          shasum -a 256 -c duet-macos-arm64.zip.sha256
+          unzip duet-macos-arm64.zip          # a bare 'duet' executable
+          ./duet version                      # expect: duet $TAG
+          \`\`\`
+
+          Put it anywhere on \`PATH\`, or point \`DUET_BIN\` at it. A repo's
+          \`tools/duet\` wrapper takes either.
+
+          **Archive SHA-256**
+
+              $SHA
+
+          On any other platform, build from source at this tag:
+
+          \`\`\`sh
+          git clone --branch $TAG https://github.com/${{ github.repository }}.git
+          cd duet-tools && swift build -c release
+          \`\`\`
+
+          See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/$TAG/CHANGELOG.md)
+          for what is in this release.
+          EOF
+
+          gh release create "$TAG" \
+            dist/duet-macos-arm64.zip dist/duet-macos-arm64.zip.sha256 \
+            --title "duet $TAG" \
+            --notes-file /tmp/notes.md \
+            --verify-tag || \
+          gh release upload "$TAG" \
+            dist/duet-macos-arm64.zip dist/duet-macos-arm64.zip.sha256 --clobber
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### release · ${{ steps.tag.outputs.name }} — ${{ steps.publish.outcome == 'success' && '✅ published' || '❌ not published' }}"
+            echo ""
+            if [ "${{ steps.publish.outcome }}" = "success" ]; then
+              echo "- assets: \`duet-macos-arm64.zip\` + \`duet-macos-arm64.zip.sha256\`"
+              echo "- sha256: \`${{ steps.stage.outputs.sha256 }}\`"
+              echo "- runs on: macOS 13+, Apple silicon"
+            else
+              echo "- nothing was attached to the tag; the Release is unchanged"
+            fi
+            echo "- toolchain: $(xcodebuild -version | tr '\n' ' ')"
+          } >> "$GITHUB_STEP_SUMMARY"

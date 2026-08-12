@@ -15,6 +15,33 @@ summary; both lanes resolve `duet` from its published tag):
 | `swift` · macos-26 | Xcode 26.6 (Swift 6.3.3) | the GA floor — the adopter toolchain |
 | `swift` · xcode-27 | Xcode 27 beta (Swift 6.4) | the newest proven line |
 
+## Install
+
+Each release publishes a prebuilt binary for macOS on Apple silicon
+(macOS 13+) beside a checksum file:
+
+```sh
+TAG=0.10.0   # the version this repo is pinned to
+BASE=https://github.com/modaal-agent/duet-tools/releases/download/$TAG
+curl -fsSLO $BASE/duet-macos-arm64.zip
+curl -fsSLO $BASE/duet-macos-arm64.zip.sha256
+shasum -a 256 -c duet-macos-arm64.zip.sha256
+unzip duet-macos-arm64.zip     # a bare 'duet' executable
+./duet version                 # expect: duet 0.10.0
+```
+
+Put it on `PATH`, or point `DUET_BIN` at it — an adopter repo's `tools/duet`
+wrapper takes either, and running it needs no Swift toolchain. The `.sha256`
+file is `shasum` output, so verification is a command rather than a value to
+compare by eye.
+
+On any other platform, build from source at the pinned tag:
+
+```sh
+git clone --branch $TAG https://github.com/modaal-agent/duet-tools.git
+cd duet-tools && swift build -c release   # .build/release/duet
+```
+
 ## Why a separate repo
 
 SwiftPM resolves package-level dependencies for every consumer regardless of
