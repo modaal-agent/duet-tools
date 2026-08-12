@@ -60,10 +60,10 @@ jobs:
       - name: Check the source version matches the tag
         run: |
           set -euo pipefail
-          DECLARED=$(grep -o 'duetToolsVersion = "[^"]*"' Sources/duet/main.swift | cut -d'"' -f2)
+          DECLARED=$(grep -o 'duetToolsVersion = "[^"]*"' Sources/duet/Version.swift | cut -d'"' -f2)
           if [ "$DECLARED" != "${{ steps.tag.outputs.name }}" ]; then
             echo "tag ${{ steps.tag.outputs.name }} does not match" \
-                 "duetToolsVersion = $DECLARED in Sources/duet/main.swift" >&2
+                 "duetToolsVersion = $DECLARED in Sources/duet/Version.swift" >&2
             exit 1
           fi
 

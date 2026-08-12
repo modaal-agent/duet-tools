@@ -21,13 +21,13 @@ Each release publishes a prebuilt binary for macOS on Apple silicon
 (macOS 13+) beside a checksum file:
 
 ```sh
-TAG=0.10.0   # the version this repo is pinned to
+TAG=0.11.0   # or the version the adopter repo is pinned to
 BASE=https://github.com/modaal-agent/duet-tools/releases/download/$TAG
 curl -fsSLO $BASE/duet-macos-arm64.zip
 curl -fsSLO $BASE/duet-macos-arm64.zip.sha256
 shasum -a 256 -c duet-macos-arm64.zip.sha256
 unzip duet-macos-arm64.zip     # a bare 'duet' executable
-./duet version                 # expect: duet 0.10.0
+./duet version                 # expect: duet 0.11.0
 ```
 
 Put it on `PATH`, or point `DUET_BIN` at it — an adopter repo's `tools/duet`
@@ -130,6 +130,19 @@ swift run duet help
   package whose dependencies are all local paths (SwiftPM writes it no lock
   ever), and a member of an aggregate `.xcworkspace` (the workspace holds
   the one lock for all its members). Read-only; exit 1 lists findings.
+- `duet mutate [<name>]` — the mutation drill (test the tests): seed each
+  behavioral mutation from `parity/mutations.json` one at a time
+  (exact-string substitution that must match the file exactly once), run the
+  full suite, and require it to go red, recording which lane caught it
+  (swift/kotlin/meta/coverage). A surviving mutation is a behavior the corpus
+  does not pin — the run fails on it, and on any stale row (`old` no longer
+  matching once: mutation rows target sources, so they go stale when sources
+  move, and the drill sweeps its own table instead of relying on discipline).
+  The clean tree is verified green first, and every mutation is restored
+  before the next runs. `<name>` runs one row — the authoring loop for a new
+  row. Add at least one row per migration wave: the row is the wave's
+  permanent negative control. Minutes, not seconds (the full suite runs once
+  per row plus a baseline), which is why this verb is not on the MCP surface.
 - `duet mcp` — the same verification verbs as a stdio MCP server
   (`duet_verify`, `duet_record`, `duet_explain`, `duet_materialize`,
   `duet_protocol_run`, `duet_scope`, `duet_lanes`, `duet_doctor`); tool

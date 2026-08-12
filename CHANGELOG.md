@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.11.0 — 2026-08-12
+
+Pre-1.0 minor: a new verb — the mutation drill.
+
+### Added — `duet mutate`
+
+`duet mutate [<name>]` seeds each behavioral mutation declared in
+`parity/mutations.json` one at a time (an exact-string substitution that
+must match its file exactly once), runs the full suite, and requires it to
+go red, recording which lane caught it (swift/kotlin/meta/coverage). A
+surviving mutation is a behavior the corpus does not pin — the run fails on
+it. A stale row (`old` no longer matching exactly once) is a config-error
+that also fails the run: mutation rows target sources, so they die with the
+code they target, and the drill sweeps its own table instead of relying on
+discipline. The clean tree is verified green before any seeding, and every
+mutation is restored — the exact prior bytes, so uncommitted edits in the
+target file survive — before the next row runs. `<name>` runs one row: the
+authoring loop for a new row. Add at least one row per migration wave; the
+row is the wave's permanent negative control.
+
+A suite with no verdict within 10 minutes is treated as hung: the row
+counts as caught (a hang never goes green), but the drill stops and fails,
+reporting the remaining rows as skipped — the interrupted run's lane
+children can still hold build locks, and verdicts taken behind those locks
+would be noise.
+
+Not served over MCP: the drill runs the full suite once per row plus a
+baseline — minutes, not seconds — outside that surface's synchronous
+contract.
+
+### Changed — the version of record is `Sources/duet/Version.swift`
+
+`duetToolsVersion` lives in its own file. A top-level global in `main.swift`
+initializes only when the file's top-level code runs, so anything reading it
+from a test process reads it uninitialized — the first in-process test
+through a `--json` report path crashed on exactly that. The release
+workflow's version gate and CONTRIBUTING's version-of-record pointer name
+the new file.
+
 ## 0.10.0 — 2026-08-11
 
 Pre-1.0 minor: the worker-isolation lint reads three shapes it used to read

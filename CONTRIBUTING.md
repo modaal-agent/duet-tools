@@ -11,7 +11,7 @@
   external planning documents.
 - **A release cut sets the version in the commit that gets tagged** (the
   family convention — see the `duet` repo's CONTRIBUTING, rule 7). The version
-  of record is `duetToolsVersion` in `Sources/duet/main.swift`; `duet version`
+  of record is `duetToolsVersion` in `Sources/duet/Version.swift`; `duet version`
   and every `--json` report are stamped with it.
 - **Pushing a bare semver tag publishes the prebuilt binary** (`release`
   workflow): it refuses to publish when the tag and `duetToolsVersion`

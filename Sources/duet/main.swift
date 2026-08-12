@@ -178,6 +178,18 @@ let usage = """
         Path-only-dependency packages and members of an aggregate
         .xcworkspace are exempt (for them the missing lock means
         nothing). Never rewrites.
+    duet mutate [<name>] [--json]
+        the mutation drill — test the tests: seed each behavioral mutation
+        from parity/mutations.json one at a time (exact-string substitution,
+        must match the file exactly once), run the full suite, and require
+        it to go red, recording which lane caught it (swift/kotlin/meta/
+        coverage). A surviving mutation is a behavior the corpus does not
+        pin — the run fails on it, and on any stale row (`old` no longer
+        matching once: sources move, so the drill sweeps its own table).
+        The clean tree is verified green first; every mutation is restored
+        before the next runs. <name> runs one row — the authoring loop for
+        a new row. Add at least one row per migration wave. Minutes, not
+        seconds: the full suite runs once per row plus a baseline.
     duet mcp
         serve the verification verbs as a stdio MCP server (duet_verify,
         duet_record, duet_explain, duet_materialize, duet_protocol_run,
@@ -191,10 +203,6 @@ let usage = """
 
   Run from anywhere inside the repo (root is found via parity/fixtures).
   """
-
-/// Bumped with each release tag — the tag is the version of record (pre-1.0
-/// minors are breaking by family convention: a new or changed gate is a minor).
-let duetToolsVersion = "0.10.0"
 
 guard let options = Options.parse(CommandLine.arguments), let command = options.command
 else {
@@ -244,6 +252,8 @@ do {
     code = try Scope.run(repo: repo, options: options)
   case "doctor":
     code = try Doctor.run(repo: repo, options: options)
+  case "mutate":
+    code = try Mutate.run(repo: repo, options: options)
   case "mcp":
     code = try Mcp.run(repo: repo, options: options)
   default:
