@@ -6,8 +6,8 @@ import Foundation
 import SwiftParser
 import SwiftSyntax
 
-/// The codegen vehicle of the Swift ceremony killer (G2, FC3-b2 — the scaffold
-/// default): emits canonical `{"case": …}` coders for every enum that declares
+/// The codegen vehicle of the Swift ceremony killer, and the scaffold's
+/// default: emits canonical `{"case": …}` coders for every enum that declares
 /// `CanonicalSumCodable` (the Duet kernel's marker protocol) in a source file.
 /// The conformance at the declaration IS the annotation — compiler-checked,
 /// autocompleted; the generated extension provides the witnesses plus the

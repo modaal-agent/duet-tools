@@ -75,7 +75,7 @@ swift run duet help
   State/Action/EffectPayload) live in gated packages only.
 - `duet record [--feature <name>|--chain <name>] [--platform swift|kotlin]
   [--check [--write]]` — scenario-driven fixture regeneration through the
-  framework's ONE §6 writer; sum-coder regen is folded in; `--check` is the
+  framework's ONE pretty writer; sum-coder regen is folded in; `--check` is the
   CI drift gate: red on behavioral drift (the replay protocol's field set),
   green through metadata-only churn (scenario.source, step label/line — the
   admissible diff of a scenario-language port). A failing `--check` leaves
@@ -110,8 +110,8 @@ swift run duet help
   `:replay-runner:installDist`; `--platform` forces the choice.
 - `duet canonical-sum [--check]` — (re)generate the committed sum coders for
   every `CanonicalSumCodable` enum (normally implicit via `record`).
-- `duet write-fixtures` — materialize pending record artifacts into §6 fixture
-  files (framework repos' own-corpus regen path).
+- `duet write-fixtures` — materialize pending record artifacts into pretty
+  fixture files (framework repos' own-corpus regen path).
 - `duet scope <path>` — which gates govern a file, and the authoring loop for
   it (the module→gates map, both routing directions; derived from the
   manifest, no configuration).

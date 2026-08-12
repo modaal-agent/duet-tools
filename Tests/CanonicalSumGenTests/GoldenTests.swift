@@ -7,9 +7,9 @@ import XCTest
 /// The codegen vehicle's golden receipt — one worst-case enum covering the whole
 /// payload-rule matrix (no payload; single unlabeled; single unlabeled optional;
 /// labeled mixed; labeled single-optional; labeled all-optional), its generated
-/// file pinned BYTE-FOR-BYTE as a literal. This is one half of the arms'
-/// lockstep gate (G2): any emission-rule change must consciously update this
-/// golden AND the macro package's expansion pin in the same commit.
+/// file pinned BYTE-FOR-BYTE as a literal. This is one half of the two
+/// vehicles' lockstep gate: any emission-rule change must consciously update
+/// this golden AND the macro package's expansion pin in the same commit.
 final class GoldenTests: XCTestCase {
   func testWorstCaseGenerationMatchesGolden() throws {
     let dir = FileManager.default.temporaryDirectory

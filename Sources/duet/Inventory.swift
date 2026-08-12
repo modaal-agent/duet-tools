@@ -3,7 +3,7 @@
 
 import Foundation
 
-/// `duet lanes [--json]` — the lane inventory as a queryable contract (A29 R1):
+/// `duet lanes [--json]` — the lane inventory as a queryable contract:
 /// every lane task, package root, and filter the manifest derives, plus what the
 /// verify gate deliberately does NOT cover. The CLI already computes all of it to
 /// run `verify`; this verb exposes the same derivation so a workflow or fallback

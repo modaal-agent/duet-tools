@@ -4,15 +4,16 @@
 import DuetReplay
 import Foundation
 
-/// The replay-protocol lane (G1, doc-18 §2.1 — proven by FC3-a, formalized as
+/// The replay-protocol lane (the protocol itself is normative in the framework's
 /// contracts/replay-protocol-v1.md): `duet protocol-run` drives every fixture
 /// (leaves AND chains — one `reduce` op, CLI-side state slots) through a
-/// replay-protocol runner subprocess and byte-gates each step CLI-side. This is
-/// the G1 shape: the flavor exposes only decode→reduce→encode; the CLI owns
-/// fixture reading, step driving, comparison, and reporting — flavor-neutrally
-/// (`--runner` drives any conforming runner). The FC3-a `writer-check` probe verb
-/// retired at F4·S2: the CLI-side writer IS the writer now, and `record --check`
-/// is its standing byte gate.
+/// replay-protocol runner subprocess and byte-gates each step CLI-side.
+///
+/// The split is what keeps the two flavors from drifting: a flavor exposes only
+/// decode→reduce→encode, and the CLI owns fixture reading, step driving,
+/// comparison and reporting for all of them (`--runner` drives any conforming
+/// runner). The CLI-side writer is the same writer the flavors record through,
+/// and `record --check` is its standing byte gate.
 enum ProtocolLane {
 
   // MARK: - protocol-run

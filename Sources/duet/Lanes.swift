@@ -204,7 +204,7 @@ enum Lanes {
       }
       return 1
     }
-    // The lane-task shape lint (A29 R4) — advisory, never a failure: a repo's
+    // The lane-task shape lint — advisory, never a failure: a repo's
     // own automation naming fewer lane tasks than the manifest derives is how
     // a migration silently stops running migrated modules' suites.
     let laneTaskWarnings = LaneTaskLint.warnings(repo: repo, manifest: manifest)
@@ -367,7 +367,7 @@ enum Lanes {
       || (kotlinResult.map { $0.exitCode != 0 } ?? false)
       || !missing.isEmpty
 
-    // What this run makes NO claim about (A29 R2) — silence reads as coverage,
+    // What this run makes NO claim about — silence reads as coverage,
     // so the gate names its own boundary: build units outside the manifest and
     // the protocol lane. Scoped runs state their scope instead.
     let coverage: Inventory.Coverage? = feature == nil
@@ -507,7 +507,7 @@ enum Lanes {
   /// scoped fixture regeneration via the scenario runners, then a review summary.
   /// Recording is a *source-generation* step: the diff is meant to be reviewed like
   /// code (bless-by-git). `--platform kotlin` records through the Kotlin runner
-  /// (`-PregenFixtures=1`); the §6 shared writer makes the two platforms' outputs
+  /// (`-PregenFixtures=1`); the shared writer makes the two platforms' outputs
   /// byte-identical for equivalent scenarios. `--check` is the CI regen gate:
   /// exit 1 if any fixture was stale relative to its scenario.
   /// (No lint gate here on purpose — record is how a lint-red tree gets repaired.)
@@ -532,7 +532,7 @@ enum Lanes {
       }
       return 1
     }
-    // The dual-writer guard (A30 R3): while a feature declares BOTH a `swift:`
+    // The dual-writer guard: while a feature declares BOTH a `swift:`
     // twin and a Kotlin `scenario:`, two writers exist for its fixture files.
     // Unscoped record runs every Swift root under REGEN, so the retiring twin
     // would re-record fixtures the Kotlin scenario owns — refuse, with the
@@ -566,7 +566,7 @@ enum Lanes {
     // Snapshot fixture bytes so the summary lists what THIS run rewrote (git diff
     // would also show unrelated uncommitted fixture changes).
     let before = fixtureDigests(repo)
-    // The ceremony killer rides record (§2.2 — no separate pipeline step): the
+    // The ceremony killer rides record, so adopting it adds no pipeline step: the
     // Swift lane regenerates the committed sum coders BEFORE recording, so the
     // fixtures compile against current coders; in --check mode stale coders fail
     // fast, before any lane runs. Kotlin-platform record skips this — the coder
@@ -622,7 +622,7 @@ enum Lanes {
     }
     var results: [ProcessResult] = []
     if let chain = options.chain {
-      // `record --chain <name>` (A30 R1): the manifest declares chains as
+      // `record --chain <name>`: the manifest declares chains as
       // fixture names only — no per-chain module entry — so the recording
       // scope is DISCOVERED: the test sources that mention the fixture by
       // name (quoted), grouped into runnable scopes. That covers a chain
@@ -736,7 +736,7 @@ enum Lanes {
     if results.contains(where: { $0.exitCode != 0 }) {
       // A red lane may have written a partial rewrite already (the Swift
       // runners write directly) — a failing --check leaves the fixture tree
-      // byte-identical (A30 R2), on this path too.
+      // byte-identical, on this path too.
       if options.check, !options.write { restoreFixtures(repo, to: before) }
       // A failed record must not leave the tree with fewer fixtures than it
       // found: put back what the pre-delete removed and the run did not
@@ -763,7 +763,7 @@ enum Lanes {
       return 1
     }
     // The Kotlin runner records to compact artifacts (it ships no on-disk writer);
-    // materialize them through the one §6 writer. The Swift runner writes files
+    // materialize them through the one pretty writer. The Swift runner writes files
     // directly through the same writer — its pass leaves no artifacts.
     _ = try RecordArtifacts.materialize(repo)
     let after = fixtureDigests(repo)
@@ -778,7 +778,7 @@ enum Lanes {
     let behavioralChanged = changed.filter { before[$0]?.behavioral != after[$0]?.behavioral }
     let metadataOnly = changed.filter { !behavioralChanged.contains($0) }
     if options.check {
-      // A failing --check must not materialize its rewrite (A30 R2): the
+      // A failing --check must not materialize its rewrite: the
       // recorded output moves to parity/.runs/record-check/ and the committed
       // tree is restored byte-identically, so a drift control needs a source
       // restore only, never a fixture-tree one. --write keeps the rewrite in

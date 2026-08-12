@@ -4,13 +4,14 @@
 import CanonicalSumGen
 import Foundation
 
-/// `duet canonical-sum [--check]` — the Swift ceremony killer's codegen verb
-/// (G2, the scaffold default). Zero-config: scans the manifest-derived package's
-/// `Sources/**` for `CanonicalSumCodable` conformers and (re)generates their
-/// committed coder files. Normally nobody runs this directly — regen is folded
-/// into `duet record`, and drift into `duet record --check` (§2.2's
-/// "no separate pipeline step") — but the standalone verb exists for a first
-/// generation on a new type, before anything records.
+/// `duet canonical-sum [--check]` — the Swift ceremony killer's codegen verb,
+/// and the scaffold's default vehicle for it. Zero-config: scans the
+/// manifest-derived package's `Sources/**` for `CanonicalSumCodable` conformers
+/// and (re)generates their committed coder files. Normally nobody runs this
+/// directly — regen is folded into `duet record` and drift into
+/// `duet record --check`, so adopting the codegen adds no pipeline step — but
+/// the standalone verb exists for a first generation on a new type, before
+/// anything records.
 enum CanonicalSumVerb {
   struct Regen {
     var written: [String] = []

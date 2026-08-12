@@ -3,7 +3,7 @@
 
 import Foundation
 
-/// The lane-task shape lint (A29 R4), run in `verify`'s meta phase. A KMP
+/// The lane-task shape lint, run in `verify`'s meta phase. A KMP
 /// migration swaps a module's lane task from `test` to `jvmTest`; the CLI models
 /// that in `unscopedGradleTasks` while every hand-written `gradlew` invocation
 /// keeps its old task list and silently stops reaching the migrated modules. The

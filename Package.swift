@@ -5,15 +5,15 @@
 
 import PackageDescription
 
-// The open `duet` CLI (doc-15 §6.1's tools/ half). Its OWN repo — SwiftPM
-// resolves one URL package per repository root, and library consumers of
-// `duet` must never resolve the toolchain: the swift-syntax pin below stays in
-// the TOOL's graph only — FC3-b's verdict, the reason the codegen arm beat the
-// macro as the scaffold default. The CLI orchestrates `swift test` / `gradlew`
-// as subprocesses and reads the machine artifacts the runners write
+// The open `duet` CLI. Its OWN repo — SwiftPM resolves one URL package per
+// repository root, and library consumers of `duet` must never resolve the
+// toolchain: the swift-syntax pin below stays in the TOOL's graph only, which
+// is also why the scaffold's default ceremony killer is this CLI's codegen verb
+// rather than the macro. The CLI orchestrates `swift test` / `gradlew` as
+// subprocesses and reads the machine artifacts the runners write
 // (parity/.runs/*). Framework dependency: DuetReplay — the canonical writers
 // the CLI byte-gates and materializes with ARE the writers the replay servers
-// run (G1 — no CLI/flavor drift by construction).
+// run, so the CLI and the flavors cannot drift apart.
 //
 // CanonicalSumEmission is exported: the `@CanonicalSum` macro opt-in
 // (modaal-agent/duet-macros) assembles its expansion from the same rule-set,

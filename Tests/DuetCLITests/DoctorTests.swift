@@ -37,13 +37,13 @@ final class DoctorTests: XCTestCase {
     // name for. Kotlin-shaped manifest, xcodegen.yml on disk.
     let text = """
       {
-        "bootstrap": {"project_name": "WikiMemory"},
+        "bootstrap": {"project_name": "SampleApp"},
         "xcodegen_root": "src-ios/App",
         "custom": 1,
         "targets": {
-          "WikiMemory": {"platform": "iOS", "architecture": "duet", "template": "duet-kmp"},
-          "WikiMemoryWidgets": {"platform": "iOS", "architecture": "mvvm"},
-          "WikiMemoryAndroid": {"platform": "Android", "architecture": "duet", "template": "duet-kmp", "extra": true}
+          "SampleApp": {"platform": "iOS", "architecture": "duet", "template": "duet-kmp"},
+          "SampleAppWidgets": {"platform": "iOS", "architecture": "mvvm"},
+          "SampleAppAndroid": {"platform": "Android", "architecture": "duet", "template": "duet-kmp", "extra": true}
         }
       }
       """
@@ -306,7 +306,7 @@ final class DoctorTests: XCTestCase {
 
   func testTestDirectoriesAreNotScanned() {
     XCTAssertFalse(Doctor.isScannedDirectory("Tests"))
-    XCTAssertFalse(Doctor.isScannedDirectory("WikiMemoryMainTests"))
+    XCTAssertFalse(Doctor.isScannedDirectory("SampleAppMainTests"))
     XCTAssertFalse(Doctor.isScannedDirectory(".build"))
     XCTAssertFalse(Doctor.isScannedDirectory("checkouts"))
     XCTAssertTrue(Doctor.isScannedDirectory("Sources"))

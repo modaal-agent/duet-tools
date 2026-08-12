@@ -5,7 +5,7 @@ import XCTest
 
 @testable import DuetCLI
 
-/// The empty-pass gate's parsing rule (A29 R3): the executed count is the
+/// The empty-pass gate's parsing rule: the executed count is the
 /// MAXIMUM across runner summaries, never the presence of a zero — `swift test`
 /// drives XCTest and swift-testing together and always prints both summaries.
 final class AssertReplayedTests: XCTestCase {
@@ -33,8 +33,8 @@ final class AssertReplayedTests: XCTestCase {
     XCTAssertEqual(AssertReplayed.maxExecuted(inLog: log), 7)
   }
 
-  /// The C4 control as a toolchain test (26 §24.3): an emptied test target
-  /// prints both zero summaries and exits 0 — the gate must read 0, not pass.
+  /// The emptied-target control: a test target with its cases removed prints
+  /// both zero summaries and exits 0 — the gate must read 0, not pass.
   func testEmptiedTargetReadsZero() {
     let log = """
       Building for debugging...

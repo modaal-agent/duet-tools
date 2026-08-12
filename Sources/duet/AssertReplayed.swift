@@ -4,8 +4,8 @@
 import Foundation
 
 /// `duet assert-replayed <log|-> [--min <n>] [--json]` — the empty-pass gate as a
-/// verb (A29 R3). The family rule "a lane that passed without replaying is a
-/// failure" is enforced inside `duet verify` by the fixture coverage gate; every
+/// verb. The rule "a lane that passed without replaying is a failure" is
+/// enforced inside `duet verify` by the fixture coverage gate; every
 /// hand-written lane script around a bare `swift test` / `gradlew` re-acquires
 /// the hole, because `swift test` exits 0 when it discovers ZERO tests. This verb
 /// owns the assertion: feed it the lane's log (or pipe it on stdin as `-`) and it

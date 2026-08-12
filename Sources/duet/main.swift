@@ -111,7 +111,7 @@ let usage = """
         fixture: the CLI finds the test sources that mention it and runs
         exactly those, so a chain records mid-migration without an unscoped
         pass. --platform kotlin records through the Kotlin runner: it emits
-        compact artifacts and the CLI materializes the §6 files (one writer).
+        compact artifacts and the CLI materializes the fixtures (one writer).
         --check = CI regen gate: exit 1 on BEHAVIORAL drift (the replay
         protocol's field set); metadata-only churn (scenario.source, step
         label/line — a scenario port's admissible diff) reports green. A
@@ -147,8 +147,8 @@ let usage = """
         (built by the CLI). --platform forces a flavor's runner on repos
         carrying both; --runner drives any conforming prebuilt runner.
     duet write-fixtures [--json]
-        materialize pending record artifacts (parity/.runs/record/**) into §6
-        fixture files — the framework repos' own-corpus regen path; adopter
+        materialize pending record artifacts (parity/.runs/record/**) into
+        pretty fixture files — the framework repos' own-corpus regen path; adopter
         repos normally just run `duet record`.
     duet canonical-sum [--check] [--json]
         (re)generate the committed sum-coder files for every enum declaring

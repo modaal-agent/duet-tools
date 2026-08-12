@@ -5,8 +5,8 @@ import XCTest
 
 @testable import DuetCLI
 
-/// The dual-writer predicate (A30 R3) and the settings-file module parse the
-/// coverage report rides on (A29 R1/R2).
+/// The dual-writer predicate, and the settings-file module parse the coverage
+/// report rides on.
 final class ManifestModelTests: XCTestCase {
   private func feature(swift: String, scenario: String?) -> Feature {
     Feature(

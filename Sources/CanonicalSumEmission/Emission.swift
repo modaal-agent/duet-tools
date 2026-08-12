@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Modaal.dev
 // Licensed under the MIT License. See LICENSE file for details.
 
-/// The ONE emission rule-set for canonical `{"case": …}` sum coders
-/// (serialization.md §4) — G2's "one derivation logic, two delivery vehicles"
-/// made literal (F4·S3): the `duet canonical-sum` codegen verb (the scaffold
+/// The ONE emission rule-set for canonical `{"case": …}` sum coders, normative
+/// in the framework's contracts/serialization.md §4: one derivation logic, two
+/// delivery vehicles — the `duet canonical-sum` codegen verb (the scaffold
 /// default) and the `@CanonicalSum` macro opt-in both assemble their output from
 /// these line builders, so the byte-dialect-critical half cannot fork. Zero
 /// dependencies on purpose: emission is pure string building; each vehicle owns

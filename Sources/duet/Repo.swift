@@ -7,7 +7,7 @@ import Foundation
 /// the repo's parity/scripts/lockstep-lint.py — and the CLI consumes its `--json`
 /// plan (running the meta-check and loading the manifest are the same call). The
 /// repo's tree shape is NOT hardcoded here: the platform roots are derived from the
-/// manifest's own per-feature source paths (F4·S1 — the CLI is repo-layout-neutral).
+/// manifest's own per-feature source paths, so the CLI is repo-layout-neutral.
 struct Repo {
   let root: URL
 
@@ -102,7 +102,7 @@ struct Feature {
   /// The scenario is Kotlin-authored (the writer runs in the Gradle lane).
   var hasKotlinScenario: Bool { scenario?.hasSuffix(".kt") == true }
 
-  /// The dual-writer window (A30): a `swift:` twin still declared while the
+  /// The dual-writer window: a `swift:` twin still declared while the
   /// scenario is already Kotlin-authored — the span of a per-feature migration
   /// in which BOTH platforms hold a writer for the same fixture files. Unscoped
   /// `record` refuses while any feature is in this state: the Swift roots run

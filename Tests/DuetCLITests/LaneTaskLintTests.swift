@@ -5,12 +5,12 @@ import XCTest
 
 @testable import DuetCLI
 
-/// The lane-task shape lint (A29 R4): a `gradlew` line naming fewer unqualified
+/// The lane-task shape lint: a `gradlew` line naming fewer unqualified
 /// lane tasks than the manifest derives loses modules; extra tasks and
 /// module-qualified tasks are deliberate and stay silent.
 final class LaneTaskLintTests: XCTestCase {
   func testStaleSingleTaskOnMixedTreeWarns() {
-    // The measured S9 case: the fallback runner's `./gradlew test` reached no
+    // The measured case: a fallback runner's `./gradlew test` reached no
     // KMP feature module while the manifest derived `test jvmTest`.
     let warnings = LaneTaskLint.warnings(
       named: "parity/scripts/parity-test.sh",

@@ -53,8 +53,8 @@ a test target that nothing runs.
 
 ### Added — `doctor` row 3: tests that have never run
 
-`verify` has printed every build unit outside the manifest since 0.6.0 (A29
-R2, the coverage-honesty requirement). Measured outcome on the reference
+`verify` has printed every build unit outside the manifest since 0.6.0, so a
+run states its own coverage boundary. Measured outcome on the reference
 repo: the list named a package with a test target for months, on every run,
 and nobody acted on it. The list is long and mixes packages another lane
 genuinely covers with packages nothing runs at all, so it reads as

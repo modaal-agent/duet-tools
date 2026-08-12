@@ -3,23 +3,21 @@
 
 import Foundation
 
-/// `duet mcp` — the standalone agent surface (doc-11 §5): a stdio MCP server over
-/// the same verification verbs, so any agent harness (Claude Code, etc.) gets the
-/// toolchain with one `mcpServers` entry. Hand-rolled JSON-RPC on newline-delimited
-/// stdio, zero third-party dependencies — the transport is ~a page, and an MCP SDK
-/// would enter every toolchain build for it.
+/// `duet mcp` — the agent surface: a stdio MCP server over the same verification
+/// verbs, so any agent harness (Claude Code, etc.) gets the toolchain with one
+/// `mcpServers` entry. Hand-rolled JSON-RPC on newline-delimited stdio, zero
+/// third-party dependencies — the transport is ~a page, and an MCP SDK would
+/// enter every toolchain build for it.
 ///
 /// Each tool call re-invokes THIS executable as a subprocess with the mapped verb
 /// and `--json`. That is deliberate, not laziness: the verbs print to stdout, and
 /// in-process dispatch would corrupt the JSON-RPC stream; the subprocess boundary
-/// also means a verb failure can never take the server down. The `--json` surfaces
-/// were designed as the tool contract (doc-11: "`verify --json` is the P2 tool
-/// contract already"), so the tool result IS the structured report — an agent
-/// never parses fixture JSON or greps Gradle logs.
+/// also means a verb failure can never take the server down. Every verb's `--json`
+/// report is the tool contract, so the tool result IS the structured report — an
+/// agent never parses fixture JSON or greps Gradle logs.
 ///
-/// No streaming, no cancel in v1: every verb is seconds-fast on a warm tree, and
-/// the streaming/cancel requirement in doc-11 attaches to the ModaalStudio
-/// wrappers (the house SideChannelBus pattern), not this server.
+/// No streaming and no cancel: every verb is seconds-fast on a warm tree, so a
+/// synchronous call carries no progress a caller could act on.
 enum Mcp {
   static let latestProtocolVersion = "2025-06-18"
   static let knownProtocolVersions = ["2024-11-05", "2025-03-26", "2025-06-18"]
@@ -66,8 +64,8 @@ enum Mcp {
       "protocolVersion": version ?? latestProtocolVersion,
       "capabilities": ["tools": [String: Any]()],
       "serverInfo": ["name": "duet", "version": serverVersion],
-      // The mini-playbook, agent-facing (19 R2): the rules an agent must know
-      // before its first call, phrased for the harness's system prompt.
+      // The mini-playbook: the rules an agent must know before its first call,
+      // phrased for the harness's system prompt.
       "instructions": """
         Duet parity toolchain. Fixtures under parity/fixtures are build products \
         compiled from scenario tests — NEVER edit them by hand; a red gate is \
@@ -90,7 +88,7 @@ enum Mcp {
   }
 
   /// The verification verbs only — the authoring verbs (scaffold/convert/audit)
-  /// are the premium surface and do not ship here (doc-18 §3.1).
+  /// are not part of this toolchain and are not served here.
   static func toolCatalog() -> [[String: Any]] {
     [
       [

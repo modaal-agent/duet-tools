@@ -4,12 +4,12 @@
 import DuetReplay
 import Foundation
 
-/// The one-writer half of `duet record` (F4·S2, G1): flavor runners' record modes
-/// emit COMPACT canonical document artifacts under `parity/.runs/record/<platform>/`;
-/// this materializes them into §6 pretty fixture files through the framework's one
-/// pretty writer (`ReplayCanonical`). Also the standalone `duet write-fixtures`
-/// verb — the path a framework repo uses to regenerate its own corpus (discovery
-/// only, no manifest required).
+/// The one-writer half of `duet record`: flavor runners' record modes emit
+/// COMPACT canonical document artifacts under `parity/.runs/record/<platform>/`;
+/// this materializes them into pretty fixture files through the framework's one
+/// pretty writer (`ReplayCanonical`), so neither flavor owns a second dialect.
+/// Also the standalone `duet write-fixtures` verb — the path a framework repo
+/// uses to regenerate its own corpus (discovery only, no manifest required).
 enum RecordArtifacts {
   static func recordDir(_ repo: Repo) -> URL {
     repo.runsDir.appendingPathComponent("record")
