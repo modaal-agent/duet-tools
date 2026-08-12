@@ -75,13 +75,16 @@ let package = Package(
     // Tests the CLI's pure derivations (summary parsing, lane-task lint, the
     // dual-writer predicate, settings parsing) by importing the executable
     // module directly — SwiftPM links it into the test bundle without running
-    // its top-level code.
+    // its top-level code. Resources/ carries the miniature adopter trees
+    // (mini-dual / mini-swift / mini-kmp) the manifest-lint harness copies to
+    // a temp directory and breaks programmatically.
     .testTarget(
       name: "DuetCLITests",
       dependencies: [
         .target(name: "DuetCLI")
       ],
-      path: "Tests/DuetCLITests"
+      path: "Tests/DuetCLITests",
+      resources: [.copy("Resources")]
     ),
   ]
 )

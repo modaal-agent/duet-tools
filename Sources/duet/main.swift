@@ -103,6 +103,18 @@ let usage = """
         `swift:` or `kotlin:` paths only — runs its one lane; a lane flag
         naming the missing lane is a meta-error); failures render with step
         label, JSON path, and scenario line.
+    duet lint [--json]
+        the manifest meta-checks alone, no lanes — the fast authoring-loop
+        red: parse parity/manifest.yaml (the CLI's own parser; grammar in
+        contracts/manifest.md — unknown TOP-LEVEL keys are an error so a
+        typo'd section cannot silently drop its block), then scenario
+        existence, fixture symmetry (listed ⊆ disk, no orphans), the
+        module-name mirror pin, the presentation ledger's entry shape, and —
+        for features declaring BOTH `swift:` and `kotlin:` — declaration
+        parity (State fields, Action/EffectPayload cases, camelCase ↔
+        PascalCase fold), the migration-window check. --json emits the plan
+        (status/errors/features/chains/presentation + top-level scalars).
+        `verify` runs the same checks as its first meta-gate.
     duet record [--feature <name>|--chain <name>] [--platform swift|kotlin]
                 [--check [--write]] [--json]
         recompile fixtures from scenarios (scoped when --feature or --chain
@@ -234,6 +246,8 @@ do {
   switch command {
   case "verify":
     code = try Lanes.run(repo: repo, options: options)
+  case "lint":
+    code = try ManifestLint.run(repo: repo, options: options)
   case "record":
     code = try Lanes.record(repo: repo, options: options)
   case "explain":

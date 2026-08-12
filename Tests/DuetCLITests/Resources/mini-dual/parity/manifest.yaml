@@ -1,0 +1,33 @@
+# Miniature dual-source adopter tree (test resource): one feature with Swift
+# and Kotlin twin declarations, one chain, and a populated presentation ledger.
+# Tests copy this tree to a temp directory and break it programmatically —
+# every check row's negative control edits a copy, never this original.
+
+features:
+  greeter:
+    swift: src-ios/Sources/GreeterFeature/GreeterFeature.swift
+    kotlin: src-android/feature-greeter/src/main/kotlin/com/mini/greeter/GreeterFeature.kt
+    state: GreeterState
+    action: GreeterAction
+    effectPayload: GreeterEffectPayload
+    scenario: src-ios/Tests/GreeterFeatureTests/GreeterScenarioTests.swift
+    fixtures:
+      - greeter
+
+chains:
+  - greeter.wave
+
+presentation:
+  waivers:
+    - kind: greeter.banner-fade
+      feature: greeter
+      platform: ios
+      manner: banner fade duration differs
+      reason: platform animation defaults
+      since: 2026-08-12
+  islands:
+    - id: greeter.map
+      feature: greeter
+      boundary: GreeterMapView
+      reason: opaque map SDK view
+      since: 2026-08-12

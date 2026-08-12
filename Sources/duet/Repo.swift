@@ -3,17 +3,19 @@
 
 import Foundation
 
-/// Repo discovery + the parity manifest model. The manifest has exactly ONE parser —
-/// the repo's parity/scripts/lockstep-lint.py — and the CLI consumes its `--json`
-/// plan (running the meta-check and loading the manifest are the same call). The
-/// repo's tree shape is NOT hardcoded here: the platform roots are derived from the
-/// manifest's own per-feature source paths, so the CLI is repo-layout-neutral.
+/// Repo discovery + the parity manifest model. The manifest has exactly ONE
+/// parser — the CLI's own (ManifestParser.swift, grammar in
+/// contracts/manifest.md) — and loading it runs the meta-checks
+/// (ManifestLint.swift), so every verb gets the lint verdict for free. The
+/// repo's tree shape is NOT hardcoded here: the platform roots are derived from
+/// the manifest's own per-feature source paths, so the CLI is
+/// repo-layout-neutral.
 struct Repo {
   let root: URL
 
   var fixturesDir: URL { root.appendingPathComponent("parity/fixtures") }
   var runsDir: URL { root.appendingPathComponent("parity/.runs") }
-  var lockstepLint: URL { root.appendingPathComponent("parity/scripts/lockstep-lint.py") }
+  var manifestFile: URL { root.appendingPathComponent("parity/manifest.yaml") }
 
   /// Walks up from the working directory to the directory containing parity/fixtures —
   /// the same root convention both test runners use.
@@ -197,72 +199,59 @@ struct Manifest {
     features.first { $0.fixtures.contains(fixture) }
   }
 
-  /// Runs lockstep-lint --json and adopts its plan — one manifest parser (python),
-  /// and every CLI invocation gets the meta-check for free.
+  /// Parses parity/manifest.yaml in-process and runs the meta-checks with it
+  /// (ManifestLint) — one manifest parser, no interpreter subprocess, and every
+  /// CLI invocation gets the lint verdict for free.
   static func load(repo: Repo) throws -> Manifest {
     enum ManifestError: Error, CustomStringConvertible {
-      case lintUnreadable(String)
       case layoutUnderivable(String)
       var description: String {
         switch self {
-        case let .lintUnreadable(detail):
-          return "lockstep-lint --json produced no parseable plan: \(detail)"
         case let .layoutUnderivable(detail):
           return "cannot derive the repo layout from the manifest: \(detail)"
         }
       }
     }
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["python3", repo.lockstepLint.path, "--json"]
-    process.currentDirectoryURL = repo.root
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = FileHandle.nullDevice
-    try process.run()
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let rawFeatures = root["features"] as? [String: [String: Any]]
-    else {
-      throw ManifestError.lintUnreadable(String(data: data, encoding: .utf8) ?? "<binary>")
-    }
-    let features = rawFeatures
-      .map { name, spec in
-        Feature(
+    let result = try ManifestLint.lint(repo: repo)
+    let features = result.parsed.featureOrder
+      .compactMap { name -> Feature? in
+        guard let entry = result.parsed.features[name] else { return nil }
+        return Feature(
           name: name,
-          swiftSource: spec["swift"] as? String ?? "",
-          kotlinSource: spec["kotlin"] as? String ?? "",
-          stateType: spec["state"] as? String ?? "",
-          actionType: spec["action"] as? String ?? "",
-          payloadType: spec["effectPayload"] as? String ?? "",
-          scenario: spec["scenario"] as? String,
-          fixtures: spec["fixtures"] as? [String] ?? [])
+          swiftSource: entry.keys["swift"] ?? "",
+          kotlinSource: entry.keys["kotlin"] ?? "",
+          stateType: entry.keys["state"] ?? "",
+          actionType: entry.keys["action"] ?? "",
+          payloadType: entry.keys["effectPayload"] ?? "",
+          scenario: entry.keys["scenario"],
+          fixtures: entry.fixtures)
       }
       .sorted { $0.name < $1.name }
     // Either side may be empty — a single-source manifest declares one lane's
     // paths only (no `swift:` twins on the KMP flavor; no `kotlin:` paths on the
     // Swift-only flavor) and the CLI runs the lanes the manifest derives. BOTH
     // empty derives no lane at all, which no lane flag can repair — named here.
+    // A lint-red manifest returns instead of throwing: the verbs' meta gate
+    // renders the errors, which name the actual defect.
     let swiftRelatives = Set(features.compactMap(\.swiftPackageRelative)).sorted()
     let androidRelative = features.lazy
       .compactMap({ feature -> String? in
         let parts = feature.kotlinSource.split(separator: "/")
         return parts.count > 1 ? String(parts[0]) : nil
       }).first
-    guard !swiftRelatives.isEmpty || androidRelative != nil else {
+    guard !swiftRelatives.isEmpty || androidRelative != nil || !result.errors.isEmpty else {
       throw ManifestError.layoutUnderivable(
         "no feature declares a `swift:` or `kotlin:` source path — the manifest"
           + " derives no platform lane at all")
     }
     return Manifest(
       features: features,
-      chains: root["chains"] as? [String] ?? [],
-      lintOK: (root["status"] as? String) == "ok",
-      lintErrors: root["errors"] as? [String] ?? [],
+      chains: result.parsed.chains,
+      lintOK: result.errors.isEmpty,
+      lintErrors: result.errors,
       swiftPackageDirs: swiftRelatives.map(repo.root.appendingPathComponent),
       androidDir: androidRelative.map(repo.root.appendingPathComponent),
-      replayRunnerRelative: root["replayRunner"] as? String,
+      replayRunnerRelative: result.parsed.scalars["replayRunner"],
       repoRoot: repo.root)
   }
 }

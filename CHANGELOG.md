@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.12.0 — 2026-08-12
+
+Pre-1.0 minor: the CLI owns its manifest — the meta-checks that lived in
+each adopter repo's `parity/scripts/lockstep-lint.py` are now the
+toolchain's, in-process.
+
+### Added — `duet lint`, the in-process manifest parser, and the grammar contract
+
+`duet lint [--json]` runs the manifest meta-checks alone, no lanes — the
+fast authoring-loop red while editing `parity/manifest.yaml` or moving
+feature sources: scenario existence, fixture symmetry (listed ⊆ disk, no
+orphans), the module-name mirror pin, the presentation ledger's entry
+shape, and — while a feature declares BOTH `swift:` and `kotlin:` sources —
+declaration parity (State property names, Action/EffectPayload case names,
+camelCase ↔ PascalCase fold), the check every per-feature migration passes
+through. Which rules apply to a feature is derived from the manifest itself
+(which source keys exist, and whether the Kotlin path names a `commonMain`
+source set), never from repo-level configuration. `--json` emits the plan
+(status/errors/features/chains/presentation + top-level scalars) other
+tools consume instead of re-parsing the yaml. Served over MCP as
+`duet_lint`; `verify` runs the same checks as its first meta-gate,
+unchanged in sequence.
+
+The grammar the parser accepts is now a contract:
+[contracts/manifest.md](contracts/manifest.md). One deliberate
+strictness: unknown TOP-LEVEL manifest keys are a named error (listing the
+known set) — the top level routes whole blocks, so a typo'd section header
+(a misspelled `chains:`) would otherwise drop its entire block without a
+sound, un-gating every chain fixture it declared. Strictness is safe under
+the pin regime: the CLI version is pinned per repo, so a manifest never
+meets an older parser that doesn't know its keys. Unknown PER-FEATURE keys
+remain accepted and ride the plan verbatim.
+
+The test surface gained the fixture-repo harness: three miniature adopter
+trees (dual-source, Swift-only, KMP single-source) under `Tests/`, copied
+to a temp directory and broken programmatically — every check row has at
+least one negative control asserting its named error, and the red-tree
+sequencing (lint stops `verify` before any lane) is asserted at the
+function seam.
+
+### Changed — manifest loading is in-process; no interpreter runtime needed
+
+Loading the manifest no longer shells to a repo-local python script:
+parsing and the meta-checks run inside the CLI, so every verb sheds a
+subprocess per invocation and running the toolchain needs no python3
+anywhere — build it, run it. An adopter repo's
+`parity/scripts/lockstep-lint.py` is dead code from this version's pin
+bump onward: delete it when bumping `parity/duet-tools.ref`, in the same
+commit.
+
 ## 0.11.0 — 2026-08-12
 
 Pre-1.0 minor: a new verb — the mutation drill.

@@ -1,0 +1,22 @@
+# Miniature KMP-flavor adopter tree (test resource): the single-source Kotlin
+# shape — no `swift:` keys, commonMain source sets, `subtrees/<name>/logic`
+# geometry, two features, and no presentation block at all (the absent-block
+# parse path). Tests copy this tree to a temp directory before breaking it.
+
+features:
+  counter:
+    kotlin: src-kmp/subtrees/counter/logic/src/commonMain/kotlin/com/mini/counter/CounterFeature.kt
+    state: CounterState
+    action: CounterAction
+    effectPayload: CounterEffectPayload
+    scenario: src-kmp/subtrees/counter/logic/src/jvmTest/kotlin/com/mini/counter/CounterScenarioTest.kt
+    fixtures:
+      - counter
+  ticker:
+    kotlin: src-kmp/subtrees/ticker/logic/src/commonMain/kotlin/com/mini/ticker/TickerFeature.kt
+    state: TickerState
+    action: TickerAction
+    effectPayload: TickerEffectPayload
+    scenario: src-kmp/subtrees/ticker/logic/src/jvmTest/kotlin/com/mini/ticker/TickerScenarioTest.kt
+    fixtures:
+      - ticker

@@ -1,0 +1,22 @@
+# Miniature Swift-only adopter tree (test resource): the single-source Swift
+# shape — no `kotlin:` keys, a `replayRunner:` top-level scalar, the split
+# subtree geometry with a feature-named SwiftPM leaf, and empty `[]` ledger
+# lists. Tests copy this tree to a temp directory before breaking it.
+
+replayRunner: src-ios/Replay
+
+features:
+  counter:
+    swift: src-ios/Subtrees/Counter/CounterFeature/Sources/CounterFeature/CounterFeature.swift
+    state: CounterState
+    action: CounterAction
+    effectPayload: CounterEffectPayload
+    scenario: src-ios/Subtrees/Counter/CounterFeature/Tests/CounterFeatureTests/CounterScenarioTests.swift
+    fixtures:
+      - counter
+
+chains:
+
+presentation:
+  waivers: []
+  islands: []

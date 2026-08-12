@@ -21,13 +21,13 @@ Each release publishes a prebuilt binary for macOS on Apple silicon
 (macOS 13+) beside a checksum file:
 
 ```sh
-TAG=0.11.0   # or the version the adopter repo is pinned to
+TAG=0.12.0   # or the version the adopter repo is pinned to
 BASE=https://github.com/modaal-agent/duet-tools/releases/download/$TAG
 curl -fsSLO $BASE/duet-macos-arm64.zip
 curl -fsSLO $BASE/duet-macos-arm64.zip.sha256
 shasum -a 256 -c duet-macos-arm64.zip.sha256
 unzip duet-macos-arm64.zip     # a bare 'duet' executable
-./duet version                 # expect: duet 0.11.0
+./duet version                 # expect: duet 0.12.0
 ```
 
 Put it on `PATH`, or point `DUET_BIN` at it — an adopter repo's `tools/duet`
@@ -73,6 +73,20 @@ swift run duet help
   Kotlin modules declare the family plugin/dependency allowlist only
   (recursing `project(...)` edges), and kernel-shape declarations (reducers,
   State/Action/EffectPayload) live in gated packages only.
+- `duet lint` — the manifest meta-checks alone, no lanes: the fast
+  authoring-loop red while editing `parity/manifest.yaml` or moving feature
+  sources. The CLI is the manifest's ONE parser
+  ([contracts/manifest.md](contracts/manifest.md) is the grammar; unknown
+  top-level keys are a named error, so a typo'd section cannot silently drop
+  its block), and the same checks run in-process as `verify`'s first
+  meta-gate: scenario existence, fixture symmetry (listed ⊆ disk, no
+  orphans), the module-name mirror pin (which rules apply is derived from
+  the manifest's own per-feature keys and source sets), the presentation
+  ledger's entry shape, and — while a feature declares BOTH `swift:` and
+  `kotlin:` — declaration parity (State fields, Action/EffectPayload cases,
+  camelCase ↔ PascalCase fold), the migration-window check. `--json` emits
+  the plan other tools consume instead of re-parsing the yaml. Running the
+  toolchain needs no interpreter runtime.
 - `duet record [--feature <name>|--chain <name>] [--platform swift|kotlin]
   [--check [--write]]` — scenario-driven fixture regeneration through the
   framework's ONE pretty writer; sum-coder regen is folded in; `--check` is the
@@ -144,8 +158,9 @@ swift run duet help
   permanent negative control. Minutes, not seconds (the full suite runs once
   per row plus a baseline), which is why this verb is not on the MCP surface.
 - `duet mcp` — the same verification verbs as a stdio MCP server
-  (`duet_verify`, `duet_record`, `duet_explain`, `duet_materialize`,
-  `duet_protocol_run`, `duet_scope`, `duet_lanes`, `duet_doctor`); tool
+  (`duet_verify`, `duet_lint`, `duet_record`, `duet_explain`,
+  `duet_materialize`, `duet_protocol_run`, `duet_scope`, `duet_lanes`,
+  `duet_doctor`); tool
   results are the
   verbs' `--json` reports, each stamped with the toolchain version that
   produced it. The

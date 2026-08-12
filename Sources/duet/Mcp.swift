@@ -75,7 +75,9 @@ enum Mcp {
         changes: author the scenario, run duet_record, then review the fixture \
         diff like code. duet_record with check=true is the CI drift gate (red on \
         behavioral drift; metadata-only churn passes). duet_protocol_run \
-        byte-gates the corpus through a flavor's replay runner. duet_scope \
+        byte-gates the corpus through a flavor's replay runner. duet_lint \
+        runs the manifest meta-checks alone (no lanes) — the fast red while \
+        editing parity/manifest.yaml or moving feature sources. duet_scope \
         reports which gates govern a file. duet_lanes reports the lane \
         inventory the manifest derives — and what verify does NOT cover. \
         duet_doctor cross-checks the repo's target declarations \
@@ -101,6 +103,11 @@ enum Mcp {
             "lane": ["type": "string", "enum": ["swift", "kotlin"], "description": "run one platform lane only (omit = both)"],
           ] as [String: Any],
         ] as [String: Any],
+      ],
+      [
+        "name": "duet_lint",
+        "description": "The manifest meta-checks alone, no lanes — the fast authoring-loop red: parse parity/manifest.yaml (unknown top-level keys are an error), then scenario existence, fixture symmetry, the module-name mirror pin, the presentation ledger's entry shape, and declaration parity for features declaring both sources. Returns the plan (status/errors/features/chains/presentation). duet_verify runs the same checks as its first meta-gate before the lanes.",
+        "inputSchema": ["type": "object", "properties": [String: Any]()] as [String: Any],
       ],
       [
         "name": "duet_record",
@@ -181,6 +188,8 @@ enum Mcp {
         args.append(lane == "swift" ? "--swift-only" : "--kotlin-only")
       }
       return (args, nil)
+    case "duet_lint":
+      return (["lint", "--json"], nil)
     case "duet_record":
       var args = ["record", "--json"]
       if let feature = arguments["feature"] as? String { args += ["--feature", feature] }
