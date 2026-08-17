@@ -42,7 +42,7 @@ final class ManifestModelTests: XCTestCase {
 
   func testGradleModulesParseBothSettingsDialects() {
     let kts = """
-      rootProject.name = "wikimemory-kmp"
+      rootProject.name = "example-kmp"
       include(":subtrees:counter:logic")
       include(":app")
       // include(":retired")

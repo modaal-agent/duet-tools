@@ -1,10 +1,6 @@
-# The toolchain's own gate (F4 CI templates). The package resolves `duet` by
-# URL at the published 0.1.0 tag, so there is ONE checkout — this repo — and
-# SwiftPM fetches the framework itself. While modaal-agent/duet is still
-# private that fetch needs credentials: the "Authenticate SwiftPM" step below
-# teaches git — which is what SwiftPM shells out to — to swap a token into
-# modaal-agent URLs. At the public flip, delete the secret and the step no-ops
-# (it is guarded on the secret being non-empty) — nothing else changes.
+# The toolchain's own gate. The package resolves `duet` by URL at the
+# published 0.2.1 tag, so there is ONE checkout — this repo — and SwiftPM
+# fetches the framework itself.
 name: ci
 
 on:
@@ -33,34 +29,9 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: ${{ matrix.xcode }}
-      # Private phase only. SwiftPM has no credential store of its own — it
-      # invokes `git` — so a global insteadOf rewrite is how the resolver gets
-      # read access to modaal-agent/duet. Scoped to the org URL prefix so the
-      # token never travels to swift-syntax (or any other host). The runner is
-      # ephemeral, but the rewrite is undone after the build anyway.
-      - name: Authenticate SwiftPM against the private framework
-        env:
-          DUET_FAMILY_TOKEN: ${{ secrets.DUET_FAMILY_TOKEN }}
-        run: |
-          if [ -z "$DUET_FAMILY_TOKEN" ]; then
-            echo "No DUET_FAMILY_TOKEN set — resolving modaal-agent/duet anonymously."
-            exit 0
-          fi
-          git config --global \
-            url."https://x-access-token:${DUET_FAMILY_TOKEN}@github.com/modaal-agent/".insteadOf \
-            "https://github.com/modaal-agent/"
       - name: Build + test the CLI (sum-coder emission suites)
         id: tests
         run: swift test
-      # The config KEY embeds the token (`url.<rewritten>.insteadOf`), so it
-      # cannot be unset by naming the matched URL — enumerate the insteadOf
-      # keys and drop them. Belt-and-braces on GitHub-hosted (ephemeral) VMs;
-      # load-bearing the day this runs on a self-hosted box.
-      - name: Drop the credential rewrite
-        if: always()
-        run: |
-          git config --global --name-only --get-regexp '^url\..*\.insteadof$' \
-            | while read -r key; do git config --global --unset-all "$key"; done
       - name: Job summary
         if: always()
         run: |
@@ -70,5 +41,5 @@ jobs:
             echo "- toolchain: $(xcodebuild -version | tr '\n' ' ')"
             echo "- swift: $(swift --version 2>&1 | head -1)"
             echo "- lane: ${{ matrix.xcode != '' && 'the GA floor (pinned)' || 'the newest proven line (image default)' }}"
-            echo "- builds the \`duet\` CLI (module \`DuetCLI\`) against the resolved \`duet\` 0.1.0 tag; runs the sum-coder emission suites"
+            echo "- builds the \`duet\` CLI (module \`DuetCLI\`) against the resolved \`duet\` 0.2.1 tag; runs the sum-coder emission suites"
           } >> "$GITHUB_STEP_SUMMARY"

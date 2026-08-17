@@ -67,45 +67,15 @@ jobs:
             exit 1
           fi
 
-      # While the framework repository is private, SwiftPM cannot resolve it
-      # anonymously. SwiftPM has no credential store of its own — it invokes
-      # `git` — so a global insteadOf rewrite is how the resolver gets read
-      # access. Scoped to the org URL prefix so the token never travels to
-      # swift-syntax (or any other host). Guarded on the secret: with none
-      # set, this step reports and exits 0.
-      - name: Authenticate SwiftPM against the framework
-        env:
-          DUET_FAMILY_TOKEN: ${{ secrets.DUET_FAMILY_TOKEN }}
-        run: |
-          if [ -z "$DUET_FAMILY_TOKEN" ]; then
-            echo "No DUET_FAMILY_TOKEN set — resolving modaal-agent/duet anonymously."
-            exit 0
-          fi
-          git config --global \
-            url."https://x-access-token:${DUET_FAMILY_TOKEN}@github.com/modaal-agent/".insteadOf \
-            "https://github.com/modaal-agent/"
-
       - name: Test before shipping
         run: swift test
 
-      # Resolves the product path here, while credentials are still in place,
-      # so no later step can re-enter SwiftPM after the rewrite is dropped.
       - name: Build release
         id: build
         run: |
           set -euo pipefail
           swift build -c release --arch arm64
           echo "bin=$(swift build -c release --arch arm64 --show-bin-path)/duet" >> "$GITHUB_OUTPUT"
-
-      # The config KEY embeds the token (`url.<rewritten>.insteadof`), so it
-      # cannot be unset by naming the matched URL — enumerate the insteadOf
-      # keys and drop them. The runner is ephemeral; this is load-bearing the
-      # day the job runs on a self-hosted box.
-      - name: Drop the credential rewrite
-        if: always()
-        run: |
-          git config --global --name-only --get-regexp '^url\..*\.insteadof$' \
-            | while read -r key; do git config --global --unset-all "$key"; done
 
       - name: Stage the archive
         id: stage

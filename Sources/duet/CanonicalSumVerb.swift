@@ -24,7 +24,7 @@ enum CanonicalSumVerb {
   static func regenerate(repo: Repo, manifest: Manifest, check: Bool) throws -> Regen {
     var regen = Regen()
     // Every package root is scanned — coder-bearing features live in more than
-    // one package since the subtree re-cuts (F5).
+    // one package since the subtree re-cuts.
     for packageDir in manifest.swiftPackageDirs {
       let sourcesRoot = packageDir.appendingPathComponent("Sources")
       for source in CanonicalSumGen.scan(sourcesRoot: sourcesRoot) {

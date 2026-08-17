@@ -271,7 +271,7 @@ final class MutateTests: XCTestCase {
       "lanes": [
         "kotlin": [
           "exit": 1,
-          "failureLines": ["com.wikimemory.TimelineGoldenTest > replay FAILED"],
+          "failureLines": ["com.example.TimelineGoldenTest > replay FAILED"],
         ]
       ],
       "reports": [
@@ -282,7 +282,7 @@ final class MutateTests: XCTestCase {
       ],
     ]
     XCTAssertEqual(
-      Mutate.firstFailure(of: payload), "com.wikimemory.TimelineGoldenTest > replay FAILED")
+      Mutate.firstFailure(of: payload), "com.example.TimelineGoldenTest > replay FAILED")
   }
 
   func testFirstFailureFallsBackToReportsThenMetaErrors() {

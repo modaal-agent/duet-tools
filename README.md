@@ -183,8 +183,9 @@ One entry, launched with `cwd` inside the adopter repo:
 }
 ```
 
-(Pre-publication, `command` is the adopter repo's `tools/duet` wrapper — same
-verbs, run from the local checkout.) The server is synchronous by design:
+(A repo that pins the toolchain can point `command` at its own `tools/duet`
+wrapper instead — same verbs, resolved at the repo's pin.) The server is
+synchronous by design:
 every verb is seconds-fast on a warm tree, so there is no streaming and no
 cancel surface; results carry `structuredContent` alongside the text report.
 

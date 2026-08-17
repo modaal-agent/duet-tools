@@ -110,7 +110,7 @@ enum Lanes {
     guard let text = failure["rendered"] as? String, !text.isEmpty else {
       let fixture = report["fixture"] as? String ?? "?"
       let kind = failure["kind"] as? String ?? "?"
-      return "✗ '\(fixture)' — \(kind) (report has no rendered block — pre-FT2 runner?)   [\(platform)]"
+      return "✗ '\(fixture)' — \(kind) (report has no rendered block — older runner?)   [\(platform)]"
     }
     guard let newline = text.firstIndex(of: "\n") else {
       return "\(text)   [\(platform)]"
@@ -238,7 +238,7 @@ enum Lanes {
     var kotlinLaunch: (Process, URL, Date)?
 
     if !options.kotlinOnly {
-      // One host lane per package root, all in parallel (F5: subtree re-cuts
+      // One host lane per package root, all in parallel (subtree re-cuts
       // spread the features across packages); a scoped run needs only the
       // feature's own root. Reports land in the shared parity/.runs dir, so the
       // coverage gate below is package-agnostic.
@@ -376,7 +376,7 @@ enum Lanes {
     if options.json {
       var lanes: [String: Any] = [:]
       if !swiftResults.isEmpty {
-        // One entry per package root (an array since F5's multi-package layout).
+        // One entry per package root (an array since the multi-package layout).
         lanes["swift"] = swiftResults.map { entry in
           var lane: [String: Any] = [
             "package": entry.package, "exit": Int(entry.result.exitCode),

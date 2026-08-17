@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.13.0 — 2026-08-17
+
+Pre-1.0 minor: the host-lane allowlist admits `duet-services`, and the CLI
+re-pins the framework.
+
+### Changed — `duet-services` counts as a family package in the host-lane check
+
+`HostLane.swiftFamilyAllowlist` is `["duet", "duet-services"]`. The check has
+two branches: with a committed `Package.resolved` it reads the resolved set,
+and without one it walks the manifest tree. A feature root that reached the
+services tier by local path took the manifest-tree branch and passed; the same
+root pinning `duet-services` by URL commits a lockfile, takes the resolved-set
+branch, and failed with "outside the allowlist". Both branches now accept it.
+
+### Changed — the framework pin moves to 0.2.1
+
+`Package.swift` pins `duet` at `exact: "0.2.1"`. The linked API does not move
+across that span — `DuetReplay` and `DuetTesting` are unchanged — so this is a
+re-pin rather than an upgrade. Pre-1.0 minors stay breaking by family
+convention, and moving the pin stays a deliberate commit.
+
+### Changed — workflows, comments and fixtures describe the published shape
+
+The `ci` and `release` workflows drop the token step and the credential-rewrite
+cleanup: SwiftPM resolves the framework anonymously. `README.md` and the CLI's
+own comments describe a repository that pins the toolchain rather than one that
+checks the family out as siblings, and the test fixtures use example
+identifiers.
+
 ## 0.12.0 — 2026-08-12
 
 Pre-1.0 minor: the CLI owns its manifest — the meta-checks that lived in

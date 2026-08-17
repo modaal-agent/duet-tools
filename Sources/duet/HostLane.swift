@@ -46,8 +46,9 @@ enum HostLane {
   // only a new EXTERNAL artifact in a gated unit is a family decision.
 
   /// `duet` ships the framework, DuetShells, DuetTesting and DuetReplay in one
-  /// package today; when the family splits, this list is where it is declared.
-  static let swiftFamilyAllowlist: Set<String> = ["duet"]
+  /// package; `duet-services` ships the services and telemetry tier. When the
+  /// family grows again, this list is where it is declared.
+  static let swiftFamilyAllowlist: Set<String> = ["duet", "duet-services"]
 
   /// A gated Kotlin module is a plain Kotlin module: the JVM or multiplatform
   /// plugin plus serialization. An AGP plugin here is the same violation as an
@@ -107,8 +108,8 @@ enum HostLane {
     let rootURL = repo.root.appendingPathComponent(root)
     let lockURL = rootURL.appendingPathComponent("Package.resolved")
     guard FileManager.default.fileExists(atPath: lockURL.path) else {
-      // No lockfile is legal exactly when nothing resolves remotely (the
-      // private phase's local-path family dep). A manifest that declares a
+      // No lockfile is legal exactly when nothing resolves remotely (a
+      // manifest whose dependencies are all local paths). A manifest that declares a
       // remote dependency without a committed lock is the gap the check
       // exists for — the resolved set IS the receipt. The sweep recurses
       // through `.package(path:` edges — the mirror of the Gradle
@@ -188,8 +189,8 @@ enum HostLane {
       let child =
         path.hasPrefix("/")
         ? URL(fileURLWithPath: path) : packageDir.appendingPathComponent(path)
-      // Label repo-local children repo-relative; the family checkout (an
-      // absolute path during the private phase) keeps its declared spelling.
+      // Label repo-local children repo-relative; a checkout outside the repo
+      // (an absolute path) keeps its declared spelling.
       let childPath = child.standardizedFileURL.path
       let rootPath = repo.root.standardizedFileURL.path
       let label =

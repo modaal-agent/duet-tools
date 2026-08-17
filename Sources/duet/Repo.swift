@@ -52,7 +52,7 @@ struct Feature {
   }
 
   /// The prefix of `swift:` before /Sources/ — the feature's OWN package root,
-  /// repo-relative. Since the first subtree re-cut (F5) features live in more
+  /// repo-relative. Since the first subtree re-cut, features live in more
   /// than one package (`Subtrees/<Name>` beside the aggregator), so the root is
   /// per-feature, not per-manifest.
   var swiftPackageRelative: String? {
@@ -139,7 +139,7 @@ struct Manifest {
   let lintOK: Bool
   let lintErrors: [String]
   /// The Swift package roots (every distinct per-feature `swift:` prefix before
-  /// /Sources/ — more than one since the first subtree re-cut, F5) and the
+  /// /Sources/ — more than one since the first subtree re-cut) and the
   /// Android build root (the first component of any feature's `kotlin:` path) —
   /// derived, absolute. Sorted by path for stable lane ordering. Single-source
   /// manifests carry ONE of the two: a KMP-flavor repo declares no `swift:`

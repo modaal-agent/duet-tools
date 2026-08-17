@@ -32,7 +32,7 @@ let package = Package(
     // byte-gate writer — so the toolchain rides a known framework tag, and
     // pre-1.0 minors are breaking by family convention (upgrades are
     // deliberate re-pin commits, never floating ranges).
-    .package(url: "https://github.com/modaal-agent/duet.git", exact: "0.1.0"),
+    .package(url: "https://github.com/modaal-agent/duet.git", exact: "0.2.1"),
     .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.0"..<"700.0.0"),
   ],
   targets: [

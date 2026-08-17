@@ -22,7 +22,7 @@ final class LaneTaskLintTests: XCTestCase {
   }
 
   func testStaleJvmTaskOnAllKmpTreeWarns() {
-    // The measured S10 case: `test` on an all-KMP manifest runs no feature
+    // The measured case: `test` on an all-KMP manifest runs no feature
     // module's lane at all.
     let warnings = LaneTaskLint.warnings(
       named: ".github/workflows/ci.yml",
