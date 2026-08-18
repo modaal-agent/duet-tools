@@ -126,6 +126,17 @@ swift run duet help
   every `CanonicalSumCodable` enum (normally implicit via `record`).
 - `duet write-fixtures` — materialize pending record artifacts into pretty
   fixture files (framework repos' own-corpus regen path).
+- `duet mocks [--check]` — the manifest-driven codegen runner: each `mocks:`
+  generator row (contracts/manifest.md) regenerates its committed file from
+  the pinned swift-sourcery-templates release bundle — one checksum-verified
+  download carrying engine + templates + the `mock-templates` CLI. `--check`
+  validates each file's fingerprint block instead: inputs re-hashed at the
+  manifest's pins, no engine run, no template compile, kilobytes of download.
+  Scan roots come from a row's `sources:` plus the roots derived from its
+  `package:` manifest (path dependencies + the Duet family at exact pins,
+  duet-services per linked product); rows run producers-first, derived from
+  the resolved roots. Overrides for template iteration: `TEMPLATES_DIR`,
+  `SOURCERY`, `MOCK_TEMPLATES`.
 - `duet scope <path>` — which gates govern a file, and the authoring loop for
   it (the module→gates map, both routing directions; derived from the
   manifest, no configuration).

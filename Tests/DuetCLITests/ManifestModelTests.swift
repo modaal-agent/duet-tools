@@ -58,4 +58,41 @@ final class ManifestModelTests: XCTestCase {
       Inventory.gradleModules(inSettingsText: groovy),
       [":app", ":services", ":replay-runner"])
   }
+
+  // MARK: - `duet mocks` run order
+
+  private func mockRow(
+    _ name: String, roots: [String], output: String
+  ) -> (generator: ParsedManifest.MockGenerator, roots: [URL], output: URL) {
+    (
+      ParsedManifest.MockGenerator(name: name),
+      roots.map { URL(fileURLWithPath: $0) },
+      URL(fileURLWithPath: output)
+    )
+  }
+
+  func testMocksProducersRunBeforeTheRowsThatScanTheirOutputs() throws {
+    // `wide` scans the module dir that contains `narrow`'s output, so
+    // `narrow` must generate first even though `wide` is declared first.
+    let wide = mockRow(
+      "wide", roots: ["/repo/Sources/App"], output: "/repo/Tests/Generated/Mocks.swift")
+    let narrow = mockRow(
+      "narrow", roots: ["/repo/Sources/App/Feature"],
+      output: "/repo/Sources/App/Generated/Components.swift")
+    let ordered = try Mocks.producersFirst([wide, narrow])
+    XCTAssertEqual(ordered.map(\.generator.name), ["narrow", "wide"])
+    // Independent rows keep declaration order.
+    let other = mockRow("other", roots: ["/repo/Sources/Lib"], output: "/repo/Sources/Lib2/X.swift")
+    XCTAssertEqual(
+      try Mocks.producersFirst([wide, other, narrow]).map(\.generator.name),
+      ["other", "narrow", "wide"])
+  }
+
+  func testMocksMutualOutputScanIsANamedCycle() {
+    let a = mockRow("a", roots: ["/repo/B"], output: "/repo/A/Out.swift")
+    let b = mockRow("b", roots: ["/repo/A"], output: "/repo/B/Out.swift")
+    XCTAssertThrowsError(try Mocks.producersFirst([a, b])) { error in
+      XCTAssertTrue("\(error)".contains("cycle: a, b"), "got \(error)")
+    }
+  }
 }

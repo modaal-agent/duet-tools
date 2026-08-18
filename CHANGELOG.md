@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.14.0 — 2026-08-18
+
+Pre-1.0 minor: the manifest grows a `mocks:` section and the CLI a `duet
+mocks` verb — Swift code generation joins the toolchain.
+
+### Added — the `mocks:` manifest section
+
+`parity/manifest.yaml` may declare a `mocks:` section (contracts/manifest.md):
+a `bundle:` pin naming the swift-sourcery-templates release tag, and one
+generator row per committed generated file — `output:`, `template:`, explicit
+`sources:` roots and/or a `package:` whose manifest derives the rest, and
+`key=value` `args:`. `duet lint` checks the section's shape offline (required
+keys, tag form, on-disk roots, arg form, row-name uniqueness) and the
+`--json` plan carries it. An absent or row-less section changes nothing.
+
+### Added — `duet mocks [--check]`
+
+`duet mocks` regenerates every row from the pinned release bundle: one
+checksum-verified download (asset + published `.sha256`, the same rung the
+`tools/duet` wrapper uses for the toolchain binary) carrying engine,
+templates and the `mock-templates` CLI, cached per tag under `.build/`.
+`duet mocks --check` validates each file's fingerprint block instead — the
+CLI-only zip (kilobytes), inputs re-hashed with family clones at the
+manifests' exact pins, no engine run, no template compile.
+
+Scan roots: a row's `sources:` first, then the `package:` derivation — every
+path dependency's sources, `duet` whole at its exact pin, `duet-services`
+per linked product, either dependency form. Rows run producers-first,
+derived from the resolved roots at run time (a row whose roots contain
+another row's output runs after it); mutual containment is a named error.
+`TEMPLATES_DIR` / `SOURCERY` / `MOCK_TEMPLATES` override provisioning for
+template iteration.
+
+The verb needs bundle 0.6.1 or later when a row's output lands inside one of
+its own scan roots — earlier `mock-templates` releases record a self-hash
+the write invalidates.
+
 ## 0.13.0 — 2026-08-17
 
 Pre-1.0 minor: the host-lane allowlist admits `duet-services`, and the CLI

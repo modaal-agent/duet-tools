@@ -158,7 +158,7 @@ final class ManifestLintTests: XCTestCase {
     let errors = try lintErrors(repo)
     XCTAssertTrue(
       errors.contains(
-        "manifest.yaml: unknown top-level key 'chanis' (known: chains, features, presentation, replayRunner)"),
+        "manifest.yaml: unknown top-level key 'chanis' (known: chains, features, mocks, presentation, replayRunner)"),
       "got \(errors)")
     // The failure mode the strictness exists for: the block's chain fixture is
     // no longer gated — and now that is loud, not silent.
@@ -417,5 +417,114 @@ final class ManifestLintTests: XCTestCase {
     // Returns at the meta gate — no platform lane subprocess is launched, so
     // this is safe (and fast) to call on a tree with no buildable packages.
     XCTAssertEqual(try Lanes.run(repo: repo, options: options), 1)
+  }
+
+  // MARK: - The mocks section (shape checks — bundle download and file
+  // currency are `duet mocks`' own job, so lint stays offline)
+
+  private func appendManifest(_ repo: Repo, _ block: String) throws {
+    let url = repo.root.appendingPathComponent("parity/manifest.yaml")
+    let text = try String(contentsOf: url, encoding: .utf8)
+    try Data((text + "\n" + block + "\n").utf8).write(to: url)
+  }
+
+  private let goldenMocks = """
+    mocks:
+      bundle: 0.6.0
+      generators:
+        counter_mocks:
+          output: src-ios/Subtrees/Counter/CounterFeature/Tests/CounterFeatureTests/Generated/CounterMocks.swift
+          template: Mocks.swifttemplate
+          sources:
+            - src-ios/Subtrees/Counter/CounterFeature/Sources
+          args:
+            - import=Foundation
+    """
+
+  func testMocksGoldenRowIsGreenAndRidesThePlan() throws {
+    let repo = try makeTree("mini-swift")
+    try appendManifest(repo, goldenMocks)
+    let result = try ManifestLint.lint(repo: repo)
+    XCTAssertEqual(result.errors, [])
+    let plan = ManifestLint.plan(of: result)
+    let mocks = try XCTUnwrap(plan["mocks"] as? [String: Any])
+    XCTAssertEqual(mocks["bundle"] as? String, "0.6.0")
+    let generators = try XCTUnwrap(mocks["generators"] as? [String: Any])
+    let row = try XCTUnwrap(generators["counter_mocks"] as? [String: Any])
+    XCTAssertEqual(row["template"] as? String, "Mocks.swifttemplate")
+    XCTAssertEqual(row["args"] as? [String], ["import=Foundation"])
+
+    let manifest = try Manifest.load(repo: repo)
+    XCTAssertEqual(manifest.mocksBundle, "0.6.0")
+    XCTAssertEqual(manifest.mockGenerators.map(\.name), ["counter_mocks"])
+  }
+
+  func testMocksRowsWithoutBundleTagAreNamed() throws {
+    let repo = try makeTree("mini-swift")
+    try appendManifest(repo, goldenMocks)
+    try rewrite(repo, "parity/manifest.yaml", "  bundle: 0.6.0\n", "")
+    try assertError(repo, containing: "[mocks] generator rows declared but no bundle: tag")
+  }
+
+  func testMocksBundleTagFormIsChecked() throws {
+    let repo = try makeTree("mini-swift")
+    try appendManifest(repo, goldenMocks)
+    try rewrite(repo, "parity/manifest.yaml", "bundle: 0.6.0", "bundle: main")
+    try assertError(repo, containing: "[mocks] bundle: expected a swift-sourcery-templates release tag")
+  }
+
+  func testMocksRowRequiredKeysAndRootsAreChecked() throws {
+    let repo = try makeTree("mini-swift")
+    try appendManifest(repo, goldenMocks)
+    try rewrite(repo, "parity/manifest.yaml", "      template: Mocks.swifttemplate\n", "")
+    try rewrite(
+      repo, "parity/manifest.yaml",
+      "- src-ios/Subtrees/Counter/CounterFeature/Sources",
+      "- src-ios/Subtrees/Counter/NoSuchDir")
+    let errors = try lintErrors(repo)
+    XCTAssertTrue(
+      errors.contains { $0.contains("[mocks.counter_mocks] missing template:") }, "got \(errors)")
+    XCTAssertTrue(
+      errors.contains { $0.contains("sources: root missing on disk: src-ios/Subtrees/Counter/NoSuchDir") },
+      "got \(errors)")
+  }
+
+  func testMocksRowNeedsSourcesOrPackageAndValidArgs() throws {
+    let repo = try makeTree("mini-swift")
+    try appendManifest(
+      repo,
+      """
+      mocks:
+        bundle: 0.6.0
+        generators:
+          rootless:
+            output: src-ios/Generated/X.swift
+            template: Mocks.swifttemplate
+            args:
+              - importFoundation
+      """)
+    let errors = try lintErrors(repo)
+    XCTAssertTrue(
+      errors.contains { $0.contains("[mocks.rootless] needs sources: roots or a package:") },
+      "got \(errors)")
+    XCTAssertTrue(
+      errors.contains { $0.contains("args: entry is not key=value: 'importFoundation'") },
+      "got \(errors)")
+  }
+
+  func testMocksPackageWithoutManifestIsNamed() throws {
+    let repo = try makeTree("mini-swift")
+    try appendManifest(
+      repo,
+      """
+      mocks:
+        bundle: 0.6.0
+        generators:
+          derived:
+            output: src-ios/Generated/X.swift
+            template: Mocks.swifttemplate
+            package: src-ios/NoSuchPackage
+      """)
+    try assertError(repo, containing: "[mocks.derived] package: src-ios/NoSuchPackage has no Package.swift")
   }
 }

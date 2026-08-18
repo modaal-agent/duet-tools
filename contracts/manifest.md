@@ -22,6 +22,8 @@ accept it.
   - `chains:` — a list of `- <fixture>` items at indent 2: chain fixtures,
     gated but owned by no single feature.
   - `presentation:` — the ledger (below).
+  - `mocks:` — the code-generation section (below): the release-bundle pin
+    and one generator row per committed generated file, `duet mocks`' config.
   - `replayRunner: <dir>` — optional scalar: the Swift package root owning
     the `Sources/replay-runner` executable, for repos whose replay glue
     lives outside every feature package.
@@ -87,6 +89,47 @@ feature must exist, and `since` is a `YYYY-MM-DD` date. The lint checks
 entry shape only — whether a waiver or island is justified stays review's
 job.
 
+### The mocks section
+
+```yaml
+mocks:
+  bundle: 0.6.1           # the swift-sourcery-templates release tag
+  generators:
+    <name>:               # indent 4; one row per generated file
+      output: <path>      # indent 6 scalars — the committed file, repo-relative
+      template: <file>    # entry point inside the bundle's templates/
+      package: <dir>      # optional: derive roots from this package's manifest
+      sources:            # optional: explicit repo-relative scan roots
+        - <dir>
+      args:               # template args, key=value
+        - import=Foundation
+```
+
+- `bundle:` — the release tag of the swift-sourcery-templates artifact
+  bundle every row generates with. The bundle carries engine, templates and
+  the `mock-templates` CLI together, so this one pin replaces an
+  engine/templates version pair. Required once any generator row exists;
+  bare semver.
+- `generators:` — rows keep declaration order. Each row needs `output:`,
+  `template:`, and at least one of `sources:` / `package:`.
+- `sources:` — the roots the row owns, scanned first, in order. Keep them as
+  narrow as the annotations require: every `.swift` file under a root joins
+  the output's fingerprint, so a too-wide root turns unrelated edits into
+  staleness churn.
+- `package:` — a Swift package directory whose manifest DERIVES the rest of
+  the roots (`swift package dump-package`): every path dependency's sources,
+  and every Duet family dependency at its exact pin — `duet` scanned whole,
+  `duet-services` scanned per linked product — whichever dependency form the
+  manifest carries. The package's own `Sources/` is NOT implied; a row that
+  wants it lists it under `sources:`.
+- `args:` — `key=value` pairs passed to the template (`import=…`,
+  `testable=…`). Unknown per-row keys are accepted and carried into the
+  plan, like feature entries.
+- At generation, rows run producers-first — a row whose resolved roots
+  contain another row's output runs after it — derived from the roots at run
+  time; declaration order is the tiebreak, and rows whose roots contain each
+  other's outputs are a named error.
+
 ## The checks (`duet lint`, and every verb's manifest load)
 
 Which rules apply to a feature is derived from the manifest itself — which
@@ -102,14 +145,20 @@ from repo-level configuration:
 | `kotlin:` only | the feature must BE single-source (`commonMain`) |
 
 Plus, independent of flavor: scenario existence, fixture symmetry (listed ⊆
-disk, no orphans), and the ledger's entry shape. `verify` runs all of this
+disk, no orphans), the ledger's entry shape, and the mocks section's shape —
+parse errors, the scalar set (`bundle` is the only known scalar), the
+bundle-tag form, each row's required keys, on-disk existence of `sources:`
+roots and the `package:` manifest, `key=value` args, and row-name uniqueness.
+Lint stays offline: the bundle download and the generated files' currency are
+`duet mocks --check`'s job, never lint's. `verify` runs all of this
 as its first meta-gate — a lint failure stops the run before any lane.
 
 ## The plan (`duet lint --json`)
 
 One JSON object: `status` (`ok`|`fail`), `errors` (every violation, in check
 order), `features` (each entry's scalars verbatim plus its `fixtures` list),
-`chains`, `presentation` (`waivers`/`islands` as parsed), the known
-top-level scalars (`replayRunner`), and the `toolchain` stamp every `duet`
-JSON report carries. Consume the plan instead of re-parsing the yaml —
+`chains`, `presentation` (`waivers`/`islands` as parsed), `mocks` (bundle +
+generator rows, when the section exists), the known top-level scalars
+(`replayRunner`), and the `toolchain` stamp every `duet` JSON report
+carries. Consume the plan instead of re-parsing the yaml —
 that is what the CLI itself does.

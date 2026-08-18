@@ -153,6 +153,11 @@ struct Manifest {
   /// glue lives outside every feature package (a scaffolded all-subtrees layout
   /// has no aggregator root to probe).
   let replayRunnerRelative: String?
+  /// The `mocks:` section — the bundle tag and the generator rows (manifest
+  /// order), `duet mocks`' config. Empty rows = no section, or a wired
+  /// section with no rows yet; the verb is a green no-op on both.
+  let mocksBundle: String?
+  let mockGenerators: [ParsedManifest.MockGenerator]
   /// Repo root the relative paths resolve against (for per-feature lookups).
   let repoRoot: URL
 
@@ -252,6 +257,8 @@ struct Manifest {
       swiftPackageDirs: swiftRelatives.map(repo.root.appendingPathComponent),
       androidDir: androidRelative.map(repo.root.appendingPathComponent),
       replayRunnerRelative: result.parsed.scalars["replayRunner"],
+      mocksBundle: result.parsed.mocksScalars["bundle"],
+      mockGenerators: result.parsed.mockGenerators,
       repoRoot: repo.root)
   }
 }

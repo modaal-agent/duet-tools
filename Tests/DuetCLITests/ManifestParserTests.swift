@@ -100,7 +100,7 @@ final class ManifestParserTests: XCTestCase {
       """)
     XCTAssertEqual(
       parsed.topLevelErrors,
-      ["manifest.yaml: unknown top-level key 'chanis' (known: chains, features, presentation, replayRunner)"])
+      ["manifest.yaml: unknown top-level key 'chanis' (known: chains, features, mocks, presentation, replayRunner)"])
     // The misdeclared block is NOT silently adopted as chains.
     XCTAssertTrue(parsed.chains.isEmpty)
   }
@@ -109,7 +109,7 @@ final class ManifestParserTests: XCTestCase {
     let parsed = ManifestParser.parse("raplayRunner: src-ios/Replay\n")
     XCTAssertEqual(
       parsed.topLevelErrors,
-      ["manifest.yaml: unknown top-level key 'raplayRunner' (known: chains, features, presentation, replayRunner)"])
+      ["manifest.yaml: unknown top-level key 'raplayRunner' (known: chains, features, mocks, presentation, replayRunner)"])
     XCTAssertTrue(parsed.scalars.isEmpty)
   }
 
@@ -152,5 +152,63 @@ final class ManifestParserTests: XCTestCase {
       """)
     XCTAssertEqual(
       parsed.ledgerParseErrors, ["[presentation] unparseable ledger line: '- entry'"])
+  }
+
+  // MARK: - The mocks section
+
+  func testMocksSectionParses() {
+    let parsed = ManifestParser.parse(
+      """
+      features:
+        counter:
+          swift: src-ios/Sources/CounterFeature/CounterFeature.swift
+
+      mocks:
+        bundle: 0.6.0
+        generators:
+          # duet-scaffold:mocks-generators (rows are inserted above this line)
+          counter_node_mocks:
+            output: src-ios/Tests/Generated/CounterNodeMocks.swift  # trailing comment
+            template: Mocks.swifttemplate
+            package: src-ios
+            sources:
+              - src-ios/Sources/CounterNode
+            args:
+              - testable=CounterNode
+              - import=Foundation
+      """)
+    XCTAssertTrue(parsed.hasMocksSection)
+    XCTAssertEqual(parsed.mocksScalars["bundle"], "0.6.0")
+    XCTAssertEqual(parsed.mockGenerators.count, 1)
+    let row = parsed.mockGenerators[0]
+    XCTAssertEqual(row.name, "counter_node_mocks")
+    XCTAssertEqual(row.keys["output"], "src-ios/Tests/Generated/CounterNodeMocks.swift")
+    XCTAssertEqual(row.keys["template"], "Mocks.swifttemplate")
+    XCTAssertEqual(row.keys["package"], "src-ios")
+    XCTAssertEqual(row.sources, ["src-ios/Sources/CounterNode"])
+    XCTAssertEqual(row.args, ["testable=CounterNode", "import=Foundation"])
+    XCTAssertTrue(parsed.mocksParseErrors.isEmpty)
+    XCTAssertTrue(parsed.topLevelErrors.isEmpty)
+  }
+
+  func testEmptyMocksSectionIsLegalAndAbsenceStaysAbsent() {
+    // The wired-but-no-rows state a fresh scaffold starts in.
+    let parsed = ManifestParser.parse("mocks:\n  generators:\n    # marker only\n")
+    XCTAssertTrue(parsed.hasMocksSection)
+    XCTAssertTrue(parsed.mockGenerators.isEmpty)
+    XCTAssertTrue(parsed.mocksParseErrors.isEmpty)
+    let absent = ManifestParser.parse("features:\n  x:\n    swift: a/Sources/B/C.swift\n")
+    XCTAssertFalse(absent.hasMocksSection)
+  }
+
+  func testMocksLineOutsideGeneratorsIsAnError() {
+    let parsed = ManifestParser.parse(
+      """
+      mocks:
+        bundle: 0.6.0
+          stray: line
+      """)
+    XCTAssertEqual(parsed.mocksParseErrors.count, 1)
+    XCTAssertTrue(parsed.mocksParseErrors[0].contains("outside generators:"), "got \(parsed.mocksParseErrors)")
   }
 }

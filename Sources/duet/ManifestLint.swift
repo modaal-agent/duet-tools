@@ -69,9 +69,12 @@ enum ManifestLint {
       result.parsed.chains.isEmpty ? "" : ", \(result.parsed.chains.count) chain(s)"
     let ledgerNote =
       ", ledger: \(result.parsed.waivers.count) waiver(s) / \(result.parsed.islands.count) island(s)"
+    let mocksNote =
+      result.parsed.mockGenerators.isEmpty
+      ? "" : ", mocks: \(result.parsed.mockGenerators.count) generator(s)"
     print(
       "lockstep-lint: OK (\(result.parsed.features.count) feature(s),"
-        + " \(result.fixturesOnDisk) fixture(s)\(chainsNote)\(suffix)\(ledgerNote))")
+        + " \(result.fixturesOnDisk) fixture(s)\(chainsNote)\(suffix)\(ledgerNote)\(mocksNote))")
     return 0
   }
 
@@ -94,6 +97,19 @@ enum ManifestLint {
       "presentation": ["waivers": result.parsed.waivers, "islands": result.parsed.islands],
     ]
     for (key, value) in result.parsed.scalars { plan[key] = value }
+    if result.parsed.hasMocksSection {
+      var generators: [String: Any] = [:]
+      for generator in result.parsed.mockGenerators {
+        var row: [String: Any] = [:]
+        for (key, value) in generator.keys { row[key] = value }
+        row["sources"] = generator.sources
+        row["args"] = generator.args
+        generators[generator.name] = row
+      }
+      var mocks: [String: Any] = ["generators": generators]
+      if let bundle = result.parsed.mocksScalars["bundle"] { mocks["bundle"] = bundle }
+      plan["mocks"] = mocks
+    }
     return plan
   }
 
@@ -105,6 +121,7 @@ enum ManifestLint {
     if parsed.features.isEmpty { errors.append("manifest.yaml: no features parsed") }
     errors += parsed.ledgerParseErrors
     errors += presentationErrors(parsed: parsed)
+    errors += mocksErrors(parsed: parsed, repo: repo)
 
     let fm = FileManager.default
     var listed = Set<String>()
@@ -377,6 +394,66 @@ enum ManifestLint {
     }
     errors.append("\(context): unbalanced braces")
     return nil
+  }
+
+  /// The `mocks:` section shape — `duet mocks`' config. Shape only: lint
+  /// stays offline, so the bundle download and the generated files' currency
+  /// are the verb's own job (`duet mocks --check`), never lint's. What IS
+  /// checked: parse errors, the scalar set, the bundle-tag form, each row's
+  /// required keys (`output`, `template`, and `sources:` roots or a
+  /// `package:` to derive them from), on-disk existence of the declared
+  /// dirs, `key=value` arg form, and row-name uniqueness.
+  static func mocksErrors(parsed: ParsedManifest, repo: Repo) -> [String] {
+    var errors = parsed.mocksParseErrors
+    let fm = FileManager.default
+    for key in parsed.mocksScalars.keys.sorted() where key != "bundle" {
+      errors.append("[mocks] unknown key '\(key)' (known: bundle, generators)")
+    }
+    let bundle = parsed.mocksScalars["bundle"]
+    if let bundle,
+      bundle.range(of: "^[0-9]+\\.[0-9]+\\.[0-9]+$", options: .regularExpression) == nil
+    {
+      errors.append(
+        "[mocks] bundle: expected a swift-sourcery-templates release tag like 0.6.0,"
+          + " got \(ManifestParser.pythonRepr(bundle))")
+    }
+    if bundle == nil, !parsed.mockGenerators.isEmpty {
+      errors.append(
+        "[mocks] generator rows declared but no bundle: tag — the rows pin the"
+          + " swift-sourcery-templates release they generate with")
+    }
+    var seen = Set<String>()
+    for generator in parsed.mockGenerators {
+      let label = "[mocks.\(generator.name)]"
+      if !seen.insert(generator.name).inserted {
+        errors.append("\(label) duplicate generator row")
+      }
+      if generator.keys["output"] == nil {
+        errors.append("\(label) missing output: — the committed generated file, repo-relative")
+      }
+      if generator.keys["template"] == nil {
+        errors.append("\(label) missing template: — the entry point inside the bundle's templates/")
+      }
+      if generator.sources.isEmpty, generator.keys["package"] == nil {
+        errors.append("\(label) needs sources: roots or a package: to derive them from")
+      }
+      if let package = generator.keys["package"],
+        !fm.fileExists(
+          atPath: repo.root.appendingPathComponent(package)
+            .appendingPathComponent("Package.swift").path)
+      {
+        errors.append("\(label) package: \(package) has no Package.swift")
+      }
+      for source in generator.sources
+      where !fm.fileExists(atPath: repo.root.appendingPathComponent(source).path) {
+        errors.append("\(label) sources: root missing on disk: \(source)")
+      }
+      for arg in generator.args where !arg.contains("=") {
+        errors.append(
+          "\(label) args: entry is not key=value: \(ManifestParser.pythonRepr(arg))")
+      }
+    }
+    return errors
   }
 
   /// Group-1 captures of every match.

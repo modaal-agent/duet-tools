@@ -28,6 +28,27 @@ struct ParsedManifest {
   var islands: [[String: String]] = []
   /// Known top-level scalars (`replayRunner:` today) — ride the plan verbatim.
   var scalars: [String: String] = [:]
+  /// One `mocks:` generator row — the config `duet mocks` runs (grammar in
+  /// contracts/manifest.md). Rows keep manifest order; generation follows it.
+  struct MockGenerator {
+    var name: String
+    /// Row scalars (`output`, `template`, `package`; unknown keys carried —
+    /// rows are extensible the same way feature entries are).
+    var keys: [String: String] = [:]
+    /// Explicit repo-relative scan roots, in declaration order.
+    var sources: [String] = []
+    /// Template args, `key=value` (`import=…`, `testable=…`).
+    var args: [String] = []
+  }
+  /// `mocks:` section scalars (`bundle:` — the swift-sourcery-templates
+  /// release tag the rows generate with).
+  var mocksScalars: [String: String] = [:]
+  var mockGenerators: [MockGenerator] = []
+  /// Whether a `mocks:` section appeared at all. An empty section is legal —
+  /// the wired-but-no-rows state a fresh scaffold starts in.
+  var hasMocksSection = false
+  /// `mocks:` block parse errors (shape errors found while reading it).
+  var mocksParseErrors: [String] = []
   /// Strict top-level grammar errors (unknown key, unparseable line).
   var topLevelErrors: [String] = []
   /// `presentation:` block parse errors (shape errors found while reading it).
@@ -40,7 +61,7 @@ enum ManifestParser {
   /// The top-level routing set. Everything else at indent 0 is an error —
   /// safe under the pin regime (the CLI version is pinned per repo, so a
   /// manifest never meets an older parser that doesn't know its keys).
-  static let knownSections: Set<String> = ["features", "chains", "presentation"]
+  static let knownSections: Set<String> = ["features", "chains", "presentation", "mocks"]
   static let knownScalars: Set<String> = ["replayRunner"]
 
   static func parse(_ text: String) -> ParsedManifest {
@@ -48,6 +69,7 @@ enum ManifestParser {
     let lines = splitLines(text)
     parseStructure(lines, into: &parsed)
     parsePresentation(lines, into: &parsed)
+    parseMocks(lines, into: &parsed)
     return parsed
   }
 
@@ -197,6 +219,87 @@ enum ManifestParser {
         parsed.ledgerParseErrors.append(
           "[presentation] unparseable ledger line: \(pythonRepr(line.raw.trimmingCharacters(in: .whitespaces)))")
       }
+    }
+  }
+
+  // MARK: - Pass 3: the mocks section
+
+  private static func parseMocks(_ lines: [Line], into parsed: inout ParsedManifest) {
+    var inMocks = false
+    var inGenerators = false
+    var currentIndex: Int?
+    var listKey: String?
+    for line in lines {
+      let s = line.content
+      if line.indent == 0 {
+        inMocks = s == "mocks:"
+        if inMocks { parsed.hasMocksSection = true }
+        inGenerators = false
+        currentIndex = nil
+        listKey = nil
+        continue
+      }
+      guard inMocks else { continue }
+      if line.indent == 2 {
+        currentIndex = nil
+        listKey = nil
+        if s == "generators:" {
+          inGenerators = true
+          continue
+        }
+        inGenerators = false
+        if let colon = s.firstIndex(of: ":") {
+          let key = String(s[..<colon]).trimmingCharacters(in: .whitespaces)
+          let value = String(s[s.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+          parsed.mocksScalars[key] = value
+        } else {
+          parsed.mocksParseErrors.append("[mocks] unparseable line: \(pythonRepr(s))")
+        }
+        continue
+      }
+      guard inGenerators else {
+        parsed.mocksParseErrors.append("[mocks] line outside generators:: \(pythonRepr(s))")
+        continue
+      }
+      if line.indent == 4, s.hasSuffix(":") {
+        parsed.mockGenerators.append(
+          ParsedManifest.MockGenerator(name: String(s.dropLast())))
+        currentIndex = parsed.mockGenerators.count - 1
+        listKey = nil
+        continue
+      }
+      guard let index = currentIndex else {
+        parsed.mocksParseErrors.append(
+          "[mocks] line outside a generator row: \(pythonRepr(s))")
+        continue
+      }
+      if line.indent == 6 {
+        if s == "sources:" || s == "args:" {
+          listKey = String(s.dropLast())
+          continue
+        }
+        listKey = nil
+        if let colon = s.firstIndex(of: ":") {
+          let key = String(s[..<colon]).trimmingCharacters(in: .whitespaces)
+          let value = String(s[s.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+          parsed.mockGenerators[index].keys[key] = value
+        } else {
+          parsed.mocksParseErrors.append(
+            "[mocks.\(parsed.mockGenerators[index].name)] unparseable line: \(pythonRepr(s))")
+        }
+        continue
+      }
+      if line.indent >= 8, s.hasPrefix("- "), let key = listKey {
+        let item = String(s.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+        if key == "sources" {
+          parsed.mockGenerators[index].sources.append(item)
+        } else {
+          parsed.mockGenerators[index].args.append(item)
+        }
+        continue
+      }
+      parsed.mocksParseErrors.append(
+        "[mocks] unparseable line: \(pythonRepr(line.raw.trimmingCharacters(in: .whitespaces)))")
     }
   }
 

@@ -151,6 +151,21 @@ let usage = """
         emit a standalone failing unit test for one fixture step on one platform.
     duet materialize --clean
         delete every generated Materialized_* test.
+    duet mocks [--check] [--json]
+        run the manifest's `mocks:` generator rows (grammar in
+        contracts/manifest.md): regenerate each committed file from the
+        pinned swift-sourcery-templates release bundle — ONE checksum-
+        verified download carrying engine + templates + CLI, so there is
+        no engine/templates version pair to keep matched — or, with
+        --check, validate each file's fingerprint block: inputs re-hashed
+        at the manifest's pins (family clones at their exact versions),
+        no engine run, no template compile, kilobytes of download. A
+        touched input, an added source file, a hand-edit below the block,
+        or a bundle-tag mismatch is red. Scan roots come from each row's
+        sources: list plus the roots derived from its package: manifest
+        (path deps + Duet family pins; duet-services per linked product).
+        Overrides for template iteration: TEMPLATES_DIR, SOURCERY,
+        MOCK_TEMPLATES.
     duet protocol-run [--platform swift|kotlin] [--runner <path>] [--json]
         byte-gate the full corpus through a replay-protocol runner
         (contracts/replay-protocol-v1.md). Default: build + drive the repo's
@@ -254,6 +269,8 @@ do {
     code = Explain.run(repo: repo, options: options)
   case "materialize":
     code = try Materialize.run(repo: repo, options: options)
+  case "mocks":
+    code = try Mocks.run(repo: repo, options: options)
   case "protocol-run":
     code = try ProtocolLane.run(repo: repo, options: options)
   case "write-fixtures":
