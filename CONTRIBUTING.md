@@ -18,5 +18,11 @@
   disagree, and attaches `duet-macos-arm64.zip` and its `.sha256` to that
   tag's Release. To publish the asset for a tag that already exists, run the
   workflow manually and give it the tag.
+- **Test doubles never live in a product's `Sources/`, `#if DEBUG`
+  included.** A DEBUG gate keeps a double out of release binaries, not out of
+  the module's API surface or its compile graph. A double one test target
+  uses lives in that test target; a double shared across targets or with
+  consumers ships in a dedicated test-support library product that only test
+  targets link.
 - **Licensing**: MIT, inbound = outbound; submitting a PR means your
   contribution is licensed under the [MIT License](LICENSE).
