@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed — `duet mocks` scans a family pin from one place
+
+A family URL pin is scanned from `.build/duet-sources/<identity>` in every
+run. The checkout a build leaves at
+`.build/SourcePackages/checkouts/<identity>` is now the clone ORIGIN when it
+sits on the pin — same content, no network, no credentials — and never a scan
+root. The fingerprint records the paths it enumerated, so preferring that
+directory as a root made the same sources validate in a fresh clone and
+report every input `unlisted` in a repo that had been built locally. A
+checkout on any other tag is ignored rather than hashed as if it were the
+pin.
+
 ## 0.14.0 — 2026-08-18
 
 Pre-1.0 minor: the manifest grows a `mocks:` section and the CLI a `duet

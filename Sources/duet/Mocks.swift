@@ -359,9 +359,9 @@ enum Mocks {
       }
     }
 
-    // Family URL pins, at their exact versions. Prefer the checkout SwiftPM
-    // already made for the build (same revision, no network, no credentials);
-    // fall back to a shallow clone at the pin — the fresh-runner case.
+    // Family URL pins, at their exact versions — always scanned out of
+    // `.build/duet-sources/<identity>`, never out of a build's own checkout
+    // tree (`familyClone` documents why).
     for dep in dependencies {
       for sc in dep["sourceControl"] as? [[String: Any]] ?? [] {
         guard let identity = sc["identity"] as? String, familyIdentities.contains(identity),
@@ -371,14 +371,7 @@ enum Mocks {
           let url = ((location["remote"] as? [[String: Any]])?.first?["urlString"] as? String)
             ?? ((location["remote"] as? [String])?.first)
         else { continue }
-        let checkout = repo.root.appendingPathComponent(
-          ".build/SourcePackages/checkouts/\(identity)")
-        let source: URL
-        if fm.fileExists(atPath: checkout.path) {
-          source = checkout
-        } else {
-          source = try familyClone(identity: identity, url: url, version: exact, repo: repo)
-        }
+        let source = try familyClone(identity: identity, url: url, version: exact, repo: repo)
         if identity == "duet-services" {
           servicesSourcesDir = source.appendingPathComponent("Sources")
           continue
@@ -421,29 +414,56 @@ enum Mocks {
     return roots
   }
 
-  /// `.build/duet-sources/<identity>` at the exact pin, reused when the
-  /// cached clone already sits on that tag.
+  /// The ONE scan root for a family URL pin: `.build/duet-sources/<identity>`
+  /// at the exact pin, reused when the cached clone already sits on that tag.
+  ///
+  /// This prefix is also what the fingerprint records, and that is why the
+  /// checkout SwiftPM makes for the build
+  /// (`.build/SourcePackages/checkouts/<identity>`) is used as a clone ORIGIN
+  /// and never as a scan root. Scanning it directly would key the recorded
+  /// input paths — and so a green or red `--check` — to whether the repo had
+  /// been built locally: the same content enumerates under a different prefix
+  /// than the one committed. Cloning also reads the tag's committed content
+  /// out of a checkout carrying local edits, and resolves both origins the
+  /// same way — by tag — so the scanned content matches the pin whichever
+  /// one supplied it.
+  ///
+  /// A checkout qualifies as the origin only when it sits on the pin (an
+  /// exact-match tag equal to `version`) — a checkout left behind by an older
+  /// resolve carries different content under the same path.
   static func familyClone(identity: String, url: String, version: String, repo: Repo) throws -> URL
   {
     let cache = repo.root.appendingPathComponent(".build/duet-sources/\(identity)")
-    let describe = Lanes.finish(try Lanes.launch(
-      ["git", "-C", cache.path, "describe", "--tags", "--exact-match"],
-      cwd: repo.root, logName: "mocks-describe"))
-    let current = (try? String(contentsOf: describe.logURL, encoding: .utf8))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
-    if describe.exitCode == 0, current == version { return cache }
-    print("mocks: cloning \(identity)@\(version) …")
+    if exactTag(at: cache, repo: repo) == version { return cache }
+    // A local origin clones over the filesystem: no network, no credentials,
+    // and `--depth` does not apply (git ignores it and hardlinks instead).
+    let checkout = repo.root.appendingPathComponent(
+      ".build/SourcePackages/checkouts/\(identity)")
+    let local = exactTag(at: checkout, repo: repo) == version
+    let origin = local ? checkout.path : url
+    print("mocks: cloning \(identity)@\(version) from \(local ? "the resolved checkout" : url) …")
     try? FileManager.default.removeItem(at: cache)
     try FileManager.default.createDirectory(
       at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
-    let clone = Lanes.finish(try Lanes.launch(
-      ["git", "clone", "--quiet", "--depth", "1", "--branch", version,
-       "-c", "advice.detachedHead=false", url, cache.path],
-      cwd: repo.root, logName: "mocks-clone"))
+    var arguments = ["git", "clone", "--quiet"]
+    if !local { arguments += ["--depth", "1"] }
+    arguments += ["--branch", version, "-c", "advice.detachedHead=false", origin, cache.path]
+    let clone = Lanes.finish(try Lanes.launch(arguments, cwd: repo.root, logName: "mocks-clone"))
     guard clone.exitCode == 0 else {
       throw MocksError.derivation(
-        "could not clone \(identity)@\(version) from \(url) (log: \(clone.logURL.path))")
+        "could not clone \(identity)@\(version) from \(origin) (log: \(clone.logURL.path))")
     }
     return cache
+  }
+
+  /// The tag `directory` is checked out at, or nil — a missing directory, a
+  /// non-repository, and a commit carrying no tag all answer the same way.
+  static func exactTag(at directory: URL, repo: Repo) -> String? {
+    guard let describe = try? Lanes.finish(Lanes.launch(
+      ["git", "-C", directory.path, "describe", "--tags", "--exact-match"],
+      cwd: repo.root, logName: "mocks-describe")), describe.exitCode == 0
+    else { return nil }
+    return (try? String(contentsOf: describe.logURL, encoding: .utf8))?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

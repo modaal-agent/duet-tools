@@ -120,8 +120,11 @@ mocks:
   the roots (`swift package dump-package`): every path dependency's sources,
   and every Duet family dependency at its exact pin — `duet` scanned whole,
   `duet-services` scanned per linked product — whichever dependency form the
-  manifest carries. The package's own `Sources/` is NOT implied; a row that
-  wants it lists it under `sources:`.
+  manifest carries. A family pin is always scanned out of
+  `.build/duet-sources/<identity>`, the prefix the fingerprint records — a
+  checkout left by a local build supplies the content when it sits on the
+  pin, and never moves the paths. The package's own `Sources/` is NOT
+  implied; a row that wants it lists it under `sources:`.
 - `args:` — `key=value` pairs passed to the template (`import=…`,
   `testable=…`). Unknown per-row keys are accepted and carried into the
   plan, like feature entries.
