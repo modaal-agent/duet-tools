@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.16.0 — 2026-08-19
+
+### Changed — the manifest contract states the bundle floor for a zero-match row
+
+A `mocks:` generator row whose scan matches no annotated declaration is legal
+and stays green, from template bundles **0.6.2** onward: the templates render
+one marker comment under the header, so the committed output exists — and
+`mocks --check` validates it — before the row's first annotation. Under an
+older bundle the engine writes nothing for an empty render and the row fails
+generation on the missing output file, so a row registered ahead of its first
+annotation needs the `bundle:` pin at 0.6.2 or later. The rule is now in
+`contracts/manifest.md`'s mocks section; no verb changed, and a repo whose
+rows all match at least one annotation is unaffected.
+
 ## 0.15.0 — 2026-08-19
 
 ### Added — the host-lane gate admits the Kotlin mock engine, test-side only

@@ -132,6 +132,13 @@ mocks:
   contain another row's output runs after it — derived from the roots at run
   time; declaration order is the tiebreak, and rows whose roots contain each
   other's outputs are a named error.
+- A row whose scan matches no annotated declaration still generates:
+  template bundles from **0.6.2** render one marker comment under the header
+  instead of an empty file, so the committed output exists — and `--check`
+  validates it — before the row's first annotation. Older bundles write
+  nothing on an empty render and the row fails generation on the missing
+  output, so a row registered ahead of its first annotation needs the
+  `bundle:` pin at 0.6.2 or later.
 
 ## The checks (`duet lint`, and every verb's manifest load)
 
