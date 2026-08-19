@@ -9,4 +9,4 @@
 /// Lives in its own file, not main.swift: a top-level global in a main file
 /// initializes only when the top-level code runs, so under XCTest it would be
 /// read uninitialized — every `--json` report stamps it via `emitJSON`.
-let duetToolsVersion = "0.14.0"
+let duetToolsVersion = "0.15.0"

@@ -57,6 +57,10 @@ enum HostLane {
     "libs.plugins.kotlin.jvm",
     "libs.plugins.kotlin.multiplatform",
     "libs.plugins.kotlin.serialization",
+    // KSP carries the family mock engine (dev.modaal:mocks-processor) into
+    // the TEST compilation. The plugin is admitted; where a processor may be
+    // wired is checked per configuration below (kspTest/kspJvmTest only).
+    "libs.plugins.ksp",
   ]
 
   /// The kernel, its serialization dialect, and the test bracket.
@@ -66,6 +70,16 @@ enum HostLane {
     "libs.kotlinx.serialization.json",
     "libs.kotlinx.coroutines.test",
     "kotlin(\"test\")",
+  ]
+
+  /// Symbol processors a gated module may wire into its TEST compilation
+  /// (`kspTest`/`kspJvmTest`): the family mock engine only. Any other `ksp*`
+  /// configuration — `ksp(...)`, `kspJvm(...)`, a native target's — is a
+  /// placement violation regardless of artifact: generated code must never
+  /// reach a main/commonMain classpath, and generated mocks are host-lane
+  /// (JVM-test) products only.
+  static let gradleKspAllowlist: Set<String> = [
+    "libs.mocks.processor"
   ]
 
   /// Build products and tool state the declaration sweep never enters.
@@ -237,6 +251,27 @@ enum HostLane {
       errors.append("[host-lane] gated Kotlin module `\(label)` has no build.gradle.kts")
       return
     }
+    let scan = scanGatedBuildScript(label: label, source: source)
+    errors.append(contentsOf: scan.errors)
+    for gradlePath in scan.projectPaths {
+      let child = "\(gradleRoot)/\(gradlePath.replacingOccurrences(of: ":", with: "/"))"
+      checkGatedGradleModule(
+        child, seen: &seen, gradleRoot: gradleRoot, via: via + [module],
+        repo: repo, errors: &errors)
+    }
+  }
+
+  /// One gated build script's line scan — pure on the source text so every
+  /// rule is unit-testable: plugin aliases/ids against the plugin allowlist,
+  /// dependency declarations against the dependency allowlist, `ksp*`
+  /// processor wiring against the ksp allowlist AND its placement rule
+  /// (test configurations only). Returned `projectPaths` are the
+  /// root-relative `project(":a:b")` edges (`a:b`) the caller recurses into.
+  static func scanGatedBuildScript(
+    label: String, source: String
+  ) -> (errors: [String], projectPaths: [String]) {
+    var errors: [String] = []
+    var projectPaths: [String] = []
     let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
       .map { $0.components(separatedBy: "//")[0] }
     for line in lines {
@@ -252,6 +287,35 @@ enum HostLane {
           errors.append(pluginError(label: label, plugin: plugin))
         }
       }
+      // Both spellings: `kspTest(...)` (type-safe accessor, plain JVM module)
+      // and `"kspJvmTest"(...)` (string invoke — a multiplatform target's ksp
+      // configurations exist only after the kotlin block evaluates, so the
+      // accessor never does).
+      if let range = line.range(
+        of: #"^\s*"?ksp[A-Za-z0-9]*"?\((.+)\)\s*$"#, options: .regularExpression)
+      {
+        let call = String(line[range]).trimmingCharacters(in: .whitespaces)
+        let configuration = String(call[call.startIndex..<call.firstIndex(of: "(")!])
+          .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+        let dependency = String(
+          call[call.index(after: call.firstIndex(of: "(")!)..<call.index(before: call.endIndex)])
+        if configuration != "kspTest" && configuration != "kspJvmTest" {
+          errors.append(
+            "[host-lane] gated Kotlin module `\(label)` wires a symbol processor into"
+              + " `\(configuration)` — processors are test-only in a gated module"
+              + " (kspTest/kspJvmTest): generated code must never reach a main/commonMain"
+              + " classpath.")
+        } else if let projectPath = projectEdge(dependency) {
+          projectPaths.append(projectPath)
+        } else if !gradleKspAllowlist.contains(dependency) {
+          errors.append(
+            "[host-lane] gated Kotlin module `\(label)` wires `\(dependency)` into"
+              + " `\(configuration)` — outside the processor allowlist"
+              + " \(gradleKspAllowlist.sorted()). A gated module's test-time symbol"
+              + " processors are the family mock engine only.")
+        }
+        continue
+      }
       guard
         let range = line.range(
           of: #"^\s*(?:api|implementation|testImplementation|compileOnly|runtimeOnly|testRuntimeOnly)\((.+)\)\s*$"#,
@@ -260,17 +324,8 @@ enum HostLane {
       let call = String(line[range]).trimmingCharacters(in: .whitespaces)
       let dependency = String(
         call[call.index(after: call.firstIndex(of: "(")!)..<call.index(before: call.endIndex)])
-      if let projectRange = dependency.range(
-        of: #"^project\(":[\w:.-]+"\)$"#, options: .regularExpression)
-      {
-      // Gradle paths are root-relative (`:subtrees:x:logic`); the sweep works
-      // in repo-relative paths.
-        let gradlePath = String(dependency[projectRange]
-          .dropFirst(#"project(":"#.count).dropLast(#"")"#.count))
-        let child = "\(gradleRoot)/\(gradlePath.replacingOccurrences(of: ":", with: "/"))"
-        checkGatedGradleModule(
-          child, seen: &seen, gradleRoot: gradleRoot, via: via + [module],
-          repo: repo, errors: &errors)
+      if let projectPath = projectEdge(dependency) {
+        projectPaths.append(projectPath)
         continue
       }
       if !gradleDependencyAllowlist.contains(dependency) {
@@ -281,6 +336,19 @@ enum HostLane {
             + " libraries arrive as project(...) deps, which are checked recursively.")
       }
     }
+    return (errors, projectPaths)
+  }
+
+  /// `project(":a:b")` → `a:b` (Gradle paths are root-relative; the sweep
+  /// works in repo-relative paths); nil for anything else.
+  private static func projectEdge(_ dependency: String) -> String? {
+    guard
+      let projectRange = dependency.range(
+        of: #"^project\(":[\w:.-]+"\)$"#, options: .regularExpression)
+    else { return nil }
+    return String(
+      dependency[projectRange]
+        .dropFirst(#"project(":"#.count).dropLast(#"")"#.count))
   }
 
   private static func pluginError(label: String, plugin: String) -> String {

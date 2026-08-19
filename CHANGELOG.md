@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.15.0 — 2026-08-19
+
+### Added — the host-lane gate admits the Kotlin mock engine, test-side only
+
+A gated Kotlin module may now apply the KSP plugin (`libs.plugins.ksp`) and
+wire `dev.modaal:mocks-processor` (`libs.mocks.processor`) into its TEST
+compilation: `kspTest(...)`/`kspJvmTest(...)` join the scan, checked against
+a new processor allowlist. Placement is part of the rule — a processor in
+any other `ksp*` configuration (`ksp(...)`, `kspJvm(...)`, a native
+target's) is rejected regardless of artifact, because generated code must
+never reach a main/commonMain classpath. The per-line build-script scan is
+extracted as `HostLane.scanGatedBuildScript` and unit-tested rule by rule,
+red controls included.
 
 ### Fixed — `duet mocks` scans a family pin from one place
 
