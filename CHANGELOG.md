@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.17.0 — 2026-08-20
+
+### Changed — `duet mocks` reads a dependency's layout from that dependency's own manifest
+
+A derived scan root resolved to `<dependency>/Sources`, a directory name this
+tool assumed rather than read. A family package that keeps its Swift half
+under `swift/` — the framework's layout, which leaves the repository root
+free for the other language halves — therefore contributed no roots, and a
+mock over a protocol it declares generated incomplete: an inherited
+requirement Sourcery never parsed lands in the consumer's test target as
+"does not conform to protocol".
+
+Every scanned dependency now reports its own layout, through `swift package
+describe --type json` run in its directory. The roots are that package's
+Swift target directories, wherever its manifest puts them —
+`Sources/<Target>`, `swift/Sources/<Target>`, or a `path:` of the package's
+choosing. Three consequences beyond the layout itself:
+
+- The targets a product compiles come from `product_memberships`, so the
+  per-linked-product rule for the services package no longer needs a product
+  name to match a directory name, and a product spanning several targets
+  resolves.
+- A directory SwiftPM does not compile as a Swift target is not a root: a
+  TEST target parked under `Sources/`, a binary target's xcframework, a C
+  target, a build-tool plugin. A dependency that keeps its specs under
+  `Sources/` had them hashed into the consumer's fingerprint until now, so
+  editing one failed `mocks --check` with no mock having changed.
+- A dependency whose layout cannot be read fails the run and names the
+  package, where it previously contributed no roots and the run generated
+  short mocks silently. A dependency path that holds no manifest is part of
+  that: `swift package` searches ancestors for one, so reading such a path
+  answers with whichever package encloses it unless the run stops there.
+
+`describe` costs one manifest compile, the same as the `dump-package` the
+derivation already runs on the row's own `package:`: no dependency
+resolution, no network, and nothing written into the scanned package. The
+consumer package stays on `dump-package`, which is what carries each
+dependency's requirement and location and the `.product(name:package:)`
+pairs. Derived roots are sorted, so a row's argument list is stable between
+runs.
+
+Run generation, not `--check`, on this bump. A repo whose scanned file set is
+unchanged regenerates byte-identical output; one whose dependency parks a
+test target under `Sources/` drops those entries from its recorded input
+lists.
+
 ## 0.16.0 — 2026-08-19
 
 ### Changed — the manifest contract states the bundle floor for a zero-match row

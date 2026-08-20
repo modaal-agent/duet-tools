@@ -36,6 +36,13 @@ import Foundation
 /// Third-party remotes are deliberately out: none declares a protocol the
 /// annotated ones refine, and parsing them costs seconds per run for nothing.
 ///
+/// Each scanned dependency reports its OWN layout, through `swift package
+/// describe` in its directory: the roots are that package's Swift target
+/// directories, wherever its manifest puts them. No directory-name
+/// convention is assumed, and a directory SwiftPM does not compile as a
+/// Swift target — a test target parked under `Sources/`, a binary target's
+/// xcframework, a C target, a plugin — is not a root.
+///
 /// Rows run producer-before-consumer: a row whose scan roots contain another
 /// row's output runs after it, so the recorded input hash is the post-write
 /// one. The order is derived from the resolved roots at run time (derived
@@ -307,9 +314,113 @@ enum Mocks {
 
   // MARK: - Source-root derivation (`package:`)
 
-  static func derivedRoots(packageRelative: String, repo: Repo) throws -> [URL] {
+  /// A dependency package's Swift target directories, from SwiftPM's own
+  /// layout resolution: `swift package describe --type json` reports the
+  /// resolved `path` of every target, so a package scans correctly whether it
+  /// keeps a target at `Sources/<Target>`, at `swift/Sources/<Target>`, or
+  /// wherever its manifest's `path:` points.
+  ///
+  /// `products` narrows the result to the targets those products compile.
+  /// `product_memberships` is the package-internal closure — a product's own
+  /// target dependencies come with it — so a product spanning several targets,
+  /// or one whose target is named unlike it, resolves without a table here.
+  /// Passing nil takes every Swift target.
+  ///
+  /// What the target filter removes, which a directory scan cannot: a TEST
+  /// target parked under `Sources/` (its specs declare no port, and hashing
+  /// them fails a consumer's `--check` whenever a spec is edited), a binary
+  /// target's xcframework, a C target, a build-tool plugin.
+  static func swiftTargetDirs(
+    _ described: [String: Any], packageRoot: URL, products: Set<String>? = nil
+  ) -> [URL] {
+    var dirs: [URL] = []
+    for target in described["targets"] as? [[String: Any]] ?? [] {
+      guard target["module_type"] as? String == "SwiftTarget",
+        target["type"] as? String != "test",
+        let rawPath = target["path"] as? String
+      else { continue }
+      if let products {
+        let memberships = Set(target["product_memberships"] as? [String] ?? [])
+        guard !memberships.isDisjoint(with: products) else { continue }
+      }
+      // Joined to the directory the CALLER named, never to the root
+      // `describe` reports: that one has symlinks resolved (`/tmp/x` becomes
+      // `/private/tmp/x`), and a root outside the caller's path namespace
+      // enumerates outside the fingerprint root the CLI is given.
+      let dir = rawPath.hasPrefix("/")
+        ? URL(fileURLWithPath: rawPath)
+        : packageRoot.appendingPathComponent(rawPath)
+      dirs.append(dir.standardizedFileURL)
+    }
+    // `describe` does not order its targets. Sort: the roots become the
+    // generator's argument list, and it must not move between runs.
+    return dirs.sorted { $0.path < $1.path }
+  }
+
+  /// `swift package describe --type json` for the package at `packageRoot`.
+  ///
+  /// One manifest compile, the same cost as `dump-package`: it resolves no
+  /// dependency, reaches no network, and writes nothing into the package. A
+  /// dependency whose URL is unfetchable, whose `Package.resolved` is absent,
+  /// or whose own sibling path dependency is missing still describes.
+  ///
+  /// A failure is fatal and names the package, rather than contributing no
+  /// roots: a mock generated over a scan that skipped a package compiles here
+  /// and fails in the consumer's test target with "does not conform to
+  /// protocol". `describe` reads the layout off disk, so it also fails on a
+  /// target directory the manifest declares and the checkout does not carry —
+  /// a package in that state builds nowhere, and its ports are not mockable.
+  static func describePackage(at packageRoot: URL) throws -> [String: Any] {
     let fm = FileManager.default
+    // The manifest has to be HERE. `swift package` searches ancestors when the
+    // directory it is pointed at carries none, so a dependency path that no
+    // longer holds a package would otherwise be described as whichever repo
+    // encloses it — a scan of the wrong tree, reported as a success.
+    guard fm.fileExists(atPath: packageRoot.appendingPathComponent("Package.swift").path) else {
+      throw MocksError.derivation(
+        "no Package.swift at \(packageRoot.path) — a `package:` row reaches it as a dependency")
+    }
+    // stderr to a FILE, not a second pipe: the JSON is read from this process
+    // before the child exits, and a manifest-compile warning filling a stderr
+    // pipe would deadlock that read. It is forwarded verbatim below.
+    let noise = fm.temporaryDirectory.appendingPathComponent(
+      "duet-describe-\(UUID().uuidString).log")
+    fm.createFile(atPath: noise.path, contents: nil)
+    defer { try? fm.removeItem(at: noise) }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["swift", "package", "describe", "--type", "json"]
+    process.currentDirectoryURL = packageRoot
+    process.standardInput = FileHandle.nullDevice
+    let stdout = Pipe()
+    process.standardOutput = stdout
+    let errors = try FileHandle(forWritingTo: noise)
+    process.standardError = errors
+    try process.run()
+    let data = (try? stdout.fileHandleForReading.readToEnd()) ?? Data()
+    process.waitUntilExit()
+    try? errors.close()
+    let reported = (try? String(contentsOf: noise, encoding: .utf8)) ?? ""
+    if !reported.isEmpty { FileHandle.standardError.write(Data(reported.utf8)) }
+    guard process.terminationStatus == 0,
+      let described = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+      let detail = reported.split(separator: "\n").last.map(String.init) ?? "no output"
+      throw MocksError.derivation(
+        "swift package describe failed in \(packageRoot.path) — \(detail)")
+    }
+    return described
+  }
+
+  static func derivedRoots(packageRelative: String, repo: Repo) throws -> [URL] {
     let packageDir = repo.root.appendingPathComponent(packageRelative)
+    // The CONSUMER is read with `dump-package`, not `describe`: the derivation
+    // needs each dependency's requirement and location, and the
+    // `.product(name:package:)` pairs this package's targets link. `describe`
+    // reports a target's product dependencies as bare product names, with no
+    // package attribution, so it cannot say which of them are the services
+    // package's.
+    //
     // stdout alone — a manifest-compile warning on stderr must not corrupt
     // the JSON (Lanes.launch merges the two streams into one log).
     let process = Process()
@@ -332,10 +443,10 @@ enum Mocks {
     var roots: [URL] = []
     let dependencies = manifest["dependencies"] as? [[String: Any]] ?? []
 
-    // Path dependencies: `<path>/Sources`, or the framework's `swift/Sources`
-    // spelling for a family sibling checkout. duet-services is deferred to the
-    // per-product scan below, whichever form it takes here.
-    var servicesSourcesDir: URL?
+    // Path dependencies, at the target directories each one's own manifest
+    // resolves to. duet-services is deferred to the per-product scan below,
+    // whichever form it takes here.
+    var servicesRoot: URL?
     for dep in dependencies {
       for fs in dep["fileSystem"] as? [[String: Any]] ?? [] {
         guard let rawPath = fs["path"] as? String else { continue }
@@ -345,17 +456,10 @@ enum Mocks {
         let identity = fs["identity"] as? String ?? ""
         let name = fs["nameForTargetDependencyResolutionOnly"] as? String ?? ""
         if identity == "duet-services" || name == "duet-services" {
-          servicesSourcesDir = path.appendingPathComponent("Sources")
+          servicesRoot = path
           continue
         }
-        if fm.fileExists(atPath: path.appendingPathComponent("Sources").path) {
-          roots.append(path.appendingPathComponent("Sources"))
-        } else if fm.fileExists(atPath: path.appendingPathComponent("swift/Sources").path) {
-          roots.append(path.appendingPathComponent("swift/Sources"))
-        } else {
-          FileHandle.standardError.write(
-            Data("mocks: path dependency has no Sources/ — skipping \(path.path)\n".utf8))
-        }
+        roots += swiftTargetDirs(try describePackage(at: path), packageRoot: path)
       }
     }
 
@@ -373,43 +477,37 @@ enum Mocks {
         else { continue }
         let source = try familyClone(identity: identity, url: url, version: exact, repo: repo)
         if identity == "duet-services" {
-          servicesSourcesDir = source.appendingPathComponent("Sources")
+          servicesRoot = source
           continue
         }
-        for candidate in ["swift/Sources", "Sources"] {
-          let root = source.appendingPathComponent(candidate)
-          if fm.fileExists(atPath: root.path) {
-            roots.append(root)
-            break
-          }
-        }
+        roots += swiftTargetDirs(try describePackage(at: source), packageRoot: source)
       }
     }
 
-    // duet-services, per LINKED product: the package keeps one source
-    // directory per product, so the linked product names ARE the directories.
-    if let servicesSourcesDir {
-      var products: [String] = []
+    // duet-services, per LINKED product: the products this repo's targets name
+    // select the targets scanned, so a port declared behind a product the repo
+    // does not link stays out — its mock would name types the test target
+    // cannot see.
+    if let servicesRoot {
+      var linked: Set<String> = []
       for target in manifest["targets"] as? [[String: Any]] ?? [] {
         for dependency in target["dependencies"] as? [[String: Any]] ?? [] {
           if let product = dependency["product"] as? [Any], product.count >= 2,
             let productName = product[0] as? String,
-            let packageName = product[1] as? String, packageName == "duet-services",
-            !products.contains(productName)
+            let packageName = product[1] as? String, packageName == "duet-services"
           {
-            products.append(productName)
+            linked.insert(productName)
           }
         }
       }
-      for product in products {
-        let root = servicesSourcesDir.appendingPathComponent(product)
-        if fm.fileExists(atPath: root.path) {
-          roots.append(root)
-        } else {
-          FileHandle.standardError.write(
-            Data("mocks: no \(product) directory in the duet-services sources — skipping\n".utf8))
-        }
+      let described = try describePackage(at: servicesRoot)
+      let declared = Set(
+        (described["products"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String })
+      for product in linked.subtracting(declared).sorted() {
+        FileHandle.standardError.write(
+          Data("mocks: duet-services at this pin declares no \(product) product — skipping\n".utf8))
       }
+      roots += swiftTargetDirs(described, packageRoot: servicesRoot, products: linked)
     }
     return roots
   }

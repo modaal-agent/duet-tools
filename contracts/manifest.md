@@ -120,7 +120,14 @@ mocks:
   the roots (`swift package dump-package`): every path dependency's sources,
   and every Duet family dependency at its exact pin — `duet` scanned whole,
   `duet-services` scanned per linked product — whichever dependency form the
-  manifest carries. A family pin is always scanned out of
+  manifest carries. Each scanned dependency supplies its OWN layout (`swift
+  package describe` in its directory): the roots are its Swift target
+  directories, wherever its manifest puts them, so a package that keeps its
+  Swift half under `swift/` scans with no row edit. A directory SwiftPM does
+  not compile as a Swift target is not a root — a test target parked under
+  `Sources/`, a binary target, a C target, a plugin — and a dependency whose
+  layout cannot be read fails the run by name.
+  A family pin is always scanned out of
   `.build/duet-sources/<identity>`, the prefix the fingerprint records — a
   checkout left by a local build supplies the content when it sits on the
   pin, and never moves the paths. The package's own `Sources/` is NOT
