@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.18.0 — 2026-08-21
+
+### Changed — the gated-Kotlin allowlist admits the telemetry artifact
+
+`HostLane.gradleDependencyAllowlist` gains `libs.duet.services.telemetry`.
+
+A gated reducer types its `Track` effects on the event grammar, so the module
+that declares that grammar is reachable from every gated module in an app with
+analytics, and the check recurses into it through `project(...)`. With the
+grammar's substrate published as `dev.modaal.duet.services:telemetry`, that
+module declares one external artifact and the scan rejected it.
+
+The artifact qualifies on the same property the kernel does: it carries the
+kernel and kotlinx serialization, no platform SDK and no app library, so a
+gated module that resolves it still compiles and replays on a bare JVM. The
+rest of the services tier is not admitted — the Kotlin allowlist names
+artifacts, not groups, so an app-services or platform-bound coordinate under
+the same group is still a violation.
+
 ## 0.17.0 — 2026-08-20
 
 ### Changed — `duet mocks` reads a dependency's layout from that dependency's own manifest

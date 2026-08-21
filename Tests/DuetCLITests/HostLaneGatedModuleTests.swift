@@ -70,6 +70,23 @@ final class HostLaneGatedModuleTests: XCTestCase {
     XCTAssertTrue(result.errors[0].contains("outside the plugin"))
   }
 
+  func testTelemetryArtifactIsAdmittedInAGatedModule() {
+    // The grammar module a gated reducer's `Track` effects are typed on links
+    // the services tier's telemetry artifact; the recursion reaches it through
+    // `project(":telemetry")`, so it is scanned as a gated module itself.
+    let result = scan(
+      """
+      kotlin {
+        sourceSets {
+          commonMain.dependencies {
+            api(libs.duet.services.telemetry)
+          }
+        }
+      }
+      """)
+    XCTAssertEqual(result.errors, [])
+  }
+
   func testUnlistedExternalDependencyStaysRejected() {
     let result = scan("  implementation(libs.some.networking)")
     XCTAssertEqual(result.errors.count, 1)

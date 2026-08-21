@@ -63,10 +63,15 @@ enum HostLane {
     "libs.plugins.ksp",
   ]
 
-  /// The kernel, its serialization dialect, and the test bracket.
+  /// The kernel, its serialization dialect, the test bracket, and the services
+  /// tier's platform-free artifacts. A gated reducer types its `Track` effects
+  /// on the telemetry grammar, so that artifact is reachable from every gated
+  /// module in an app with analytics; it carries the kernel and kotlinx
+  /// serialization and nothing else, which is the property that admits it.
   static let gradleDependencyAllowlist: Set<String> = [
     "libs.duet.kernel",
     "libs.duet.kernel.test",
+    "libs.duet.services.telemetry",
     "libs.kotlinx.serialization.json",
     "libs.kotlinx.coroutines.test",
     "kotlin(\"test\")",
