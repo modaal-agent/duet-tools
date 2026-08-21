@@ -182,6 +182,15 @@ let usage = """
         CanonicalSumCodable (scans the package's Sources/**). Normally implicit:
         `duet record` regenerates first, and `record --check` gates coder drift
         — the standalone verb covers a first generation on a new type.
+    duet design-tokens [--check] [--json]
+        (re)generate both languages' design-token sources from
+        parity/design-tokens.yaml (grammar in contracts/design-tokens.md): the
+        vocabulary enums and the value tables, into each declared target's
+        output directory. --check regenerates in memory and compares — a
+        stale file or a hand-edit is named and exits 1, and a file the
+        config no longer declares is reported as orphaned. The role
+        bindings, the font resolvers and the theme registration stay
+        hand-authored; a repo with no config generates nothing and passes.
     duet scope <path> [--json]
         which gates govern a file (and the authoring loop for it) — the
         module→gates map, derived from the manifest: fixture → its owning
@@ -279,6 +288,8 @@ do {
     code = try CanonicalSumVerb.run(repo: repo, options: options)
   case "lanes":
     code = try Inventory.run(repo: repo, options: options)
+  case "design-tokens":
+    code = try DesignTokensVerb.run(repo: repo, options: options)
   case "scope":
     code = try Scope.run(repo: repo, options: options)
   case "doctor":

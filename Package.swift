@@ -34,6 +34,14 @@ let package = Package(
     // deliberate re-pin commits, never floating ranges).
     .package(url: "https://github.com/modaal-agent/duet.git", exact: "0.2.1"),
     .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.0"..<"700.0.0"),
+    // The design-token config's reader. `duet tokens` parses a nested document
+    // with folded block scalars for every token's prose, which a line parser
+    // gets subtly wrong on a paragraph; strictness moves to the schema walk
+    // instead, where an unknown key is reported against the token it sits on.
+    // The parity manifest keeps its own hand-rolled parser: its grammar is a
+    // fixed flat shape, and rejecting what the contract does not name is the
+    // point there.
+    .package(url: "https://github.com/jpsim/Yams.git", from: "6.0.0"),
   ],
   targets: [
     .target(
@@ -61,6 +69,7 @@ let package = Package(
       dependencies: [
         .target(name: "CanonicalSumGen"),
         .product(name: "DuetReplay", package: "duet"),
+        .product(name: "Yams", package: "Yams"),
       ],
       path: "Sources/duet"
     ),

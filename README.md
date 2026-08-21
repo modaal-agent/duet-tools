@@ -168,6 +168,21 @@ swift run duet help
   row. Add at least one row per migration wave: the row is the wave's
   permanent negative control. Minutes, not seconds (the full suite runs once
   per row plus a baseline), which is why this verb is not on the MCP surface.
+- `duet design-tokens [--check]` — the design-token codegen verb. Reads
+  `parity/design-tokens.yaml` — one app-authored master carrying the semantic
+  colour, type and gradient vocabularies and their values
+  ([contracts/design-tokens.md](contracts/design-tokens.md) is the grammar) —
+  and writes each declared language's vocabulary enums and value tables into
+  that target's output directory. Both languages come from one input in one
+  declaration order, so their case lists and values cannot diverge. What stays
+  hand-authored is what has no twin: the role bindings (Material slots and
+  Apple roles are different sets), the resolvers that turn a family token and
+  its axes into a registered face, and the theme registration. `--check`
+  regenerates in memory and compares whole files — the generator is compiled
+  in and a run costs milliseconds, so there is no fingerprint block and a
+  hand-edit anywhere in a generated file is red; a file the config no longer
+  declares is reported as orphaned. A repo with no config generates nothing
+  and passes.
 - `duet mcp` — the same verification verbs as a stdio MCP server
   (`duet_verify`, `duet_lint`, `duet_record`, `duet_explain`,
   `duet_materialize`, `duet_protocol_run`, `duet_scope`, `duet_lanes`,

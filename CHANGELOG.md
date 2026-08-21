@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.19.0 — 2026-08-21
+
+### Added — `duet design-tokens`, the cross-platform token generator
+
+A repo's design tokens get one master: `parity/design-tokens.yaml`, an
+app-authored document carrying the semantic colour, type and gradient
+vocabularies with their values (grammar in
+[contracts/design-tokens.md](contracts/design-tokens.md)). The verb generates
+each declared language's vocabulary enums and value tables from it — Swift and
+Kotlin today — and `--check` fails while a generated file disagrees.
+
+The layers that split this way are the ones with a twin on the other platform.
+A colour's value and a type token's family, weight, size, line height,
+tracking and variable-font axes read the same on both sides, so they are
+config. The role bindings do not: Material slots and Apple roles are different
+sets, and a binding has no counterpart to agree with. Neither do the resolvers
+that turn a family token into a registered face, which read app-owned font
+resources. Those stay hand-authored, and the generated Swift table hands the
+app's `fontSet(for:)` a record rather than a font.
+
+One column has no cross-platform expression and is carried per platform: the
+`UIFont.TextStyle` a cut scales against, declared as `swift: { textStyle: … }`
+and required on every font token whenever a `swift:` target is declared.
+
+Colours are authored as `#RRGGBB` with an optional alpha in 0…1. The Kotlin
+table carries `0xAARRGGBB`, with `AA` the fraction times 255 rounded half away
+from zero — the rule Android's own float-to-byte conversion uses.
+
+`--check` follows `duet canonical-sum` rather than `duet mocks`: regenerate in
+memory and compare whole files. The mocks fingerprint block exists because
+that verb's regeneration costs a bundle download and a Sourcery run; this
+generator is compiled into the binary, so there is nothing to amortize and no
+input list to keep accurate. Two failure shapes, both named with the path:
+stale (the file differs from what the config generates) and orphaned (a file a
+target owns that the config no longer declares — it still compiles, so the
+check reports it).
+
+Cross-language identity holds by construction: both languages are emitted from
+one input in one declaration order, so the case lists and the values are equal
+without a pin comparing them.
+
+A repo with no `parity/design-tokens.yaml` generates nothing and passes.
+
+### Changed — the toolchain reads YAML with a YAML engine, in one place
+
+`duet design-tokens` parses its config with Yams. The parity manifest keeps
+its own hand-rolled line parser: its grammar is a fixed flat shape and
+rejecting what the contract does not name is the point there, while the token
+config nests lists of maps and carries folded block scalars for every token's
+prose. The token config holds the same strictness at its schema walk — every
+key checked against the known set for its position, an unknown one named
+against the token it sits on.
+
 ## 0.18.0 — 2026-08-21
 
 ### Changed — the gated-Kotlin allowlist admits the telemetry artifact

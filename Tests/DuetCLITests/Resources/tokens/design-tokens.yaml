@@ -1,0 +1,254 @@
+# The golden config: a fictional app's design-token master, sized to cover
+# every form the schema accepts rather than to be large.
+#
+# Covered here, and asserted by the goldens beside it: both language targets;
+# groups with and without a heading; the two-appearance and one-value colour
+# forms; alpha on each; the half-byte alpha tie (0.3 × 255 = 76.5); single- and
+# multi-paragraph docs; palette notes; all three font families; every optional
+# axis present and absent; tracking present and absent; a gradient.
+
+version: 1
+
+swift:
+  output: src-ios/Sources/Theming/Generated
+  engine: DuetTheming
+  theme: MainTheme
+
+kotlin:
+  output: src-kmp/theming/src/commonMain/kotlin/com/example/theming/Generated
+  package: com.example.theming
+  engine: dev.modaal.duet.services.theming
+  palette: MainPalette
+
+colors:
+  - group: Labels
+    tokens:
+      - name: labelPrimary
+        light: "#1A1A1A"
+        dark: "#F2F2F2"
+      - name: labelSecondary
+        doc: >-
+          Supporting text one step below the primary label: subtitles, helper
+          text, and secondary values that still have to read easily.
+
+          Not a caption tier — the caption tokens are smaller and quieter, and
+          swapping one for the other changes the hierarchy rather than the
+          weight.
+        light: "#6B6B6B"
+        dark: "#9A9A9A"
+      - name: labelDisabled
+        note: The one label that is allowed to fail contrast — nothing is read from it.
+        light: "#A8A8A8"
+        dark: "#565656"
+      - name: labelOnAccent
+        doc: Label over an accent fill, in both appearances.
+        note: "Fixed on purpose: the fill it sits on does not invert."
+        value: "#FFFFFF"
+
+  - group: Surfaces
+    tokens:
+      - name: surfacePrimary
+        note: The page. Warm off-white rather than pure white.
+        light: "#FBFAF7"
+        dark: "#141414"
+      - name: surfaceRaised
+        light: "#FFFFFF"
+        dark: "#1E1E1E"
+      - name: surfaceScrim
+        doc: Modal scrim — flat, no blur.
+        light: "#1A1A1A"
+        lightAlpha: 0.24
+        dark: "#000000"
+        darkAlpha: 0.5
+
+  - group: Separators and fills
+    tokens:
+      - name: separatorHairline
+        light: "#1A1A1A"
+        lightAlpha: 0.26
+        dark: "#F2F2F2"
+        darkAlpha: 0.26
+      - name: fillPrimary
+        light: "#1A1A1A"
+        lightAlpha: 0.08
+        dark: "#F2F2F2"
+        darkAlpha: 0.12
+      - name: fillGrid
+        note: >-
+          Black and white rather than the ink and paper tokens: a grid line
+          reads as a tint of the surface under it, whatever that surface is.
+        light: "#000000"
+        lightAlpha: 0.05
+        dark: "#FFFFFF"
+        darkAlpha: 0.04
+
+  - group: Interactive
+    tokens:
+      - name: interactivePrimary
+        light: "#1A1A1A"
+        dark: "#F2F2F2"
+      - name: interactivePrimaryPressed
+        light: "#1A1A1A"
+        lightAlpha: 0.85
+        dark: "#F2F2F2"
+        darkAlpha: 0.85
+      - name: interactiveDisabledLabel
+        note: >-
+          0.3 × 255 is 76.5 — the one alpha in this palette that lands exactly
+          between two bytes, and the byte the Kotlin table carries is 0x4D.
+        light: "#1A1A1A"
+        lightAlpha: 0.3
+        dark: "#F2F2F2"
+        darkAlpha: 0.3
+      - name: interactiveSelected
+        light: "#3D2E5C"
+        lightAlpha: 0.12
+        dark: "#9A82C4"
+        darkAlpha: 0.16
+
+  - group: Feedback
+    tokens:
+      - name: feedbackSuccess
+        light: "#3F7A46"
+        dark: "#7FBE86"
+      - name: feedbackSuccessSurface
+        light: "#3F7A46"
+        lightAlpha: 0.1
+        dark: "#7FBE86"
+        darkAlpha: 0.14
+      - name: feedbackError
+        light: "#B3261E"
+        dark: "#E7796F"
+      - name: feedbackErrorSurface
+        light: "#B3261E"
+        lightAlpha: 0.1
+        dark: "#E7796F"
+        darkAlpha: 0.14
+
+  # A group with no heading: the tokens are emitted in order with no section
+  # comment, which is what an app with one flat vocabulary gets.
+  - tokens:
+      - name: accent
+        doc: Accent — indicators and active hairlines. Never a fill.
+        light: "#3D2E5C"
+        dark: "#9A82C4"
+      - name: shadowAmbient
+        value: "#000000"
+        alpha: 0.16
+
+fonts:
+  - group: Display — the serif face
+    tokens:
+      - name: largeTitle
+        doc: >-
+          The largest title on a screen: top-level navigation titles, onboarding
+          and hero surfaces.
+        note: Large `opsz` and high `SOFT` — the display cut, not the body cut scaled up.
+        family: serif
+        weight: 400
+        size: 34
+        lineHeight: 41
+        tracking: -0.01
+        opticalSize: 144
+        softness: 50
+        swift:
+          textStyle: largeTitle
+      - name: title2
+        doc: Section heading inside a screen.
+        family: serif
+        weight: 500
+        size: 22
+        lineHeight: 28
+        opticalSize: 48
+        softness: 30
+        swift:
+          textStyle: title2
+
+  - group: Body — the serif face at reading sizes
+    tokens:
+      - name: bodyRegular
+        doc: Default body text — paragraphs, list rows, descriptions.
+        note: "`opsz` tracks the point size here rather than the display sizes above."
+        family: serif
+        weight: 400
+        size: 17
+        lineHeight: 26
+        opticalSize: 17
+        softness: 20
+        swift:
+          textStyle: body
+      - name: bodyEmphasized
+        family: serif
+        weight: 600
+        size: 17
+        lineHeight: 26
+        opticalSize: 17
+        softness: 20
+        swift:
+          textStyle: body
+
+  - group: Chrome — the sans face
+    tokens:
+      - name: headline
+        doc: >-
+          Inline title for collapsed navigation bars, key values, and card
+          titles. A UI title, not a content heading.
+        family: sans
+        weight: 600
+        size: 17
+        lineHeight: 22
+        width: 100
+        swift:
+          textStyle: headline
+      - name: subheadRegular
+        family: sans
+        weight: 400
+        size: 15
+        lineHeight: 20
+        width: 100
+        swift:
+          textStyle: subheadline
+
+  - group: Labels — the mono face
+    tokens:
+      - name: footnoteRegular
+        doc: Metadata, timestamps, and quiet supporting information.
+        note: >-
+          Every mono label carries 0.08 em of tracking; the face is set in
+          ALLCAPS at these sizes and reads tight without it.
+        family: mono
+        weight: 400
+        size: 13
+        lineHeight: 17
+        tracking: 0.08
+        swift:
+          textStyle: footnote
+      - name: footnoteMedium
+        note: >-
+          The same 13/17 metrics as `footnoteRegular` — medium is a weight step,
+          not a size step, so a regular-to-medium swap must not resize the text.
+        family: mono
+        weight: 500
+        size: 13
+        lineHeight: 17
+        tracking: 0.08
+        swift:
+          textStyle: footnote
+      - name: captionRegular
+        family: mono
+        weight: 400
+        size: 11
+        lineHeight: 14
+        tracking: 0.08
+        swift:
+          textStyle: caption1
+
+gradients:
+  - name: surfaceWash
+    doc: The one gradient the design system keeps.
+    note: >-
+      Both stops are the raised surface at different alphas, so the wash reads
+      as a fade rather than as a second colour.
+    stops:
+      - "#FFFFFF"
+      - "#FBFAF7"

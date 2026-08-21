@@ -5,8 +5,11 @@ import Foundation
 
 /// The parsed parity manifest — the CLI's own reader of `parity/manifest.yaml`.
 /// The grammar is the manifest's fixed shape (contracts/manifest.md), hand-rolled
-/// on purpose: the family's zero-third-party-dependency rule holds, and a full
-/// YAML engine would accept far more than the contract allows.
+/// on purpose: a full YAML engine would accept far more than the contract
+/// allows, and the manifest's whole point is that a line it does not name is an
+/// error. The one document read with a YAML engine is the design-token config
+/// (TokensConfig.swift), whose nested shape and folded prose blocks a line
+/// parser gets wrong; it holds the same strictness at its schema walk instead.
 ///
 /// Unknown TOP-LEVEL keys are a named error: the manifest's top level routes
 /// whole blocks, so a typo'd section header (a misspelled `chains:`) would
