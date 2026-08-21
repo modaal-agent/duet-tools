@@ -288,6 +288,20 @@ extension MainTheme {
         Color(uiColor: tokenColor(0xFFFFFF)),
         Color(uiColor: tokenColor(0xFBFAF7)),
       ])))
+
+    // The two-appearance form: each appearance runs down its own surface ramp,
+    // so the wash inverts with the page instead of staying a light wash on a
+    // dark ground.
+    case .surfaceHero:
+      return GradientSet(.auto(
+        light: Gradient(colors: [
+          Color(uiColor: tokenColor(0xFBFAF7)),
+          Color(uiColor: tokenColor(0xFFFFFF)),
+        ]),
+        dark: Gradient(colors: [
+          Color(uiColor: tokenColor(0x141414)),
+          Color(uiColor: tokenColor(0x1E1E1E)),
+        ])))
     }
   }
 }

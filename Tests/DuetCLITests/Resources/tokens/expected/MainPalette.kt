@@ -11,13 +11,15 @@ package com.example.theming
 import dev.modaal.duet.services.theming.ColorToken
 import dev.modaal.duet.services.theming.FontFamilyToken
 import dev.modaal.duet.services.theming.FontToken
+import dev.modaal.duet.services.theming.GradientToken
 
 /**
  * The values behind the vocabularies — one entry per token, in the terms the
  * engine reads.
  *
- * Colours are `0xAARRGGBB`. Each `when` is exhaustive over its vocabulary, so a
- * token added to the config gets a value in the same generation.
+ * Colours and gradient stops are `0xAARRGGBB`. Each `when` is exhaustive over
+ * its vocabulary, so a token added to the config gets a value in the same
+ * generation.
  */
 object MainPalette {
 
@@ -180,6 +182,24 @@ object MainPalette {
           opticalSize = null,
           softness = null,
           width = null,
+        )
+    }
+
+  fun gradient(token: SemanticGradient): GradientToken =
+    when (token) {
+
+      // Both stops are the raised surface at different alphas, so the wash
+      // reads as a fade rather than as a second colour.
+      SemanticGradient.surfaceWash ->
+        GradientToken.fixed(listOf(0xFFFFFFFF, 0xFFFBFAF7))
+
+      // The two-appearance form: each appearance runs down its own surface
+      // ramp, so the wash inverts with the page instead of staying a light wash
+      // on a dark ground.
+      SemanticGradient.surfaceHero ->
+        GradientToken.auto(
+          light = listOf(0xFFFBFAF7, 0xFFFFFFFF),
+          dark = listOf(0xFF141414, 0xFF1E1E1E),
         )
     }
 }

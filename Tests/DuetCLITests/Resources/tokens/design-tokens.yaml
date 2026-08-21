@@ -5,7 +5,7 @@
 # groups with and without a heading; the two-appearance and one-value colour
 # forms; alpha on each; the half-byte alpha tie (0.3 × 255 = 76.5); single- and
 # multi-paragraph docs; palette notes; all three font families; every optional
-# axis present and absent; tracking present and absent; a gradient.
+# axis present and absent; tracking present and absent; both gradient forms.
 
 version: 1
 
@@ -252,3 +252,15 @@ gradients:
     stops:
       - "#FFFFFF"
       - "#FBFAF7"
+  - name: surfaceHero
+    doc: The wash behind a hero header.
+    note: >-
+      The two-appearance form: each appearance runs down its own surface ramp,
+      so the wash inverts with the page instead of staying a light wash on a
+      dark ground.
+    light:
+      - "#FBFAF7"
+      - "#FFFFFF"
+    dark:
+      - "#141414"
+      - "#1E1E1E"

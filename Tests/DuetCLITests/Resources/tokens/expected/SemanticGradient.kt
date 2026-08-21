@@ -11,9 +11,10 @@ package com.example.theming
 /**
  * The app's gradient vocabulary.
  *
- * The engine fills no gradient role — Compose paints brushes at call sites, not
- * through a theme slot — so the vocabulary carries the names and the stops live
- * in the Apple table.
+ * Material carries no gradient slot — `ColorScheme` holds colours and
+ * `Typography` type — so a Compose surface reads its stops from the palette by
+ * token and paints them itself. The Apple tree reaches the same stops through
+ * its theme, which does carry a gradient asset kind.
  */
 enum class SemanticGradient {
 
@@ -21,4 +22,9 @@ enum class SemanticGradient {
    * The one gradient the design system keeps.
    */
   surfaceWash,
+
+  /**
+   * The wash behind a hero header.
+   */
+  surfaceHero,
 }

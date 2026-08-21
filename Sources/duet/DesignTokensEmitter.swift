@@ -322,11 +322,20 @@ enum DesignTokensEmitter {
         out.append("")
         if let note = token.note { out += comment(note, prefix: "// ", indent: "    ") }
         out.append("    case .\(token.name):")
-        out.append("      return GradientSet(.static(Gradient(colors: [")
-        for stop in token.stops {
-          out.append("        Color(uiColor: \(swiftColor(stop))),")
+        switch token.appearance {
+        case .fixed(let stops):
+          out.append("      return GradientSet(.static(Gradient(colors: [")
+          out += stops.map { "        Color(uiColor: \(swiftColor($0)))," }
+          out.append("      ])))")
+        case .auto(let light, let dark):
+          out.append("      return GradientSet(.auto(")
+          out.append("        light: Gradient(colors: [")
+          out += light.map { "          Color(uiColor: \(swiftColor($0)))," }
+          out.append("        ]),")
+          out.append("        dark: Gradient(colors: [")
+          out += dark.map { "          Color(uiColor: \(swiftColor($0)))," }
+          out.append("        ])))")
         }
-        out.append("      ])))")
       }
       out += ["    }", "  }", "}", ""]
     }
@@ -391,9 +400,10 @@ enum DesignTokensEmitter {
           doc: """
             The app's gradient vocabulary.
 
-            The engine fills no gradient role — Compose paints brushes at call \
-            sites, not through a theme slot — so the vocabulary carries the names \
-            and the stops live in the Apple table.
+            Material carries no gradient slot — `ColorScheme` holds colours and \
+            `Typography` type — so a Compose surface reads its stops from the palette \
+            by token and paints them itself. The Apple tree reaches the same stops \
+            through its theme, which does carry a gradient asset kind.
             """,
           groups: [(name: nil, tokens: config.gradients.map { ($0.name, $0.doc) })])))
     }
@@ -430,16 +440,18 @@ enum DesignTokensEmitter {
   private static func kotlinPalette(config: DesignTokenConfig, target: DesignTokenConfig.KotlinTarget) -> String {
     var out = header(generatedBanner)
     out += ["package \(target.package)", ""]
-    out += ["import \(target.engine).ColorToken",
-            "import \(target.engine).FontFamilyToken",
-            "import \(target.engine).FontToken",
-            ""]
+    var imports = ["import \(target.engine).ColorToken",
+                   "import \(target.engine).FontFamilyToken",
+                   "import \(target.engine).FontToken"]
+    if !config.gradients.isEmpty { imports.append("import \(target.engine).GradientToken") }
+    out += imports + [""]
     out += kdoc("""
       The values behind the vocabularies — one entry per token, in the terms \
       the engine reads.
 
-      Colours are `0xAARRGGBB`. Each `when` is exhaustive over its vocabulary, \
-      so a token added to the config gets a value in the same generation.
+      Colours and gradient stops are `0xAARRGGBB`. Each `when` is exhaustive \
+      over its vocabulary, so a token added to the config gets a value in the \
+      same generation.
       """, indent: "")
     out.append("object \(target.palette) {")
     out.append("")
@@ -493,9 +505,54 @@ enum DesignTokensEmitter {
       }
     }
     out.append("    }")
+
+    if !config.gradients.isEmpty {
+      out.append("")
+      out.append("  fun gradient(token: SemanticGradient): GradientToken =")
+      out.append("    when (token) {")
+      for token in config.gradients {
+        out.append("")
+        if let note = token.note { out += comment(note, prefix: "// ", indent: "      ") }
+        out.append("      SemanticGradient.\(token.name) ->")
+        switch token.appearance {
+        case let .fixed(stops):
+          out += kotlinStops(stops, opening: "        GradientToken.fixed(",
+                             indent: "        ", trailing: ")")
+        case let .auto(light, dark):
+          out.append("        GradientToken.auto(")
+          out += kotlinStops(light, opening: "          light = ",
+                             indent: "          ", trailing: ",")
+          out += kotlinStops(dark, opening: "          dark = ",
+                             indent: "          ", trailing: ",")
+          out.append("        )")
+        }
+      }
+      out.append("    }")
+    }
+
     out.append("}")
     out.append("")
     return render(out)
+  }
+
+  /// A stop list: `listOf(0xFF…, 0xFF…)` on one line where it fits the
+  /// 100-column soft limit both languages' tables keep, one stop per line where
+  /// it does not. `opening` is everything before `listOf(` on the first line,
+  /// its indentation included.
+  ///
+  /// Every stop is opaque by the config grammar, so each literal is `0xFF……`
+  /// — above `Int.MAX_VALUE`, which is what types the list `List<Long>` with no
+  /// explicit type argument.
+  private static func kotlinStops(
+    _ stops: [DesignTokenConfig.ColorValue], opening: String, indent: String, trailing: String
+  ) -> [String] {
+    let values = stops.map { hex8($0.argb) }
+    let oneLine = "\(opening)listOf(\(values.joined(separator: ", ")))\(trailing)"
+    if oneLine.count <= 100 { return [oneLine] }
+    var out = ["\(opening)listOf("]
+    out += values.map { "\(indent)  \($0)," }
+    out.append("\(indent))\(trailing)")
+    return out
   }
 
   private static func kdoc(_ text: String, indent: String) -> [String] {

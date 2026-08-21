@@ -99,11 +99,18 @@ struct DesignTokenConfig {
     var textStyle: String?
   }
 
+  /// How a gradient's stops answer the appearance. Mirrors `ColorAppearance`:
+  /// one list of stops for both appearances, or a list per appearance.
+  enum GradientAppearance: Equatable {
+    case auto(light: [ColorValue], dark: [ColorValue])
+    case fixed([ColorValue])
+  }
+
   struct GradientToken {
     var name: String
     var doc: String?
     var note: String?
-    var stops: [ColorValue]
+    var appearance: GradientAppearance
   }
 
   /// A run of tokens under one heading. The heading is emitted as a section
@@ -415,6 +422,19 @@ extension DesignTokenConfig {
       return groups
     }
 
+    /// One stop list: two or more `#RRGGBB` strings, opaque (a gradient's
+    /// transparency is the surface's, not the stop's).
+    func stops(_ entry: [String: Any], _ key: String, at: String) throws -> [DesignTokenConfig.ColorValue] {
+      let raw = try list(entry, key, at: at)
+      guard raw.count >= 2 else { throw fail("\(at): '\(key)' needs at least two colours") }
+      return try raw.map { stop in
+        guard let text = stop as? String else {
+          throw fail("\(at): every entry in '\(key)' must be a '#RRGGBB' string")
+        }
+        return .init(rgb: try hex(text, at: at), alpha: 1)
+      }
+    }
+
     func gradientTokens(_ root: [String: Any]) throws -> [DesignTokenConfig.GradientToken] {
       var tokens: [DesignTokenConfig.GradientToken] = []
       for (index, raw) in try list(root, "gradients", at: "top level").enumerated() {
@@ -422,20 +442,26 @@ extension DesignTokenConfig {
         let entry = try map(raw, at: position)
         let name = try tokenName(entry, at: position)
         let at = "gradient '\(name)'"
-        try keys(entry, known: ["name", "doc", "note", "stops"], at: at)
-        let rawStops = try list(entry, "stops", at: at)
-        guard rawStops.count >= 2 else {
-          throw fail("\(at): 'stops' needs at least two colours")
+        try keys(entry, known: ["name", "doc", "note", "stops", "light", "dark"], at: at)
+        let hasFixed = entry["stops"] != nil
+        let hasSplit = entry["light"] != nil || entry["dark"] != nil
+        guard hasFixed != hasSplit else {
+          throw fail("\(at): declare either 'stops' or both 'light' and 'dark'")
         }
-        var stops: [DesignTokenConfig.ColorValue] = []
-        for stop in rawStops {
-          guard let text = stop as? String else { throw fail("\(at): every stop must be a '#RRGGBB' string") }
-          stops.append(.init(rgb: try hex(text, at: at), alpha: 1))
+        let appearance: DesignTokenConfig.GradientAppearance
+        if hasFixed {
+          appearance = .fixed(try stops(entry, "stops", at: at))
+        } else {
+          guard entry["light"] != nil, entry["dark"] != nil else {
+            throw fail("\(at): the two-appearance form needs both 'light' and 'dark'")
+          }
+          appearance = .auto(light: try stops(entry, "light", at: at),
+                             dark: try stops(entry, "dark", at: at))
         }
         tokens.append(.init(name: name,
                             doc: try optionalString(entry, "doc", at: at),
                             note: try optionalString(entry, "note", at: at),
-                            stops: stops))
+                            appearance: appearance))
       }
       return tokens
     }

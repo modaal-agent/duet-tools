@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.20.0 — 2026-08-21
+
+### Added — two-appearance gradients, in both languages
+
+A gradient declares either `stops:` (one list, both appearances) or `light:`
+and `dark:` (a stop list each), the same alternative the colour form already
+takes. Configs written against 0.19.0 read unchanged.
+
+Both languages carry the values. The Swift table emits
+`GradientSet(.static(…))` for the first form and
+`GradientSet(.auto(light:dark:))` for the second; the Kotlin palette gains a
+third table, `fun gradient(token: SemanticGradient): GradientToken`, emitting
+`GradientToken.fixed(listOf(…))` and
+`GradientToken.auto(light = listOf(…), dark = listOf(…))` over
+`0xAARRGGBB` stops. A wash built off a surface ramp inverts with the page on
+both platforms, from the one config, and a Kotlin surface reads its stops from
+the palette instead of holding a second copy of them at the call site. The
+Kotlin table requires `dev.modaal.duet.services:theming` 0.8.0, which is where
+`GradientToken` lands; a config with no `gradients:` block names it neither in
+the palette's imports nor anywhere else, and needs no re-pin.
+
+Direction is not a token column in either language: a stop list is the whole
+value, and the surface picks the axis.
+
+### Added — the cross-language value gate
+
+`DesignTokenParityTests` reads the two emitters against each other rather than
+against the config: for every token in the golden config, the generated Swift
+text and the generated Kotlin text must resolve to the same value in the same
+appearance — colours to the same ARGB, gradients to the same stops in paint
+order, type tokens to the same family, weight, size, line height, tracking and
+axes. `textStyle` is asserted present on the Swift side and absent from the
+Kotlin side, being the one column with no cross-platform expression. An
+emitter that drops an appearance or rounds an alpha differently fails here even
+when both goldens are regenerated to match it.
+
 ## 0.19.0 — 2026-08-21
 
 ### Added — `duet design-tokens`, the cross-platform token generator

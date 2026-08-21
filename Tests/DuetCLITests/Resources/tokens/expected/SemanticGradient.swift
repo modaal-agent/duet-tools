@@ -15,6 +15,9 @@ public enum SemanticGradient: GradientAssetable {
 
   /// The one gradient the design system keeps.
   case surfaceWash
+
+  /// The wash behind a hero header.
+  case surfaceHero
 }
 
 #endif

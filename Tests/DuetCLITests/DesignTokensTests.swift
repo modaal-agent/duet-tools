@@ -107,7 +107,7 @@ final class DesignTokensTests: XCTestCase {
     let config = try goldenConfig()
     XCTAssertEqual(config.colorTokens.count, 20)
     XCTAssertEqual(config.fontTokens.count, 9)
-    XCTAssertEqual(config.gradients.count, 1)
+    XCTAssertEqual(config.gradients.count, 2, "one per gradient form")
     XCTAssertEqual(config.colors.count, 6, "colour groups, the last of them unheaded")
     XCTAssertEqual(config.fonts.count, 4, "type groups")
   }
@@ -231,6 +231,41 @@ final class DesignTokensTests: XCTestCase {
   func testTokenNameMustBeALegalCaseInBothLanguages() {
     assertThrows(minimal.replacingOccurrences(of: "name: labelPrimary", with: "name: label_primary"),
                  contains: "must be lowerCamelCase")
+  }
+
+  /// `minimal` plus a `gradients:` block, so a gradient rule is drilled
+  /// against a config that is otherwise legal.
+  private func withGradient(_ body: String) -> String {
+    minimal + "\ngradients:\n  - name: backgroundHero\n" + body
+  }
+
+  func testAGradientDeclaresOneStopFormOrTheOther() {
+    assertThrows(
+      withGradient(
+        """
+            stops: ["#FFFFFF", "#000000"]
+            light: ["#FFFFFF", "#000000"]
+        """),
+      contains: "declare either 'stops' or both 'light' and 'dark'")
+  }
+
+  func testATwoAppearanceGradientNeedsBothHalves() {
+    assertThrows(
+      withGradient(
+        """
+            light: ["#FFFFFF", "#000000"]
+        """),
+      contains: "needs both 'light' and 'dark'")
+  }
+
+  func testAGradientStopListNeedsTwoColours() {
+    assertThrows(
+      withGradient(
+        """
+            light: ["#FFFFFF"]
+            dark: ["#000000", "#FFFFFF"]
+        """),
+      contains: "'light' needs at least two colours")
   }
 
   func testAConfigWithNoTargetIsAnError() {

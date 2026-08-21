@@ -94,7 +94,10 @@ gradients:
       …
     note: >-
       …
-    stops: ["#F1F0EC", "#F1F0EC"]   # two or more; `#RRGGBB`
+    stops: ["#F1F0EC", "#F1F0EC"]   # one-value form; two or more, `#RRGGBB`
+  - name: heroWash
+    light: ["#FBFAF7", "#FFFFFF"]        # two-appearance form
+    dark: ["#141414", "#1E1E1E"]
 ```
 
 - **At least one of `swift:` / `kotlin:` is required.** A config with neither
@@ -109,6 +112,15 @@ gradients:
 - **`swift: { textStyle: … }` is required on every font token whenever a
   `swift:` target is declared** — the Apple side has no default that is right,
   and the generated switch is exhaustive.
+- **A gradient takes `stops:` or both `light:` and `dark:`**, the same
+  alternative the colours take — a colour's `light:`/`dark:` is one value each,
+  a gradient's is one stop list each. Each list carries two or more `#RRGGBB`
+  stops and no alpha — a gradient's transparency belongs to the surface it is
+  painted on. Both languages get the values: Swift a `GradientSet`, Kotlin a
+  `GradientToken`, each carrying the stops per appearance. Direction is not a
+  token column — a stop list is the whole value, and the surface picks the
+  axis (`LinearGradient(gradient:startPoint:endPoint:)` on Apple, a `Brush`
+  factory under Compose).
 - **`family:` is one of `serif`, `sans`, `mono`** — the three the engine's
   family token names. The app's resolver maps them to faces.
 - **Prose is authored as a folded scalar** (`doc: >-` / `note: >-`). The
