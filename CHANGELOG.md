@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.21.0 — 2026-08-25
+
+### Changed — the Gradle lanes resolve the newest installed JDK, not exactly 21
+
+`Lanes.gradleEnvironment()` asks `/usr/libexec/java_home` for `21+` where it
+asked for `21`. It runs only when the caller has no `JAVA_HOME`, and 21 is the
+floor the lane configures on rather than the JVM a repo's modules ask for: a
+bare major selects that major exactly, so on a machine holding both a 21 and a
+25 the lane started its daemon on 21 while the repo's modules declared
+`jvmToolchain(25)`.
+
+What that costs is not a compile-target mismatch — Gradle resolves a declared
+toolchain independently. It is the daemon's own JVM, which starts the compile
+workers, KSP's included: a KSP processor jar published at a newer class-file
+major than the daemon fails to load, and `record`, `verify` and the protocol
+lane all report a Kotlin compilation failure whose cause is
+`UnsupportedClassVersionError` naming the processor, on a machine that has the
+right JDK installed.
+
+`21+` selects the newest installed JDK at or above the floor. Three answers, in
+the order Gradle takes them: `gradle/gradle-daemon-jvm.properties`
+(`toolchainVersion=<major>`) decides the daemon's JVM over `JAVA_HOME`, so a
+repo that carries one is unaffected by this probe; an exported `JAVA_HOME` is
+used when the repo states no criteria, and the probe does not run at all in
+that case; the probe is what answers when neither is present.
+
 ## 0.20.0 — 2026-08-21
 
 ### Added — two-appearance gradients, in both languages

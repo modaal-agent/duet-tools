@@ -48,8 +48,21 @@ enum Lanes {
       seconds: Date().timeIntervalSince(start))
   }
 
-  /// The Gradle lane needs JAVA_HOME (21) to *configure* even the JVM-only test
-  /// task. The Android SDK location is repo/machine config, not toolchain config —
+  /// The Gradle lane needs a JAVA_HOME to *configure* even the JVM-only test
+  /// task, so a caller that has none gets one resolved here.
+  ///
+  /// The probe asks `/usr/libexec/java_home` for `21+` rather than `21`. A bare
+  /// major selects that major exactly, and 21 is the floor this lane
+  /// configures on, not the JVM a repo's own modules ask for — a multiplatform
+  /// repo declaring `jvmToolchain(25)` needs the daemon on 25, because the
+  /// daemon is what starts the compile workers, KSP's included, and a
+  /// processor jar built for a newer class-file major fails to load on an
+  /// older one with `UnsupportedClassVersionError`. `21+` selects the newest
+  /// installed JDK at or above the floor. A repo that wants a specific JVM
+  /// states it in `gradle/gradle-daemon-jvm.properties`, which Gradle reads
+  /// ahead of this value.
+  ///
+  /// The Android SDK location is repo/machine config, not toolchain config —
   /// Gradle reads `<android>/local.properties` (sdk.dir) or the caller's
   /// ANDROID_HOME itself; the CLI adds neither.
   static func gradleEnvironment() -> [String: String] {
@@ -58,7 +71,7 @@ enum Lanes {
     if current["JAVA_HOME"] == nil {
       let probe = Process()
       probe.executableURL = URL(fileURLWithPath: "/usr/libexec/java_home")
-      probe.arguments = ["-v", "21"]
+      probe.arguments = ["-v", "21+"]
       let pipe = Pipe()
       probe.standardOutput = pipe
       probe.standardError = FileHandle.nullDevice
