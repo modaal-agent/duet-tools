@@ -5,8 +5,10 @@ import Foundation
 
 /// The lane-task shape lint, run in `verify`'s meta phase. A KMP
 /// migration swaps a module's lane task from `test` to `jvmTest`; the CLI models
-/// that in `unscopedGradleTasks` while every hand-written `gradlew` invocation
-/// keeps its old task list and silently stops reaching the migrated modules. The
+/// that in `Manifest.laneFamilyTasks` while every hand-written `gradlew`
+/// invocation keeps its old task list and silently stops reaching the migrated
+/// modules. (The CLI's own lanes name their modules instead and never use these
+/// unqualified names — `Manifest.unscopedGradleTasks`.) The
 /// lint scans the repo's own automation (`.github/workflows/*.yml`,
 /// `parity/scripts/*.sh`) for unqualified lane-family tasks and WARNS — never
 /// fails — when a line runs fewer lane tasks than the manifest derives.
@@ -51,7 +53,7 @@ enum LaneTaskLint {
   /// lane → nothing to lint.
   static func warnings(repo: Repo, manifest: Manifest) -> [String] {
     guard manifest.androidDir != nil else { return [] }
-    let expected = manifest.unscopedGradleTasks
+    let expected = manifest.laneFamilyTasks
     var results: [String] = []
     let dirs = [
       repo.root.appendingPathComponent(".github/workflows"),

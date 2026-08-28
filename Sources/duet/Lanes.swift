@@ -299,7 +299,7 @@ enum Lanes {
     // A Swift-only manifest derives no Kotlin lane (androidDir nil), and a
     // scoped run whose feature has no Kotlin twin derives no task — the
     // mirror of the empty-roots skip above (`Manifest.gradleTasks(scope:)`).
-    let kotlinTasks = manifest.gradleTasks(scope: feature)
+    let kotlinTasks = verifyGradleTasks(repo: repo, manifest: manifest, scope: feature)
     if !options.swiftOnly, let androidDir = manifest.androidDir, !kotlinTasks.isEmpty {
       let tasks = kotlinTasks
       // --rerun: an up-to-date Gradle test task would silently skip the replays and
@@ -930,6 +930,28 @@ enum Lanes {
       let initialStates = document["initialStates"] as? [String: Any]
     else { return [] }
     return Set(initialStates.keys)
+  }
+
+  /// The Kotlin lane's Gradle tasks for a `verify` run: the scope's tasks
+  /// (`Manifest.gradleTasks(scope:)`), plus — on an unscoped run — the tasks
+  /// hosting each chain's replay. An unscoped run's coverage gate expects a
+  /// report for every chain fixture, and a chain's replay test lives wherever
+  /// its participants' aggregator is, which need not be a module any feature
+  /// declares. Discovery is the same one `record --chain` uses: the test
+  /// sources that mention the fixture by name.
+  static func verifyGradleTasks(repo: Repo, manifest: Manifest, scope feature: Feature?)
+    -> [String]
+  {
+    var tasks = manifest.gradleTasks(scope: feature)
+    guard feature == nil else { return tasks }
+    for chain in manifest.chains {
+      for task in chainHosts(of: chain, repo: repo, manifest: manifest)
+        .gradleTaskStems.keys.sorted() where !tasks.contains(task)
+      {
+        tasks.append(task)
+      }
+    }
+    return tasks
   }
 
   /// The runnable scopes hosting a chain's tests: Gradle lane task → test-class

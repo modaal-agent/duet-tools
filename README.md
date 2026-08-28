@@ -64,7 +64,11 @@ swift run duet help
   both platform lanes in parallel, with the fixture coverage gate. A
   `--feature` run takes the lanes THAT feature declares — a row with no
   `kotlin:` path runs the Swift lane alone, rather than the whole Kotlin
-  plane its manifest derives
+  plane its manifest derives. The Kotlin lane names its modules
+  (`:<module>:jvmTest` per feature, plus the module hosting each chain's
+  replay on an unscoped run) rather than the unqualified `test` / `jvmTest`,
+  which Gradle expands into every module in the tree — including an Android
+  application module, whose unit-test task needs an SDK location
   (mid-migration coexistence: a feature with no `swift:` twin is expected
   kotlin-only, and a CHAIN expects a Swift row only while every participant —
   its fixture's `initialStates` keys — still has a twin). The Swift lane runs one
@@ -106,11 +110,14 @@ swift run duet help
   feature or per chain inside that window (the writer follows the manifest's
   scenario).
 - `duet lanes` — the lane inventory as data: every lane task, package root,
-  and filter the manifest derives (what `verify` runs), the chains and their
-  participants, the protocol lane's runner, and what `verify` does NOT cover
-  (gradle modules and Swift packages outside the manifest). Generate
-  workflows and fallback runners from this instead of re-deriving lane sets
-  by hand — `verify` prints the same non-coverage on every unscoped run.
+  and filter the manifest derives (`unscopedGradleTasks` is what `verify`
+  runs; `laneFamilyTasks` is the unqualified family YOUR `./gradlew` line
+  needs to reach every declared module), the chains and their participants,
+  the protocol lane's runner, and what `verify` does NOT cover (gradle
+  modules and Swift packages outside the manifest — name those in your own
+  workflow steps). Generate workflows and fallback runners from this instead
+  of re-deriving lane sets by hand — `verify` prints the same non-coverage on
+  every unscoped run.
 - `duet assert-replayed <log|-> [--min <n>]` — the empty-pass gate for
   hand-written lane scripts: fail unless the log shows at least `--min`
   (default 1) executed tests, taking the MAXIMUM across runner summaries

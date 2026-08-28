@@ -97,7 +97,7 @@ enum Mcp {
     [
       [
         "name": "duet_verify",
-        "description": "Byte-gate the fixture corpus: meta-checks (declaration lockstep + fixture symmetry), then both platform lanes in parallel, with the fixture coverage gate. Scope with `feature`; restrict to one lane with `lane`. Returns the structured run report; on failure call duet_explain next.",
+        "description": "Byte-gate the fixture corpus: meta-checks (declaration lockstep + fixture symmetry), then both platform lanes in parallel, with the fixture coverage gate. Scope with `feature`; restrict to one lane with `lane`. The Kotlin lane runs the manifest's own module tasks — one per feature, plus each chain's host module on an unscoped run — so it reaches no module the manifest does not declare. Returns the structured run report; on failure call duet_explain next.",
         "inputSchema": [
           "type": "object",
           "properties": [
@@ -126,7 +126,7 @@ enum Mcp {
       ],
       [
         "name": "duet_lanes",
-        "description": "The lane inventory as data: every lane task, package root, and filter the manifest derives (what duet_verify runs), chains with participants, and what verify does NOT cover (gradle modules and Swift packages outside the manifest, the protocol lane). Generate workflows or fallback runners from this instead of re-deriving lane sets by hand.",
+        "description": "The lane inventory as data: every lane task, package root, and filter the manifest derives — `unscopedGradleTasks` is what duet_verify runs, `laneFamilyTasks` is the unqualified family a hand-written ./gradlew line needs to reach every declared module — plus chains with participants, and what verify does NOT cover (gradle modules and Swift packages outside the manifest, the protocol lane). Generate workflows or fallback runners from this instead of re-deriving lane sets by hand.",
         "inputSchema": ["type": "object", "properties": [String: Any]()] as [String: Any],
       ],
       [

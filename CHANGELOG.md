@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.23.0 — 2026-08-28
+
+### Changed — the unscoped Kotlin lane names its modules
+
+`duet verify`'s unscoped Kotlin lane runs the manifest's own module tasks —
+one `:<module>:jvmTest` or `:<module>:test` per feature, deduped — instead of
+the unqualified `test` / `jvmTest` names it passed before. `Manifest` splits
+the two derivations: `unscopedGradleTasks` is what a lane RUNS, and
+`laneFamilyTasks` is the unqualified family a hand-written `./gradlew` line
+needs to reach every declared module — what the lane-task shape lint holds a
+repo's automation to, and what `duet lanes` now reports beside the module set.
+
+Gradle expands an unqualified name in every project that has it, declared in
+the manifest or not. On a tree carrying an Android application module, `test`
+reaches `:app:testDebugUnitTest`, which cannot be configured without an SDK
+location, so a lane whose job was replaying two feature fixtures ended in:
+
+```
+Could not determine the dependencies of task ':app:testDebugUnitTest'.
+> SDK location not found. Define a valid SDK location with an ANDROID_HOME
+  environment variable or by setting the sdk.dir path in your project's local
+  properties file
+```
+
+0.22.0 removed that for a `--feature` run by deriving the scope's own task.
+This is the unscoped half: on a mixed manifest, `duet verify` in a shell with
+no `ANDROID_HOME` and no `local.properties` now passes where it failed for
+every developer who had not exported the variable. A repo with a Kotlin lane
+and no features yet derives no task at all and the lane is skipped — that
+state picked bare `test` before, which is `:app`'s.
+
+Coverage matches what the verb already claimed: `verify` prints every Gradle
+module outside the manifest as its own boundary ("not covered by verify — run
+these in your workflow"), and it now runs exactly that. Chain fixtures are
+still replayed — an unscoped run adds the modules hosting each chain's tests,
+discovered the way `record --chain` discovers them.
+
+**Adopters:** a module whose suites this lane swept for you — a services,
+telemetry or theming module — needs a step naming it in your own workflow
+(`./gradlew :services:jvmTest`, one per module you gate). `duet lanes`
+reports both task sets, and `verify`'s "not covered" line lists the modules
+to name.
+
 ## 0.22.0 — 2026-08-28
 
 ### Changed — the declaration shape rows ask only where the manifest answers

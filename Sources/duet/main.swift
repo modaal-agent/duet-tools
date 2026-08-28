@@ -104,7 +104,11 @@ let usage = """
         naming the missing lane is a meta-error). --feature runs the lanes
         THAT feature declares: a row with no `kotlin:` path runs the Swift
         lane alone, and a lane flag naming the lane it lacks is the same
-        meta-error. Failures render with step label, JSON path, and
+        meta-error. The Kotlin lane runs the manifest's own module tasks
+        (:<module>:jvmTest per feature, plus the module hosting each chain's
+        replay when unscoped) — never the unqualified `test`, which Gradle
+        expands into every module, an Android app module's SDK-bound unit
+        tests included. Failures render with step label, JSON path, and
         scenario line.
     duet lint [--json]
         the manifest meta-checks alone, no lanes — the fast authoring-loop
@@ -137,7 +141,9 @@ let usage = """
         record refuses — record per feature or per chain inside that window.
     duet lanes [--json]
         the lane inventory as data: every lane task, package root, and filter
-        the manifest derives (what `verify` runs), the chains and their
+        the manifest derives (unscopedGradleTasks = what `verify` runs;
+        laneFamilyTasks = the unqualified family YOUR ./gradlew line needs to
+        reach every declared module), the chains and their
         participants, and what verify does NOT cover (gradle modules and
         Swift packages outside the manifest, the protocol lane) — generate
         workflows and fallback runners from this instead of re-deriving.

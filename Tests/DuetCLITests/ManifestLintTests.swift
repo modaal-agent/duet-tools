@@ -88,7 +88,8 @@ final class ManifestLintTests: XCTestCase {
       [repo.root.appendingPathComponent("src-ios").path])
     XCTAssertEqual(
       manifest.androidDir?.path, repo.root.appendingPathComponent("src-android").path)
-    XCTAssertEqual(manifest.unscopedGradleTasks, ["test"])
+    XCTAssertEqual(manifest.unscopedGradleTasks, [":feature-greeter:test"])
+    XCTAssertEqual(manifest.laneFamilyTasks, ["test"])
   }
 
   func testMiniSwiftGoldenPlanAndDerivedLanes() throws {
@@ -119,7 +120,10 @@ final class ManifestLintTests: XCTestCase {
     XCTAssertTrue(manifest.lintOK)
     XCTAssertTrue(manifest.swiftPackageDirs.isEmpty)
     XCTAssertEqual(manifest.androidDir?.path, repo.root.appendingPathComponent("src-kmp").path)
-    XCTAssertEqual(manifest.unscopedGradleTasks, ["jvmTest"])
+    XCTAssertEqual(
+      manifest.unscopedGradleTasks,
+      [":subtrees:counter:logic:jvmTest", ":subtrees:ticker:logic:jvmTest"])
+    XCTAssertEqual(manifest.laneFamilyTasks, ["jvmTest"])
     let counter = try XCTUnwrap(manifest.feature(named: "counter"))
     XCTAssertTrue(counter.isKmpSourceSet)
     XCTAssertEqual(counter.gradleTestTask, ":subtrees:counter:logic:jvmTest")

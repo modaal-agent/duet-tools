@@ -280,7 +280,11 @@ enum Inventory {
 
     if options.json {
       var payload: [String: Any] = [
+        // What an unscoped lane RUNS (the manifest's own module tasks), beside
+        // the unqualified family a hand-written `./gradlew` line needs to reach
+        // every module the manifest declares.
         "unscopedGradleTasks": manifest.androidDir != nil ? manifest.unscopedGradleTasks : [],
+        "laneFamilyTasks": manifest.androidDir != nil ? manifest.laneFamilyTasks : [],
         "swiftPackages": manifest.swiftPackageDirs.map { Lanes.relativePath($0, in: repo) },
         "features": featureRows,
         "chains": chainRows,
@@ -307,9 +311,16 @@ enum Inventory {
       for dir in manifest.swiftPackageDirs { print("    \(Lanes.relativePath(dir, in: repo))") }
     }
     if let androidDir = manifest.androidDir {
+      let tasks = manifest.unscopedGradleTasks
+      let unscoped =
+        tasks.isEmpty
+        ? "none (no feature declares a `kotlin:` path)" : tasks.joined(separator: " ")
       print(
         "  kotlin lane: \(Lanes.relativePath(androidDir, in: repo)) — unscoped task(s): "
-          + manifest.unscopedGradleTasks.joined(separator: " "))
+          + unscoped)
+      print(
+        "    a `./gradlew` line of your own reaches every declared module with: "
+          + manifest.laneFamilyTasks.joined(separator: " "))
     } else {
       print("  kotlin lane: none (no `kotlin:` paths)")
     }

@@ -166,23 +166,47 @@ struct Manifest {
     feature.swiftPackageRelative.map { repoRoot.appendingPathComponent($0) }
   }
 
-  /// The unscoped Gradle lane tasks. An unqualified task name runs in every
-  /// project that HAS it — Gradle matches per module — so the manifest's
-  /// source-set knowledge selects the SET of names: `test` for JVM modules,
-  /// `jvmTest` for KMP modules (which have no aggregate `test` task — running
-  /// `test` there silently replays nothing), and BOTH on a mixed tree. The
-  /// earlier all-or-nothing pick (`jvmTest` only when EVERY feature was
-  /// KMP-shaped) silently skipped every migrated module for as long as one
-  /// unmigrated twin remained — the whole span of a per-feature migration.
-  var unscopedGradleTasks: [String] {
+  /// The lane-task FAMILY, for a `./gradlew` line written by hand. An
+  /// unqualified task name runs in every project that HAS it — Gradle matches
+  /// per module — so the manifest's source-set knowledge selects the SET of
+  /// names: `test` for JVM modules, `jvmTest` for KMP modules (which have no
+  /// aggregate `test` task — running `test` there silently replays nothing),
+  /// and BOTH on a mixed tree. The earlier all-or-nothing pick (`jvmTest` only
+  /// when EVERY feature was KMP-shaped) silently skipped every migrated module
+  /// for as long as one unmigrated twin remained — the whole span of a
+  /// per-feature migration.
+  ///
+  /// `LaneTaskLint` holds a repo's own automation to this set. The lanes this
+  /// CLI launches name their modules instead (`unscopedGradleTasks`), because
+  /// the same matching that makes an unqualified name reach every declared
+  /// module also reaches every UNdeclared one: on a tree carrying an Android
+  /// application module, `test` reaches `:app:testDebugUnitTest`, which cannot
+  /// configure without an SDK location.
+  var laneFamilyTasks: [String] {
     let kmp = features.contains(where: \.isKmpSourceSet)
     let jvm = features.contains { !$0.isKmpSourceSet }
     if kmp && jvm { return ["test", "jvmTest"] }
     return kmp ? ["jvmTest"] : ["test"]
   }
 
+  /// The Gradle tasks an unscoped Kotlin lane runs: each feature's own module
+  /// task (`Feature.gradleTestTask`), deduped and ordered. A manifest whose
+  /// features declare no `kotlin:` path derives none and the caller skips the
+  /// lane — which is also a Kotlin-shaped repo's day-0 state, before its first
+  /// feature.
+  ///
+  /// This is the manifest's own module set, not a name Gradle expands: the
+  /// lane replays the fixtures the manifest declares, and `duet verify`'s
+  /// coverage line already names every module outside the manifest as its own
+  /// boundary. Modules a repo wants gated beyond that — a services or theming
+  /// module with its own suites — are named by that repo's own workflow steps
+  /// (`./gradlew :services:jvmTest`, one per gated module).
+  var unscopedGradleTasks: [String] {
+    Array(Set(features.compactMap(\.gradleTestTask))).sorted()
+  }
+
   /// The Gradle lane tasks for a run's scope: the feature's own task when
-  /// scoped, the unscoped set otherwise, and NONE for a scoped feature with
+  /// scoped, every feature's otherwise, and NONE for a scoped feature with
   /// no Kotlin twin — the caller skips the Kotlin lane, the mirror of the
   /// Swift lane's empty-roots skip for a feature with no `swift:` twin.
   ///
