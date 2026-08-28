@@ -61,7 +61,10 @@ swift run duet help
   (lockstep + fixture symmetry + the host-lane rule + the spec↔fixture
   cross-reference when `parity/feature-specs/` exists: one-pager per feature,
   every declared fixture mentioned, chain participation claims true), then
-  both platform lanes in parallel, with the fixture coverage gate
+  both platform lanes in parallel, with the fixture coverage gate. A
+  `--feature` run takes the lanes THAT feature declares — a row with no
+  `kotlin:` path runs the Swift lane alone, rather than the whole Kotlin
+  plane its manifest derives
   (mid-migration coexistence: a feature with no `swift:` twin is expected
   kotlin-only, and a CHAIN expects a Swift row only while every participant —
   its fixture's `initialStates` keys — still has a twin). The Swift lane runs one
@@ -144,7 +147,10 @@ swift run duet help
   in `.modaal/project.json` (platform present, template one the toolchain
   models, pair members agreeing on template, an iOS target's `xcodegen.yml`
   present, the template's implied shape matching the manifest's derived
-  lanes), plus the worker-isolation lint — a `Working` conformer (direct,
+  lanes — that last row asked only of a manifest deriving exactly ONE lane,
+  and never of a target the `migration` marker names, because a repo
+  migrating feature by feature derives both and a repo with no features
+  derives neither), plus the worker-isolation lint — a `Working` conformer (direct,
   via a refining protocol, or via a superclass) declared
   `@unchecked Sendable` in non-test sources. The compiler accepts that stamp
   with no diagnostic even under complete concurrency checking, so only a

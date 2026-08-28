@@ -9,10 +9,16 @@ final class DoctorTests: XCTestCase {
 
   // MARK: - [declarations]
 
+  /// `swiftShaped` defaults to the opposite of `kotlinShaped` — the
+  /// single-lane manifest the shape rows answer for. The mixed and featureless
+  /// states pass it explicitly.
   private func geometry(
-    kotlinShaped: Bool, existing: Set<String> = ["src-ios/App/xcodegen.yml"]
+    kotlinShaped: Bool, swiftShaped: Bool? = nil,
+    existing: Set<String> = ["src-ios/App/xcodegen.yml"]
   ) -> Doctor.Geometry {
-    Doctor.Geometry(kotlinShaped: kotlinShaped, fileExists: { existing.contains($0) })
+    Doctor.Geometry(
+      kotlinShaped: kotlinShaped, swiftShaped: swiftShaped ?? !kotlinShaped,
+      fileExists: { existing.contains($0) })
   }
 
   private func json(_ text: String) -> Data { Data(text.utf8) }
@@ -82,6 +88,59 @@ final class DoctorTests: XCTestCase {
     let findings = Doctor.declarationFindings(
       projectJSON: json(text), geometry: geometry(kotlinShaped: false))
     XCTAssertEqual(findings.count, 1)
+    XCTAssertTrue(findings[0].contains("derives no Kotlin lane"))
+  }
+
+  func testAMixedManifestHoldsBothShapeRows() {
+    // The per-feature migration window: rows cross one at a time, so the app
+    // being migrated declares its Swift template while the manifest already
+    // derives a Kotlin lane. Neither shape row has a case to answer, and the
+    // other rows still do (this target's xcodegen.yml is on disk).
+    let text = """
+      {"targets": {
+        "TrailJournal": {"platform": "iOS", "template": "duet-swift-ios"},
+        "TrailJournalAndroid": {"platform": "Android", "template": "duet-kmp"}
+      }}
+      """
+    XCTAssertEqual(
+      Doctor.declarationFindings(
+        projectJSON: json(text), geometry: geometry(kotlinShaped: true, swiftShaped: true)),
+      [])
+  }
+
+  func testAFeaturelessManifestHoldsBothShapeRows() {
+    // Day 0 of a Kotlin-shaped repo: no features yet, so the manifest derives
+    // neither lane and cannot contradict either template claim.
+    let text = """
+      {"targets": {
+        "Fresh": {"platform": "iOS", "template": "duet-kmp"},
+        "FreshAndroid": {"platform": "Android", "template": "duet-kmp"}
+      }}
+      """
+    XCTAssertEqual(
+      Doctor.declarationFindings(
+        projectJSON: json(text), geometry: geometry(kotlinShaped: false, swiftShaped: false)),
+      [])
+  }
+
+  func testTheMigrationMarkersOwnTargetsAreHeldAndOthersAreNot() {
+    // The grafted Android target declares the Kotlin shape before the first
+    // `kotlin:` row exists; a target the marker does not name is checked as
+    // usual, so the swift-only manifest still answers for 'OtheriOS'.
+    let text = """
+      {
+        "migration": {"route": "duet-swift-to-kmp", "targets": {
+          "ios": "TrailJournal", "android": "TrailJournalAndroid"}},
+        "targets": {
+          "TrailJournalAndroid": {"platform": "Android", "template": "duet-kmp"},
+          "OtheriOS": {"platform": "iOS", "template": "duet-kmp"}
+        }
+      }
+      """
+    let findings = Doctor.declarationFindings(
+      projectJSON: json(text), geometry: geometry(kotlinShaped: false))
+    XCTAssertEqual(findings.count, 1)
+    XCTAssertTrue(findings[0].contains("OtheriOS"), findings[0])
     XCTAssertTrue(findings[0].contains("derives no Kotlin lane"))
   }
 

@@ -171,6 +171,25 @@ enum Lanes {
 
   // MARK: - Commands
 
+  /// The lane flags against the lanes the RUN derives — the manifest's when
+  /// unscoped, the named feature's when scoped. A flag naming a lane this run
+  /// has none of is a meta-error, not a silent green: with both lanes skipped
+  /// the coverage gate expects nothing and the run reports PASS having
+  /// replayed nothing.
+  static func laneFlagMismatch(
+    swiftOnly: Bool, kotlinOnly: Bool, swiftLane: Bool, kotlinLane: Bool, scope: String?
+  ) -> String? {
+    let subject = scope.map { "feature '\($0)' declares no" } ?? "the manifest declares no"
+    let flag = scope.map { " --feature \($0)" } ?? ""
+    if kotlinOnly, !kotlinLane {
+      return "--kotlin-only\(flag): \(subject) `kotlin:` path — there is no Kotlin lane to run"
+    }
+    if swiftOnly, !swiftLane {
+      return "--swift-only\(flag): \(subject) `swift:` path — there is no Swift lane to run"
+    }
+    return nil
+  }
+
   /// `duet verify [--feature X] [--swift-only|--kotlin-only] [--json]`
   static func run(repo: Repo, options: Options) throws -> Int32 {
     let start = Date()
@@ -226,15 +245,11 @@ enum Lanes {
       for warning in laneTaskWarnings { print("  ⚠ lane-task shape: \(warning)") }
     }
     let feature = try options.resolveFeature(in: manifest)
-    // A lane flag naming a lane the manifest does not derive is a meta-error,
-    // not a silent green: with both lanes skipped, the coverage gate below
-    // expects nothing and the run would report PASS having replayed nothing.
-    let flagMismatch: String? =
-      options.kotlinOnly && manifest.androidDir == nil
-      ? "--kotlin-only: the manifest declares no `kotlin:` paths — there is no Kotlin lane to run"
-      : options.swiftOnly && manifest.swiftPackageDirs.isEmpty
-        ? "--swift-only: the manifest declares no `swift:` paths — there is no Swift lane to run"
-        : nil
+    let flagMismatch = laneFlagMismatch(
+      swiftOnly: options.swiftOnly, kotlinOnly: options.kotlinOnly,
+      swiftLane: feature.map { !$0.swiftSource.isEmpty } ?? !manifest.swiftPackageDirs.isEmpty,
+      kotlinLane: feature.map(\.hasKotlinLane) ?? (manifest.androidDir != nil),
+      scope: feature?.name)
     if let flagMismatch {
       if options.json {
         emitJSON(["status": "failed", "phase": "meta", "errors": [flagMismatch]])
@@ -281,10 +296,12 @@ enum Lanes {
           (package, try launch(arguments, cwd: root, logName: "swift-\(root.lastPathComponent)")))
       }
     }
-    // A Swift-only manifest derives no Kotlin lane (androidDir nil) — the
-    // mirror of the empty-roots skip above.
-    if !options.swiftOnly, let androidDir = manifest.androidDir {
-      let tasks = feature?.gradleTestTask.map { [$0] } ?? manifest.unscopedGradleTasks
+    // A Swift-only manifest derives no Kotlin lane (androidDir nil), and a
+    // scoped run whose feature has no Kotlin twin derives no task — the
+    // mirror of the empty-roots skip above (`Manifest.gradleTasks(scope:)`).
+    let kotlinTasks = manifest.gradleTasks(scope: feature)
+    if !options.swiftOnly, let androidDir = manifest.androidDir, !kotlinTasks.isEmpty {
+      let tasks = kotlinTasks
       // --rerun: an up-to-date Gradle test task would silently skip the replays and
       // write no reports — a "PASS" that verified nothing (caught by the coverage
       // check below, but rerunning is the correct behavior for a verification tool).
@@ -681,10 +698,18 @@ enum Lanes {
     } else if platform == "kotlin" {
       // Reachable only by explicit --platform kotlin on a Swift-only manifest —
       // the defaulting above never picks kotlin without a Kotlin root.
-      guard let androidDir = manifest.androidDir else {
+      let tasks = manifest.gradleTasks(scope: feature)
+      guard let androidDir = manifest.androidDir, !tasks.isEmpty else {
+        // A scope with no `kotlin:` path derives no task; recording it through
+        // the unscoped task set would regenerate every OTHER feature's
+        // fixtures under a --feature flag.
         let message =
-          "--platform kotlin: the manifest declares no `kotlin:` paths — "
-          + "there is no Kotlin runner to record through"
+          feature.map {
+            "--platform kotlin --feature \($0.name): that feature declares no "
+              + "`kotlin:` path — there is no Kotlin runner to record it through"
+          }
+          ?? "--platform kotlin: the manifest declares no `kotlin:` paths — "
+            + "there is no Kotlin runner to record through"
         if options.json {
           emitJSON(["status": "failed", "phase": "meta", "errors": [message]])
         } else {
@@ -692,7 +717,6 @@ enum Lanes {
         }
         return 1
       }
-      let tasks = feature?.gradleTestTask.map { [$0] } ?? manifest.unscopedGradleTasks
       // Per-task --rerun: same note as verify — it binds to the task named
       // right before it, and a mixed tree names one lane task per module shape.
       results.append(

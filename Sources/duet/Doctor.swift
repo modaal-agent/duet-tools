@@ -15,6 +15,16 @@ import Foundation
 /// here is what is on disk." This is the CLI's only `.modaal` consumer —
 /// gate derivation stays manifest-only.
 ///
+/// The two template-shape rows ask only where the manifest has evidence to
+/// answer with: a manifest deriving BOTH lanes is a per-feature migration in
+/// progress (rows cross one at a time, so a Swift-templated target sits
+/// beside a Kotlin lane for the whole window), and a manifest with no
+/// features derives neither lane. Both states are silent. A target the
+/// `migration` marker's `targets` names is silent too, single-lane or not:
+/// the Android target grafted onto a migrating repo declares the Kotlin
+/// shape before the first `kotlin:` row exists, and the app being migrated
+/// keeps its own template until its shell swaps.
+///
 /// **[workers]** — the worker-isolation lint: a `Working` conformer
 /// (directly, via a refining protocol, or via a superclass) declared
 /// `@unchecked Sendable` in non-test sources. The compiler cannot catch
@@ -67,7 +77,13 @@ enum Doctor {
   /// What the declarations are checked against. `fileExists` takes a
   /// repo-relative path — injected so the checks stay pure.
   struct Geometry {
+    /// The manifest derives a Kotlin lane — some feature declares a `kotlin:`
+    /// path (`Manifest.androidDir`).
     var kotlinShaped: Bool
+    /// The manifest derives a Swift lane — some feature declares a `swift:`
+    /// path (`Manifest.swiftPackageDirs`). With both flags the repo is
+    /// mid-migration; with neither it has no features yet.
+    var swiftShaped: Bool
     var fileExists: (String) -> Bool
   }
 
@@ -100,6 +116,18 @@ enum Doctor {
       if let template = duet["template"] as? String, !knownTemplates.contains(template) {
         findings.append(
           "[declarations] \(file): `duet.template` names no template this toolchain models: '\(template)'")
+      }
+    }
+
+    // The mid-migration marker's own targets: the app being migrated and the
+    // target grafted onto it. Read-only, and deny-nothing like the rest of
+    // this check — the marker's schema belongs to the tool that writes it.
+    var migrationTargets: Set<String> = []
+    if let migration = metadata["migration"] as? [String: Any],
+      let markerTargets = migration["targets"] as? [String: Any]
+    {
+      for value in markerTargets.values {
+        if let target = value as? String { migrationTargets.insert(target) }
       }
     }
 
@@ -149,12 +177,18 @@ enum Doctor {
         continue
       }
       let kotlinTemplate = kotlinShapedTemplates.contains(template)
-      if kotlinTemplate, !geometry.kotlinShaped {
+      // The shape rows fire on evidence of the OTHER lane and only where the
+      // manifest derives exactly one (see the type's doc comment): both lanes
+      // is a migration window, neither is a repo with no features, and a
+      // marker-named target is the migration's own.
+      let singleLane = geometry.kotlinShaped != geometry.swiftShaped
+      let answerable = singleLane && !migrationTargets.contains(name)
+      if kotlinTemplate, !geometry.kotlinShaped, answerable {
         findings.append(
           "[declarations] target '\(name)' declares '\(template)' but the parity manifest "
             + "derives no Kotlin lane")
       }
-      if !kotlinTemplate, geometry.kotlinShaped {
+      if !kotlinTemplate, geometry.kotlinShaped, answerable {
         findings.append(
           "[declarations] target '\(name)' declares '\(template)' but the parity manifest "
             + "derives a Kotlin lane — that template's shape has none")
@@ -441,6 +475,7 @@ enum Doctor {
     let projectJSON = try? Data(contentsOf: projectJSONURL)
     let geometry = Geometry(
       kotlinShaped: manifest.androidDir != nil,
+      swiftShaped: !manifest.swiftPackageDirs.isEmpty,
       fileExists: { relative in
         FileManager.default.fileExists(
           atPath: repo.root.appendingPathComponent(relative).path)

@@ -181,6 +181,21 @@ struct Manifest {
     return kmp ? ["jvmTest"] : ["test"]
   }
 
+  /// The Gradle lane tasks for a run's scope: the feature's own task when
+  /// scoped, the unscoped set otherwise, and NONE for a scoped feature with
+  /// no Kotlin twin — the caller skips the Kotlin lane, the mirror of the
+  /// Swift lane's empty-roots skip for a feature with no `swift:` twin.
+  ///
+  /// The scoped-but-Kotlin-less case took `unscopedGradleTasks` before, which
+  /// ran every Kotlin module's suites for a scope owning none of them: on a
+  /// mixed tree `verify --feature <a swift-only row>` ran the whole Kotlin
+  /// plane, so it could fail on another feature's suite, and its bare `test`
+  /// matched `:app:testDebugUnitTest`, which needs an Android SDK location.
+  func gradleTasks(scope feature: Feature?) -> [String] {
+    guard let feature else { return unscopedGradleTasks }
+    return feature.gradleTestTask.map { [$0] } ?? []
+  }
+
   /// The package that owns the `replay-runner` executable product (the protocol
   /// lane's driver): the manifest's explicit `replayRunner:` key when declared,
   /// else probed — because after a re-cut the aggregator hosting it is just one

@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.22.0 — 2026-08-28
+
+### Changed — the declaration shape rows ask only where the manifest answers
+
+`duet doctor`'s two `[declarations]` template-shape rows — "declares
+'duet-kmp' but the parity manifest derives no Kotlin lane" and its mirror —
+fire only where the manifest derives exactly ONE lane, and never for a target
+the `migration` marker in `.modaal/project.json` names.
+
+The rows compared each target's template against one repo-wide bit
+(`androidDir != nil`), and two legitimate states contradict that bit. A repo
+migrating feature by feature derives BOTH lanes for the whole window: the app
+keeps its Swift template while crossed rows already declare `kotlin:` paths,
+so the mirror row fired on every run — measured on a migrating tree as
+`✗ [declarations] target 'X' declares 'duet-swift-ios' but the parity manifest
+derives a Kotlin lane`, exit 1 on every push until the last feature crossed. A
+repo with no features yet derives NEITHER lane, so both `duet-kmp` targets of
+a day-0 Kotlin-shaped repo were findings — which is what the "declares
+features" gate on adopter doctor steps was working around.
+
+`Doctor.Geometry` gains `swiftShaped` beside `kotlinShaped`: a row asks its
+question when the manifest derives the other lane and only that one. The
+marker exemption is narrow — the targets named in `migration.targets` (the app
+being migrated and the target grafted onto it); every other target is checked
+as before.
+
+### Changed — a scoped run's Kotlin lane is the scope's own, or none
+
+`Manifest.gradleTasks(scope:)` derives a run's lane tasks: the feature's own
+task when scoped, the manifest's set when not, and NO task for a scoped
+feature that declares no `kotlin:` path — `verify` skips the Kotlin lane
+there, the mirror of the Swift lane's existing skip for a feature with no
+`swift:` twin.
+
+That case fell back to the unscoped task set, so on a mixed tree
+`duet verify --feature <a swift-only row>` ran every Kotlin module's suites:
+the run could fail on another feature's suite, and the bare `test` task
+matched `:app:testDebugUnitTest`, which exits with "SDK location not found"
+unless `ANDROID_HOME` or `local.properties` is set — for a scope with no
+Android surface at all.
+
+`record --platform kotlin --feature <that row>` refuses with the feature named
+instead of regenerating every other feature's fixtures. `--swift-only` and
+`--kotlin-only` are checked against the scope as well: a flag naming a lane
+the named feature does not have is the meta-error the manifest-level check
+already reported.
+
 ## 0.21.0 — 2026-08-25
 
 ### Changed — the Gradle lanes resolve the newest installed JDK, not exactly 21

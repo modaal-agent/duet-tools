@@ -101,8 +101,11 @@ let usage = """
         spec↔fixture cross-reference when parity/feature-specs/ exists), then
         the manifest's platform lanes in parallel (a single-source manifest —
         `swift:` or `kotlin:` paths only — runs its one lane; a lane flag
-        naming the missing lane is a meta-error); failures render with step
-        label, JSON path, and scenario line.
+        naming the missing lane is a meta-error). --feature runs the lanes
+        THAT feature declares: a row with no `kotlin:` path runs the Swift
+        lane alone, and a lane flag naming the lane it lacks is the same
+        meta-error. Failures render with step label, JSON path, and
+        scenario line.
     duet lint [--json]
         the manifest meta-checks alone, no lanes — the fast authoring-loop
         red: parse parity/manifest.yaml (the CLI's own parser; grammar in
@@ -202,7 +205,11 @@ let usage = """
         template one this toolchain models, pair members agreeing on
         template, an iOS target's xcodegen.yml present, and the template's
         implied shape matching the manifest's derived lanes ("this repo
-        says duet-kmp; the manifest derives no Kotlin lane" is a finding).
+        says duet-kmp; the manifest derives no Kotlin lane" is a finding)
+        — that last row asked only where the manifest derives exactly ONE
+        lane, and never of a target the `migration` marker names: a repo
+        migrating feature by feature derives both lanes, and one with no
+        features derives neither.
         Row 2: the worker-isolation lint — a Working conformer (direct,
         via a refining protocol, or via a superclass) declared
         '@unchecked Sendable' in non-test sources; the compiler accepts
