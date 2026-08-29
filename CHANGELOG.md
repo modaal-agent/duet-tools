@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.24.0 — 2026-08-29
+
+### Changed — the empty features block is a valid starting state
+
+A `features:` block that exists and declares nothing is the shape a repo has
+between its creation and its first feature. The meta-checks pass on it, and
+the verbs whose subject is the declared feature set report the vacuous
+result instead of failing to derive a lane:
+
+- `duet lint`: `lockstep-lint: OK (0 feature(s), …)`, plus a note that the
+  platform lanes engage with the first manifest entry.
+- Unscoped `duet verify`: meta-checks pass, both lanes are skipped, and the
+  run reports `0/0 fixture report(s) passed` with the same note — exit 0.
+- Unscoped `duet record` / `duet record --check`: nothing to record /
+  nothing to drift — exit 0.
+- `duet doctor` reads the declaration layer, not the feature rows, and
+  already passes on this shape — unchanged.
+
+Two boundaries keep the pass from reclassifying damage as emptiness:
+
+- Scoped invocations stay strict: `--feature <name>` on a manifest that
+  does not declare `<name>` is still an error.
+- Only the genuinely empty block passes. A `features:` section whose lines
+  parse to nothing keeps `manifest.yaml: no features parsed`, and each
+  unplaced line is named beside it
+  (`manifest.yaml: unparseable features entry: '<line>'`). An absent
+  `features:` section keeps the error too.
+
+A workflow that holds its feature-keyed steps until the first manifest
+entry keeps working unchanged; after this release the hold saves the
+vacuous steps rather than avoiding a failure.
+
+
 ## 0.23.0 — 2026-08-28
 
 ### Changed — the unscoped Kotlin lane names its modules

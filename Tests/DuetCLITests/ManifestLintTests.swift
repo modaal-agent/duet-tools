@@ -531,4 +531,66 @@ final class ManifestLintTests: XCTestCase {
       """)
     try assertError(repo, containing: "[mocks.derived] package: src-ios/NoSuchPackage has no Package.swift")
   }
+
+  // MARK: - The zero-feature starting state (the empty features block)
+
+  /// Replace the manifest wholesale — the pre-first-feature shape is a
+  /// `features:` block holding only a comment.
+  private func writeManifest(_ repo: Repo, _ contents: String) throws {
+    try Data(contents.utf8).write(
+      to: repo.root.appendingPathComponent("parity/manifest.yaml"))
+  }
+
+  func testAnEmptyFeaturesBlockPassesTheMetaChecks() throws {
+    let repo = try makeTree("mini-kmp")
+    try writeManifest(
+      repo,
+      """
+      features:
+        # feature entries are inserted above this line
+      """)
+    try delete(repo, "parity/fixtures/counter.fixture.json")
+    try delete(repo, "parity/fixtures/ticker.fixture.json")
+    let result = try ManifestLint.lint(repo: repo)
+    XCTAssertEqual(result.errors, [])
+    XCTAssertTrue(result.parsed.featuresBlockEmpty)
+    // Manifest.load derives no lane on this shape and does NOT throw — the
+    // verbs report the vacuous state and exit 0 instead.
+    let manifest = try Manifest.load(repo: repo)
+    XCTAssertTrue(manifest.lintOK)
+    XCTAssertTrue(manifest.featuresBlockEmpty)
+    XCTAssertEqual(manifest.swiftPackageDirs, [])
+    XCTAssertNil(manifest.androidDir)
+  }
+
+  func testAnEmptyFeaturesBlockStillReportsOrphanFixtures() throws {
+    // The pass covers the block, not the tree: fixtures nothing declares are
+    // still orphans, so damage beside the empty block keeps failing.
+    let repo = try makeTree("mini-kmp")
+    try writeManifest(
+      repo,
+      """
+      features:
+        # feature entries are inserted above this line
+      """)
+    try assertError(repo, containing: "fixture on disk but not in manifest: counter")
+  }
+
+  func testAFeaturesBlockThatParsesToNothingStaysAnError() throws {
+    // The empty-vs-damaged boundary: an entry missing its colon parses to
+    // zero features but is NOT the empty block — both the verbatim error and
+    // the line itself are named.
+    let repo = try makeTree("mini-kmp")
+    try writeManifest(repo, "features:\n  counter\n")
+    try assertError(repo, containing: "manifest.yaml: no features parsed")
+    try assertError(repo, containing: "manifest.yaml: unparseable features entry: 'counter'")
+  }
+
+  func testAManifestWithoutAFeaturesSectionStaysAnError() throws {
+    // An absent section is not the emitted shape — only the present-but-empty
+    // block is the valid starting state.
+    let repo = try makeTree("mini-kmp")
+    try writeManifest(repo, "chains:\n")
+    try assertError(repo, containing: "manifest.yaml: no features parsed")
+  }
 }

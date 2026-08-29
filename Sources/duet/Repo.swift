@@ -158,6 +158,12 @@ struct Manifest {
   /// section with no rows yet; the verb is a green no-op on both.
   let mocksBundle: String?
   let mockGenerators: [ParsedManifest.MockGenerator]
+  /// The zero-feature starting state (`ParsedManifest.featuresBlockEmpty`):
+  /// the `features:` block exists, every line in it parsed, and it declares
+  /// nothing yet. The lint passes on this shape; a verb whose subject is the
+  /// declared feature set reports the vacuous result and exits 0 instead of
+  /// failing to derive a lane.
+  let featuresBlockEmpty: Bool
   /// Repo root the relative paths resolve against (for per-feature lookups).
   let repoRoot: URL
 
@@ -273,8 +279,10 @@ struct Manifest {
       .sorted { $0.name < $1.name }
     // Either side may be empty — a single-source manifest declares one lane's
     // paths only (no `swift:` twins on the KMP flavor; no `kotlin:` paths on the
-    // Swift-only flavor) and the CLI runs the lanes the manifest derives. BOTH
-    // empty derives no lane at all, which no lane flag can repair — named here.
+    // Swift-only flavor) and the CLI runs the lanes the manifest derives.
+    // BOTH empty is legal in exactly one shape: the empty features block (the
+    // pre-first-feature state — every lane is vacuous and the verbs say so).
+    // A DECLARED feature deriving no lane at all is the error named here.
     // A lint-red manifest returns instead of throwing: the verbs' meta gate
     // renders the errors, which name the actual defect.
     let swiftRelatives = Set(features.compactMap(\.swiftPackageRelative)).sorted()
@@ -283,7 +291,10 @@ struct Manifest {
         let parts = feature.kotlinSource.split(separator: "/")
         return parts.count > 1 ? String(parts[0]) : nil
       }).first
-    guard !swiftRelatives.isEmpty || androidRelative != nil || !result.errors.isEmpty else {
+    guard
+      !swiftRelatives.isEmpty || androidRelative != nil || !result.errors.isEmpty
+        || result.parsed.featuresBlockEmpty
+    else {
       throw ManifestError.layoutUnderivable(
         "no feature declares a `swift:` or `kotlin:` source path — the manifest"
           + " derives no platform lane at all")
@@ -298,6 +309,7 @@ struct Manifest {
       replayRunnerRelative: result.parsed.scalars["replayRunner"],
       mocksBundle: result.parsed.mocksScalars["bundle"],
       mockGenerators: result.parsed.mockGenerators,
+      featuresBlockEmpty: result.parsed.featuresBlockEmpty,
       repoRoot: repo.root)
   }
 }

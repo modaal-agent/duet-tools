@@ -315,12 +315,15 @@ enum Lanes {
         extraEnv: gradleEnvironment(), logName: "kotlin")
     }
     // Lanes stream to their log files, not the console — say so before waiting,
-    // else a stalled lane is an undiagnosable blank screen.
+    // else a stalled lane is an undiagnosable blank screen. (A zero-feature
+    // manifest launches nothing — no dangling logs line.)
     if !options.json {
       var running: [String] = []
       for entry in swiftLaunches { running.append("swift[\(entry.package)] \(entry.launch.1.path)") }
       if let launch = kotlinLaunch { running.append("kotlin \(launch.1.path)") }
-      print("duet verify: lanes running — logs: \(running.joined(separator: " · "))")
+      if !running.isEmpty {
+        print("duet verify: lanes running — logs: \(running.joined(separator: " · "))")
+      }
     }
     for entry in swiftLaunches { swiftResults.append((entry.package, finish(entry.launch))) }
     if let launch = kotlinLaunch { kotlinResult = finish(launch) }
@@ -465,6 +468,11 @@ enum Lanes {
 
     let passedCount = reports.count - failed.count
     print("duet verify: \(passedCount)/\(reports.count) fixture report(s) passed")
+    if feature == nil, manifest.featuresBlockEmpty {
+      print(
+        "note: no features declared — nothing to replay;"
+          + " the lanes engage with the first manifest entry")
+    }
     if !missing.isEmpty {
       print("✗ missing fixture report(s) — lane ran but did not replay these:")
       for entry in missing { print("    \(entry)") }
@@ -581,6 +589,26 @@ enum Lanes {
         print("duet record: REFUSED — \(message)")
       }
       return 1
+    }
+    // The zero-feature starting state records nothing: the writers engage
+    // with the first manifest entry. Scoped runs stay strict (resolveFeature
+    // above throws on an unknown name), and a DAMAGED features block never
+    // takes this path — `featuresBlockEmpty` is false for it, so it falls
+    // through to the lane derivation and fails there as before.
+    if feature == nil, options.chain == nil, manifest.featuresBlockEmpty, manifest.chains.isEmpty {
+      if options.json {
+        emitJSON(
+          options.check
+            ? ["status": "passed", "stale": [], "metadataOnly": []]
+            : ["status": "passed", "regenerated": [], "metadataOnly": []])
+      } else {
+        let verdict =
+          options.check
+          ? "duet record --check: no features declared — nothing to drift"
+          : "duet record: no features declared — nothing to record"
+        print(verdict + "; the writers engage with the first manifest entry")
+      }
+      return 0
     }
     // A single-source (KMP-flavor) repo records through its only lane — the
     // Kotlin runner — without the caller having to say so; likewise a scoped

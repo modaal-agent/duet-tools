@@ -56,6 +56,23 @@ struct ParsedManifest {
   var topLevelErrors: [String] = []
   /// `presentation:` block parse errors (shape errors found while reading it).
   var ledgerParseErrors: [String] = []
+  /// Whether a `features:` section header appeared at all.
+  var featuresSectionSeen = false
+  /// Non-comment lines inside `features:` that matched no production
+  /// (trimmed). These separate the two zero-feature shapes: an EMPTY block —
+  /// the valid starting state before a repo's first feature — parses zero
+  /// features and leaves this empty; a DAMAGED block (a mis-indented entry, a
+  /// header missing its colon) also parses zero features but lands its lines
+  /// here, and stays an error.
+  var featuresUnparsedLines: [String] = []
+
+  /// The zero-feature starting state, distinguished from damage: the section
+  /// exists and every line in it parsed — there is simply nothing declared
+  /// yet. The meta-checks pass on this shape and the lanes engage with the
+  /// first entry.
+  var featuresBlockEmpty: Bool {
+    features.isEmpty && featuresSectionSeen && featuresUnparsedLines.isEmpty
+  }
 
   func feature(named name: String) -> FeatureEntry? { features[name] }
 }
@@ -115,6 +132,7 @@ enum ManifestParser {
         if s.hasSuffix(":") {
           let name = String(s.dropLast())
           section = name
+          if name == "features" { parsed.featuresSectionSeen = true }
           if !knownSections.contains(name) {
             parsed.topLevelErrors.append(
               "manifest.yaml: unknown top-level key '\(name)' (known: \(knownList))")
@@ -158,6 +176,11 @@ enum ManifestParser {
         let value = String(s[s.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
         parsed.features[feature]?.keys[key] = value
         inFixtures = false
+      } else {
+        // No production matched: the line is content the grammar does not
+        // place. Recorded so the meta-check can tell an EMPTY block (valid —
+        // nothing declared yet) from a DAMAGED one that parsed to nothing.
+        parsed.featuresUnparsedLines.append(s)
       }
     }
   }

@@ -75,6 +75,9 @@ enum ManifestLint {
     print(
       "lockstep-lint: OK (\(result.parsed.features.count) feature(s),"
         + " \(result.fixturesOnDisk) fixture(s)\(chainsNote)\(suffix)\(ledgerNote)\(mocksNote))")
+    if result.parsed.featuresBlockEmpty {
+      print("note: no features declared — the platform lanes engage with the first manifest entry")
+    }
     return 0
   }
 
@@ -118,7 +121,16 @@ enum ManifestLint {
   static func check(parsed: ParsedManifest, repo: Repo) -> ManifestLintResult {
     var errors: [String] = []
     errors += parsed.topLevelErrors
-    if parsed.features.isEmpty { errors.append("manifest.yaml: no features parsed") }
+    // Zero features parsed is two different states: the genuinely empty
+    // `features:` block is the valid pre-first-feature shape and passes (the
+    // lanes engage with the first entry); an absent section, or a block whose
+    // lines parsed to nothing, is damage and keeps the error.
+    if parsed.features.isEmpty, !parsed.featuresBlockEmpty {
+      errors.append("manifest.yaml: no features parsed")
+      for line in parsed.featuresUnparsedLines {
+        errors.append("manifest.yaml: unparseable features entry: '\(line)'")
+      }
+    }
     errors += parsed.ledgerParseErrors
     errors += presentationErrors(parsed: parsed)
     errors += mocksErrors(parsed: parsed, repo: repo)

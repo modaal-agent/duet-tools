@@ -32,6 +32,7 @@ final class LaneScopeTests: XCTestCase {
       swiftPackageDirs: [URL(fileURLWithPath: "/repo/src-ios/Subtrees/TrailLog")],
       androidDir: URL(fileURLWithPath: "/repo/src-kmp"),
       replayRunnerRelative: nil, mocksBundle: nil, mockGenerators: [],
+      featuresBlockEmpty: false,
       repoRoot: URL(fileURLWithPath: "/repo"))
   }
 
@@ -73,6 +74,7 @@ final class LaneScopeTests: XCTestCase {
       features: [], chains: [], lintOK: true, lintErrors: [],
       swiftPackageDirs: [], androidDir: URL(fileURLWithPath: "/repo/src-kmp"),
       replayRunnerRelative: nil, mocksBundle: nil, mockGenerators: [],
+      featuresBlockEmpty: false,
       repoRoot: URL(fileURLWithPath: "/repo"))
     // A Kotlin-shaped repo's day-0 state: nothing to replay, so the lane is
     // skipped. The family pick returned `test` here, which is `:app`'s.
@@ -160,6 +162,7 @@ final class LaneScopeTests: XCTestCase {
       features: [first, second], chains: [], lintOK: true, lintErrors: [],
       swiftPackageDirs: [], androidDir: URL(fileURLWithPath: "/repo/src-kmp"),
       replayRunnerRelative: nil, mocksBundle: nil, mockGenerators: [],
+      featuresBlockEmpty: false,
       repoRoot: URL(fileURLWithPath: "/repo"))
     XCTAssertEqual(manifest.unscopedGradleTasks, [":subtrees:capture:logic:jvmTest"])
   }

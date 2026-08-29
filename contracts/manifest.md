@@ -18,7 +18,13 @@ accept it.
 - **Line-oriented.** Comments are stripped at the first `#` (anywhere in the
   line); blank lines are ignored; indentation steps are 2 spaces.
 - **Top level** — exactly these forms:
-  - `features:` — a map of feature entries (below).
+  - `features:` — a map of feature entries (below). An empty block — the
+    section present, no entries yet — is the valid pre-first-feature state:
+    the meta-checks pass on it (with a note) and every lane is vacuous until
+    the first entry lands. A block whose lines parse to no entry is an
+    error, and each unplaced line is named
+    (`manifest.yaml: unparseable features entry: '<line>'`); an absent
+    `features:` section is an error too.
   - `chains:` — a list of `- <fixture>` items at indent 2: chain fixtures,
     gated but owned by no single feature.
   - `presentation:` — the ledger (below).
