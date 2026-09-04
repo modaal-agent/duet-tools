@@ -4,8 +4,18 @@
 
 The open `duet` CLI — the verification toolchain for
 [Duet](https://github.com/modaal-agent/duet) repos: dual-platform fixture
-verification, scenario-driven recording, the replay-protocol lane, and the
-Swift ceremony killer's codegen verb.
+verification, scenario-driven recording, the replay-protocol lane, the
+manifest and declaration checks (`lint`, `doctor`), the mutation drill, and
+the codegen verbs (sum coders, generated mocks, design tokens). Current
+release: **0.24.0** — [CHANGELOG.md](CHANGELOG.md) states what each release
+carries; a new or changed gate is a minor, and pre-1.0 minors are breaking by
+family convention.
+
+The CLI is one executable with no runtime dependencies: an adopter repo runs
+it as the released binary through its `tools/duet` wrapper, pinned in
+`parity/duet-tools.ref`. Everything a verb does is derived from the repo's
+own `parity/manifest.yaml` — the grammar is
+[contracts/manifest.md](contracts/manifest.md) and this CLI is its one parser.
 
 The CI matrix (each job writes its toolchain and verdict to the run's job
 summary; both lanes resolve `duet` from its published tag):
@@ -14,6 +24,7 @@ summary; both lanes resolve `duet` from its published tag):
 | --- | --- | --- |
 | `swift` · macos-26 | Xcode 26.6 (Swift 6.3.3) | the GA floor — the adopter toolchain |
 | `swift` · xcode-27 | Xcode 27 beta (Swift 6.4) | the newest proven line |
+| `release` (tag push) | macos-26 | builds `duet-macos-arm64.zip` + its `.sha256` sidecar and attaches both to the tag's GitHub release; refuses a tag that disagrees with the version constant |
 
 ## Install
 
@@ -21,13 +32,13 @@ Each release publishes a prebuilt binary for macOS on Apple silicon
 (macOS 13+) beside a checksum file:
 
 ```sh
-TAG=0.12.0   # or the version the adopter repo is pinned to
+TAG=0.24.0   # the current release, or the tag in the adopter repo's parity/duet-tools.ref
 BASE=https://github.com/modaal-agent/duet-tools/releases/download/$TAG
 curl -fsSLO $BASE/duet-macos-arm64.zip
 curl -fsSLO $BASE/duet-macos-arm64.zip.sha256
 shasum -a 256 -c duet-macos-arm64.zip.sha256
 unzip duet-macos-arm64.zip     # a bare 'duet' executable
-./duet version                 # expect: duet 0.12.0
+./duet version                 # expect: duet 0.24.0
 ```
 
 Put it on `PATH`, or point `DUET_BIN` at it — an adopter repo's `tools/duet`
@@ -54,7 +65,8 @@ apps and test lanes never see it.
 ## Verbs
 
 ```sh
-swift run duet help
+swift run duet help      # the full usage text; every verb also takes --json
+duet version             # the toolchain version, matching the release tag; works outside a repo
 ```
 
 - `duet verify [--feature <name>] [--swift-only|--kotlin-only]` — meta-checks
@@ -126,7 +138,9 @@ swift run duet help
   summaries, so a zero line is normal on a green run. Works outside a parity
   repo (it reads a log, not a manifest).
 - `duet explain` / `duet materialize <fixture>#<step> --platform <p>` — render
-  the last run's failures; emit a standalone failing unit test for one step.
+  the last run's failures from `parity/.runs` (no re-run); emit a standalone
+  failing unit test for one step. `duet materialize --clean` deletes every
+  generated `Materialized_*` test.
 - `duet protocol-run [--platform swift|kotlin] [--runner <path>]` — byte-gate
   the full corpus through any conforming replay-protocol runner
   (flavor-neutral). Builds the repo's own runner itself: the Swift
@@ -231,6 +245,36 @@ cancel surface; results carry `structuredContent` alongside the text report.
 `CanonicalSumEmission` is exported for
 [duet-macros](https://github.com/modaal-agent/duet-macros): both ceremony-killer
 vehicles assemble from the one emission rule-set.
+
+## Contracts
+
+Two grammars are fixed here, in `contracts/`, because this CLI is the one
+parser of both files:
+
+| contract | fixes |
+| --- | --- |
+| [`manifest.md`](contracts/manifest.md) | `parity/manifest.yaml` — the features, chains, presentation ledger and `mocks:` generator rows a repo declares, and the plan (`duet lint --json`) the toolchain derives from it |
+| [`design-tokens.md`](contracts/design-tokens.md) | `parity/design-tokens.yaml` — the semantic colour, type and gradient vocabularies and the generated shape `duet design-tokens` writes per language |
+
+The framework's own contracts (kernel, serialization, replay protocol,
+presentation, mock dialect) live in the
+[`duet`](https://github.com/modaal-agent/duet/tree/main/contracts) repo.
+
+## Layout
+
+```
+Package.swift                 the manifest at the repo root; resolves duet at an exact tag,
+                              swift-syntax (the sum-coder codegen) and Yams (the manifest parser)
+Sources/duet/                 the executable — one file per verb (Doctor, Lanes, Mocks, Mutate,
+                              DesignTokensVerb, …), the manifest parser and lints, HostLane,
+                              Mcp (the stdio server), Version
+Sources/CanonicalSumEmission/ the one emission rule-set both ceremony-killer vehicles use
+Sources/CanonicalSumGen/      the codegen vehicle over that rule-set (`duet canonical-sum`)
+Tests/DuetCLITests/           the verbs' suites over fixture repos under Tests/DuetCLITests/Resources
+Tests/CanonicalSumGenTests/   the golden expansion the macro repo's lockstep test pins too
+contracts/                    manifest.md · design-tokens.md
+.github/workflows/            ci.yml (the two Swift lanes) · release.yml (the tag-triggered binary)
+```
 
 ## License
 
