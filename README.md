@@ -7,7 +7,7 @@ The open `duet` CLI — the verification toolchain for
 verification, scenario-driven recording, the replay-protocol lane, the
 manifest and declaration checks (`lint`, `doctor`), the mutation drill, and
 the codegen verbs (sum coders, generated mocks, design tokens). Current
-release: **0.24.0** — [CHANGELOG.md](CHANGELOG.md) states what each release
+release: **0.25.0** — [CHANGELOG.md](CHANGELOG.md) states what each release
 carries; a new or changed gate is a minor, and pre-1.0 minors are breaking by
 family convention.
 
@@ -155,7 +155,9 @@ duet version             # the toolchain version, matching the release tag; work
   the pinned swift-sourcery-templates release bundle — one checksum-verified
   download carrying engine + templates + the `mock-templates` CLI. `--check`
   validates each file's fingerprint block instead: inputs re-hashed at the
-  manifest's pins, no engine run, no template compile, kilobytes of download.
+  manifest's pins, the block's recorded `template=`/`args=` checked against
+  the row's own `template:` and `args:`, no engine run, no template compile,
+  kilobytes of download.
   Scan roots come from a row's `sources:` plus the roots derived from its
   `package:` manifest (path dependencies + the Duet family at exact pins,
   duet-services per linked product); rows run producers-first, derived from

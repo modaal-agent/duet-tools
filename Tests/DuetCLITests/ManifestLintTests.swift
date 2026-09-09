@@ -434,7 +434,7 @@ final class ManifestLintTests: XCTestCase {
 
   private let goldenMocks = """
     mocks:
-      bundle: 0.6.0
+      bundle: 0.7.0
       generators:
         counter_mocks:
           output: src-ios/Subtrees/Counter/CounterFeature/Tests/CounterFeatureTests/Generated/CounterMocks.swift
@@ -452,28 +452,45 @@ final class ManifestLintTests: XCTestCase {
     XCTAssertEqual(result.errors, [])
     let plan = ManifestLint.plan(of: result)
     let mocks = try XCTUnwrap(plan["mocks"] as? [String: Any])
-    XCTAssertEqual(mocks["bundle"] as? String, "0.6.0")
+    XCTAssertEqual(mocks["bundle"] as? String, "0.7.0")
     let generators = try XCTUnwrap(mocks["generators"] as? [String: Any])
     let row = try XCTUnwrap(generators["counter_mocks"] as? [String: Any])
     XCTAssertEqual(row["template"] as? String, "Mocks.swifttemplate")
     XCTAssertEqual(row["args"] as? [String], ["import=Foundation"])
 
     let manifest = try Manifest.load(repo: repo)
-    XCTAssertEqual(manifest.mocksBundle, "0.6.0")
+    XCTAssertEqual(manifest.mocksBundle, "0.7.0")
     XCTAssertEqual(manifest.mockGenerators.map(\.name), ["counter_mocks"])
   }
 
   func testMocksRowsWithoutBundleTagAreNamed() throws {
     let repo = try makeTree("mini-swift")
     try appendManifest(repo, goldenMocks)
-    try rewrite(repo, "parity/manifest.yaml", "  bundle: 0.6.0\n", "")
+    try rewrite(repo, "parity/manifest.yaml", "  bundle: 0.7.0\n", "")
     try assertError(repo, containing: "[mocks] generator rows declared but no bundle: tag")
+  }
+
+  /// The floor is a lint error, not an unknown-argument failure part way
+  /// through a `--check` run under advice that does not apply.
+  func testMocksBundleBelowTheFloorIsNamed() throws {
+    let repo = try makeTree("mini-swift")
+    try appendManifest(repo, goldenMocks)
+    try rewrite(repo, "parity/manifest.yaml", "bundle: 0.7.0", "bundle: 0.6.2")
+    try assertError(repo, containing: "[mocks] bundle: 0.6.2 is below the 0.7.0 floor")
+  }
+
+  /// A newer bundle than the floor is the ordinary case and stays green.
+  func testMocksBundleAboveTheFloorIsGreen() throws {
+    let repo = try makeTree("mini-swift")
+    try appendManifest(repo, goldenMocks)
+    try rewrite(repo, "parity/manifest.yaml", "bundle: 0.7.0", "bundle: 0.10.1")
+    XCTAssertEqual(try ManifestLint.lint(repo: repo).errors, [])
   }
 
   func testMocksBundleTagFormIsChecked() throws {
     let repo = try makeTree("mini-swift")
     try appendManifest(repo, goldenMocks)
-    try rewrite(repo, "parity/manifest.yaml", "bundle: 0.6.0", "bundle: main")
+    try rewrite(repo, "parity/manifest.yaml", "bundle: 0.7.0", "bundle: main")
     try assertError(repo, containing: "[mocks] bundle: expected a swift-sourcery-templates release tag")
   }
 
@@ -499,7 +516,7 @@ final class ManifestLintTests: XCTestCase {
       repo,
       """
       mocks:
-        bundle: 0.6.0
+        bundle: 0.7.0
         generators:
           rootless:
             output: src-ios/Generated/X.swift
@@ -522,7 +539,7 @@ final class ManifestLintTests: XCTestCase {
       repo,
       """
       mocks:
-        bundle: 0.6.0
+        bundle: 0.7.0
         generators:
           derived:
             output: src-ios/Generated/X.swift

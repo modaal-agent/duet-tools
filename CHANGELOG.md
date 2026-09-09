@@ -1,5 +1,76 @@
 # Changelog
 
+## 0.25.0 — 2026-09-09
+
+### Changed — `duet mocks --check` reads the row it is checking against
+
+The check branch passes each generator row's `template:` and one `--args`
+per `args:` entry to `mock-templates validate`, which the generate branch
+already passes to `mock-templates generate`. The bundle's CLI rebuilds the
+`template=… args=…` description from them and fails when it differs from the
+one the file's fingerprint block records.
+
+Those two keys are the generation inputs the block records and the check did
+not cover. Everything else it verifies against the world — the recorded input
+hashes against the files, the body hash against the body, the bundle tag
+against the manifest's `bundle:` pin — while the config line was verified
+against its own SHA-256 alone. A row whose `template:` or `args:` an author
+edits without regenerating therefore validated green over a file that no
+longer matched it.
+
+A row now red under `--check` needs one `tools/duet mocks` run and a commit
+of the result. A tree whose rows and files agree stays green.
+
+### Changed — a `mocks:` row's list keys refuse an inline value
+
+`sources:` and `args:` take their items one `- item` per line below the key,
+which is the grammar `contracts/manifest.md` states. A value on the key's own
+line is now a named error:
+
+```
+[mocks.counter_mocks] args: expected one '- item' per line below it or [],
+got '[testable=Counter, import=Foundation]'
+```
+
+`[]` is excepted — it spells the empty list, as it does in the presentation
+ledger.
+
+`duet lint` reported `status: ok` for such a row and stored the line as a row
+scalar, so the row's `args` were empty: the row declared two arguments to
+anyone reading it and `duet mocks` generated with none, producing a body
+missing every `import=` the author wrote.
+
+### Changed — `mocks: bundle:` has a floor, and lint names it
+
+A `mocks:` section declaring rows pins 0.7.0 or later, and a lower tag is a
+lint error:
+
+```
+[mocks] bundle: 0.6.2 is below the 0.7.0 floor — `--check` passes each row's
+template: and args: to the bundle's mock-templates validate, whose flags for
+them arrive in 0.7.0
+```
+
+The floor is checked where the manifest is read, so it reports once with the
+tag to raise. An unchecked one surfaces as `Unknown option '--template'` once
+per row, part way through a run, under advice to regenerate — which does not
+fix it.
+
+### Adopting
+
+**`mocks: bundle:` moves to 0.7.0 or later**, in the same commit as
+`parity/duet-tools.ref`.
+
+A manifest carrying the inline list form turns `duet lint` red. The fix is
+one edit per row — the block form:
+
+```yaml
+      args:
+        - testable=Counter
+        - import=Foundation
+```
+
+
 ## 0.24.0 — 2026-08-29
 
 ### Changed — the empty features block is a valid starting state

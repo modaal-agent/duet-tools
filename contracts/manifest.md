@@ -99,7 +99,7 @@ job.
 
 ```yaml
 mocks:
-  bundle: 0.6.1           # the swift-sourcery-templates release tag
+  bundle: 0.7.0           # the swift-sourcery-templates release tag
   generators:
     <name>:               # indent 4; one row per generated file
       output: <path>      # indent 6 scalars — the committed file, repo-relative
@@ -141,17 +141,29 @@ mocks:
 - `args:` — `key=value` pairs passed to the template (`import=…`,
   `testable=…`). Unknown per-row keys are accepted and carried into the
   plan, like feature entries.
+- `sources:` and `args:` are the row's list keys, and each takes its items
+  one `- item` per line below it. An inline value on the key's own line is a
+  named error, `[]` excepted — it spells the empty list, as it does in the
+  presentation ledger. A row writing `args: [a, b]` declares two args to a
+  reader and generates with none.
+- `--check` recomputes the fingerprint block's `template=`/`args=`
+  description from the row's `template:` and `args:` and fails on a
+  difference, so a row edited without a regeneration is red over the file it
+  no longer matches. One `duet mocks` makes it green.
 - At generation, rows run producers-first — a row whose resolved roots
   contain another row's output runs after it — derived from the roots at run
   time; declaration order is the tiebreak, and rows whose roots contain each
   other's outputs are a named error.
 - A row whose scan matches no annotated declaration still generates:
-  template bundles from **0.6.2** render one marker comment under the header
-  instead of an empty file, so the committed output exists — and `--check`
-  validates it — before the row's first annotation. Older bundles write
-  nothing on an empty render and the row fails generation on the missing
-  output, so a row registered ahead of its first annotation needs the
-  `bundle:` pin at 0.6.2 or later.
+  the templates render one marker comment under the header instead of an
+  empty file, so the committed output exists — and `--check` validates it —
+  before the row's first annotation.
+- **`bundle:` is 0.7.0 or later.** `--check` passes each row's `template:`
+  and `args:` to the bundle's `mock-templates validate`, whose flags for them
+  arrive in 0.7.0; an earlier bundle fails the run on the unknown argument.
+  0.7.0 is also the floor for the marker render above — earlier bundles write
+  nothing on an empty render, and a row registered ahead of its first
+  annotation then fails generation on the missing output.
 
 ## The checks (`duet lint`, and every verb's manifest load)
 

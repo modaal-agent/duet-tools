@@ -408,6 +408,20 @@ enum ManifestLint {
     return nil
   }
 
+  /// The oldest swift-sourcery-templates release a `mocks:` section may pin
+  /// (contracts/manifest.md). Raised when the verb starts passing the bundle
+  /// a flag an older one does not take.
+  static let minimumMocksBundle = "0.7.0"
+
+  /// `MAJOR.MINOR.PATCH` as a sortable triple, or nil for anything else — the
+  /// bundle-tag form check reports a malformed tag on its own.
+  static func semver(_ tag: String) -> (Int, Int, Int)? {
+    let parts = tag.split(separator: ".", omittingEmptySubsequences: false)
+      .compactMap { Int($0) }
+    guard parts.count == 3 else { return nil }
+    return (parts[0], parts[1], parts[2])
+  }
+
   /// The `mocks:` section shape — `duet mocks`' config. Shape only: lint
   /// stays offline, so the bundle download and the generated files' currency
   /// are the verb's own job (`duet mocks --check`), never lint's. What IS
@@ -433,6 +447,20 @@ enum ManifestLint {
       errors.append(
         "[mocks] generator rows declared but no bundle: tag — the rows pin the"
           + " swift-sourcery-templates release they generate with")
+    }
+    // The floor is named here rather than met mid-run: `--check` passes each
+    // row's `template:` and `args:` to the bundle's `mock-templates validate`,
+    // and a bundle without those flags fails every row on an unknown argument
+    // under advice ("regenerate") that does not apply.
+    if let bundle, let pinned = semver(bundle), let floor = semver(minimumMocksBundle),
+      pinned < floor,
+      !parsed.mockGenerators.isEmpty
+    {
+      errors.append(
+        "[mocks] bundle: \(bundle) is below the \(minimumMocksBundle) floor —"
+          + " `--check` passes each row's template: and args: to the bundle's"
+          + " mock-templates validate, whose flags for them arrive in"
+          + " \(minimumMocksBundle)")
     }
     var seen = Set<String>()
     for generator in parsed.mockGenerators {
