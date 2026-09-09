@@ -83,6 +83,10 @@ enum ManifestParser {
   /// manifest never meets an older parser that doesn't know its keys).
   static let knownSections: Set<String> = ["features", "chains", "presentation", "mocks"]
   static let knownScalars: Set<String> = ["replayRunner"]
+  /// `mocks:` generator-row keys whose value is a list of lines below them
+  /// (contracts/manifest.md). Named here because the row parser has to refuse
+  /// an inline value on one — see `parseMocks`.
+  static let rowListKeys: Set<String> = ["sources", "args"]
 
   static func parse(_ text: String) -> ParsedManifest {
     var parsed = ParsedManifest()
@@ -300,14 +304,26 @@ enum ManifestParser {
         continue
       }
       if line.indent == 6 {
-        if s == "sources:" || s == "args:" {
-          listKey = String(s.dropLast())
-          continue
-        }
         listKey = nil
         if let colon = s.firstIndex(of: ":") {
           let key = String(s[..<colon]).trimmingCharacters(in: .whitespaces)
           let value = String(s[s.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+          if rowListKeys.contains(key) {
+            // A list key takes its items on the lines below it. An inline
+            // value on the same line is refused here rather than stored as a
+            // row scalar: `args: [a, b]` reads as a declaration of two args
+            // and generates with none, so the row and the file it produces
+            // disagree with no line to point at. `[]` is the empty list, the
+            // same spelling the presentation ledger takes.
+            if value.isEmpty {
+              listKey = key
+            } else if value != "[]" {
+              parsed.mocksParseErrors.append(
+                "[mocks.\(parsed.mockGenerators[index].name)] \(key): expected one '- item'"
+                  + " per line below it or [], got \(pythonRepr(value))")
+            }
+            continue
+          }
           parsed.mockGenerators[index].keys[key] = value
         } else {
           parsed.mocksParseErrors.append(

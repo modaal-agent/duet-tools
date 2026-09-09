@@ -401,6 +401,84 @@ final class MocksTests: XCTestCase {
     }
   }
 
+  // MARK: - The per-row argument lists
+
+  private func row(
+    name: String = "counter_mocks", template: String? = "Mocks.swifttemplate",
+    args: [String] = ["testable=Counter", "import=Foundation"]
+  ) -> ParsedManifest.MockGenerator {
+    var generator = ParsedManifest.MockGenerator(name: name)
+    generator.keys["output"] = "Generated/CounterMocks.swift"
+    if let template { generator.keys["template"] = template }
+    generator.args = args
+    return generator
+  }
+
+  private func validateArguments(
+    _ generator: ParsedManifest.MockGenerator
+  ) -> [String] {
+    Mocks.validateArguments(
+      cli: URL(fileURLWithPath: "/bin/mock-templates"), generator: generator,
+      roots: [root.appendingPathComponent("src-ios/Sources/Counter")],
+      output: root.appendingPathComponent("Generated/CounterMocks.swift"),
+      repoRoot: root, tag: "0.7.0")
+  }
+
+  /// The check branch passes the two keys the block's `config:` line is built
+  /// from, so `validate` recomputes that line and a row edited without a
+  /// regeneration is red.
+  func testCheckArgumentsCarryTheRowsTemplateAndArgs() {
+    let arguments = validateArguments(row())
+    XCTAssertEqual(arguments.first, "/bin/mock-templates")
+    XCTAssertEqual(arguments[1], "validate")
+    guard let index = arguments.firstIndex(of: "--template") else {
+      return XCTFail("no --template in \(arguments)")
+    }
+    XCTAssertEqual(arguments[index + 1], "Mocks.swifttemplate")
+    XCTAssertEqual(
+      pairs(arguments, flag: "--args"), ["testable=Counter", "import=Foundation"])
+    XCTAssertEqual(pairs(arguments, flag: "--expect-bundle"), ["0.7.0"])
+  }
+
+  /// A row declaring no `args:` passes none — the `args=` its block records.
+  func testARowWithNoArgsPassesNone() {
+    let arguments = validateArguments(row(args: []))
+    XCTAssertTrue(arguments.contains("--template"))
+    XCTAssertTrue(pairs(arguments, flag: "--args").isEmpty, "got \(arguments)")
+  }
+
+  /// `--args` without `--template` is a usage error in the CLI, so a row
+  /// declaring no template — a shape `duet lint` fails before a run reaches
+  /// here — contributes neither flag rather than an unusable pair.
+  func testARowWithNoTemplateContributesNeitherFlag() {
+    let arguments = validateArguments(row(template: nil))
+    XCTAssertFalse(arguments.contains("--template"), "got \(arguments)")
+    XCTAssertTrue(pairs(arguments, flag: "--args").isEmpty, "got \(arguments)")
+  }
+
+  /// Both branches read the same two keys: whatever the generate branch
+  /// generates with is what the check branch checks against.
+  func testBothBranchesReadTheSameTwoRowKeys() {
+    let generator = row()
+    let generate = Mocks.generateArguments(
+      cli: URL(fileURLWithPath: "/bin/mock-templates"), generator: generator,
+      roots: [root.appendingPathComponent("src-ios/Sources/Counter")],
+      output: root.appendingPathComponent("Generated/CounterMocks.swift"),
+      repoRoot: root, tag: "0.7.0",
+      sourcery: URL(fileURLWithPath: "/bin/sourcery"),
+      templatesDir: URL(fileURLWithPath: "/bundle/templates"))
+    XCTAssertEqual(pairs(generate, flag: "--args"), pairs(validateArguments(generator), flag: "--args"))
+    // generate names the template by path inside the bundle; validate by the
+    // row's own value. The CLI records the basename, so the two are one config.
+    XCTAssertEqual(pairs(generate, flag: "--templates"), ["/bundle/templates/Mocks.swifttemplate"])
+    XCTAssertEqual(pairs(validateArguments(generator), flag: "--template"), ["Mocks.swifttemplate"])
+  }
+
+  private func pairs(_ arguments: [String], flag: String) -> [String] {
+    arguments.indices.filter { arguments[$0] == flag && $0 + 1 < arguments.count }
+      .map { arguments[$0 + 1] }
+  }
+
   func testExactTagAnswersNilForANonRepository() throws {
     XCTAssertNil(Mocks.exactTag(at: root.appendingPathComponent("nowhere"), repo: repo))
     try FileManager.default.createDirectory(

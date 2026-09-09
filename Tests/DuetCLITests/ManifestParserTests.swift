@@ -201,6 +201,60 @@ final class ManifestParserTests: XCTestCase {
     XCTAssertFalse(absent.hasMocksSection)
   }
 
+  func testInlineValueOnARowListKeyIsANamedError() {
+    // The flow form reads as a declaration of two args and generates with
+    // none: the row and the file disagree, with no line to point at.
+    let parsed = ManifestParser.parse(
+      """
+      mocks:
+        bundle: 0.6.0
+        generators:
+          counter_mocks:
+            output: Generated/Mocks.swift
+            template: Mocks.swifttemplate
+            args: [testable=Counter, import=Foundation]
+      """)
+    XCTAssertEqual(
+      parsed.mocksParseErrors,
+      ["[mocks.counter_mocks] args: expected one '- item' per line below it or [],"
+        + " got '[testable=Counter, import=Foundation]'"])
+    XCTAssertTrue(parsed.mockGenerators[0].args.isEmpty)
+    XCTAssertNil(parsed.mockGenerators[0].keys["args"])
+  }
+
+  func testAScalarOnARowListKeyIsTheSameError() {
+    let parsed = ManifestParser.parse(
+      """
+      mocks:
+        generators:
+          counter_mocks:
+            sources: src-ios/Sources/Counter
+      """)
+    XCTAssertEqual(
+      parsed.mocksParseErrors,
+      ["[mocks.counter_mocks] sources: expected one '- item' per line below it or [],"
+        + " got 'src-ios/Sources/Counter'"])
+    XCTAssertTrue(parsed.mockGenerators[0].sources.isEmpty)
+  }
+
+  func testEmptyListSpellingsOnARowListKeyParseToNothing() {
+    // `key:` alone takes the lines below it; `key: []` is the empty list, the
+    // spelling the presentation ledger already accepts. Neither is an error.
+    let parsed = ManifestParser.parse(
+      """
+      mocks:
+        generators:
+          counter_mocks:
+            output: Generated/Mocks.swift
+            args: []
+            sources:
+              - src-ios/Sources/Counter
+      """)
+    XCTAssertTrue(parsed.mocksParseErrors.isEmpty, "got \(parsed.mocksParseErrors)")
+    XCTAssertTrue(parsed.mockGenerators[0].args.isEmpty)
+    XCTAssertEqual(parsed.mockGenerators[0].sources, ["src-ios/Sources/Counter"])
+  }
+
   func testMocksLineOutsideGeneratorsIsAnError() {
     let parsed = ManifestParser.parse(
       """

@@ -17,7 +17,8 @@ import Foundation
 /// toolchain binary itself.
 ///
 /// Provisioning is mode-sized. `--check` needs the CLI alone (kilobytes —
-/// validation re-hashes the recorded inputs and the output body; no Sourcery
+/// validation re-hashes the recorded inputs and the output body and rebuilds
+/// the config description from the row's `template:` and `args:`; no Sourcery
 /// run, no template compile), so it downloads the standalone CLI zip unless a
 /// full bundle is already cached. Regeneration downloads the full artifact
 /// bundle — engine + templates + CLI, pinned together by one tag, so there is
@@ -122,21 +123,16 @@ enum Mocks {
     for (generator, roots, output) in try producersFirst(resolved) {
       var arguments: [String]
       if options.check {
-        arguments = [tools.mockTemplates.path, "validate", "--file", output.path,
-                     "--root", repo.root.path]
-        for root in roots { arguments += ["--sources", root.path] }
-        arguments += ["--expect-bundle", tag]
+        arguments = validateArguments(
+          cli: tools.mockTemplates, generator: generator, roots: roots, output: output,
+          repoRoot: repo.root, tag: tag)
       } else {
         try FileManager.default.createDirectory(
           at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
-        arguments = [tools.mockTemplates.path, "generate"]
-        for root in roots { arguments += ["--sources", root.path] }
-        arguments += ["--sourcery", tools.sourcery!.path,
-                      "--templates", tools.templatesDir!.appendingPathComponent(
-                        generator.keys["template"] ?? "").path]
-        for arg in generator.args { arguments += ["--args", arg] }
-        arguments += ["--bundle-version", tag, "--root", repo.root.path,
-                      "--output", output.path]
+        arguments = generateArguments(
+          cli: tools.mockTemplates, generator: generator, roots: roots, output: output,
+          repoRoot: repo.root, tag: tag, sourcery: tools.sourcery!,
+          templatesDir: tools.templatesDir!)
       }
       let result = Lanes.finish(try Lanes.launch(
         arguments, cwd: repo.root, logName: "mocks-\(generator.name)"))
@@ -179,6 +175,57 @@ enum Mocks {
       }
     }
     return failed ? 1 : 0
+  }
+
+  // MARK: - The per-row argument lists
+
+  /// `mock-templates generate` for one row: the resolved scan roots, the
+  /// engine and the template the row's `template:` names inside the bundle,
+  /// one `--args` per `args:` entry, and the bundle tag the block records.
+  static func generateArguments(
+    cli: URL, generator: ParsedManifest.MockGenerator, roots: [URL], output: URL,
+    repoRoot: URL, tag: String, sourcery: URL, templatesDir: URL
+  ) -> [String] {
+    var arguments = [cli.path, "generate"]
+    for root in roots { arguments += ["--sources", root.path] }
+    arguments += [
+      "--sourcery", sourcery.path,
+      "--templates", templatesDir.appendingPathComponent(generator.keys["template"] ?? "").path,
+    ]
+    for arg in generator.args { arguments += ["--args", arg] }
+    arguments += ["--bundle-version", tag, "--root", repoRoot.path, "--output", output.path]
+    return arguments
+  }
+
+  /// `mock-templates validate` for one row, with no engine run: the file, the
+  /// resolved scan roots, the expected bundle tag, and — the pair that makes
+  /// the check read the row it is checking against — the row's `template:`
+  /// and one `--args` per `args:` entry, the same two keys the generate list
+  /// above builds from.
+  ///
+  /// Those two are the generation inputs the block records and the recorded
+  /// hashes do not cover: the CLI recomputes the block's `config:`
+  /// description from them and fails on a difference, so a row whose
+  /// `template:` or `args:` is edited without a regeneration is red here
+  /// instead of green over a file that no longer matches it. One
+  /// `tools/duet mocks` makes it green.
+  ///
+  /// A row declaring no `args:` passes none, which is the `args=` the block
+  /// records for it. `template:` is required — lint fails a row without it,
+  /// and every verb loads the manifest behind that check — so the guard here
+  /// is for the argument list's shape, not a shape a run reaches.
+  static func validateArguments(
+    cli: URL, generator: ParsedManifest.MockGenerator, roots: [URL], output: URL,
+    repoRoot: URL, tag: String
+  ) -> [String] {
+    var arguments = [cli.path, "validate", "--file", output.path, "--root", repoRoot.path]
+    for root in roots { arguments += ["--sources", root.path] }
+    arguments += ["--expect-bundle", tag]
+    if let template = generator.keys["template"], !template.isEmpty {
+      arguments += ["--template", template]
+      for arg in generator.args { arguments += ["--args", arg] }
+    }
+    return arguments
   }
 
   // MARK: - Run order
