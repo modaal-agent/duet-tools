@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.26.0 — 2026-09-17
+
+### Changed — the host-lane check resolves a root whose `Package.resolved` is missing
+
+Check 1 of the host-lane rule reads a Swift host-lane root's resolved set
+from its `Package.resolved`. A root whose manifest tree declares a
+`.package(url:` and has no lockfile is now resolved in place first —
+`swift package resolve` in the root, output to a log file under the
+temporary directory, one `host-lane: resolved …` line printed — and the
+check then reads the file that wrote. A root whose tree declares only
+`.package(path:` dependencies still passes without a lockfile and without a
+resolve. A resolve that exits non-zero is a finding naming its exit code and
+log; a resolve that writes no lockfile is a finding too.
+
+A lockfile is a build product that any resolution of the root writes, and a
+fresh checkout of a repository that does not commit them carries none, so
+the earlier finding on that state ("declares remote dependencies but has no
+committed Package.resolved — run `swift package resolve` there and commit the
+lock") asked for a file the check can produce itself. Repositories that commit
+their lockfiles are unaffected: a present file is read as before.
+
+### Removed — `doctor`'s third row and the "tests that have never run" line
+
+`duet doctor` no longer reports a Swift package outside the manifest that
+declares a test target, names a remote dependency and has no
+`Package.resolved`; `duet lanes` and `duet verify` no longer print the
+"tests that have never run anywhere" line, and the `--json` reports drop the
+`swiftPackagesWithUnrunTests` key under `uncovered` / `notCovered`. The row
+read the lockfile's absence as "nothing has ever resolved this package as a
+root". A lockfile is written by any resolution, kept or not, and a repository
+that does not commit lockfiles has none on every checkout, so the absence
+says nothing about whether the tests ran. The receipt for a package's tests
+is the lane that runs them; `duet lanes` still lists every Swift package the
+manifest does not claim under `uncovered.swiftPackages`.
+
 ## 0.25.0 — 2026-09-09
 
 ### Changed — `duet mocks --check` reads the row it is checking against

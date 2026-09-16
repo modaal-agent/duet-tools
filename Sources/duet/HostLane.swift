@@ -24,11 +24,12 @@ import Foundation
 /// Three checks:
 ///  1. Every Swift host-lane root's `Package.resolved` pins the Duet family
 ///     only (a local-path family dependency resolves nothing remotely — a repo
-///     with no remote deps legitimately has no lockfile). With no lockfile the
-///     manifest TREE is the receipt instead: the root's manifest and every
-///     `.package(path:` child, recursed, must declare no `.package(url:` —
-///     this check runs before the lanes, so on a fresh checkout a remote dep
-///     behind a path dep has no lockfile to show up in.
+///     with no remote deps legitimately has no lockfile). A root whose manifest
+///     tree — the root's manifest and every `.package(path:` child, recursed —
+///     declares a `.package(url:` and has no lockfile is resolved here first
+///     (`swift package resolve` in the root), because this check runs before
+///     the lanes and a fresh checkout carries no lockfile; the check then reads
+///     the file that wrote.
 ///  2. Every gated Kotlin module declares the family plugin/dependency
 ///     allowlist only, recursing through `project(...)` edges — Gradle resolves
 ///     per-configuration so the SwiftPM leak class cannot arise the same way,
@@ -123,23 +124,36 @@ enum HostLane {
 
   // MARK: - 1. Swift host-root lockfiles
 
-  private static func checkSwiftRootLock(_ root: String, repo: Repo, errors: inout [String]) {
+  static func checkSwiftRootLock(_ root: String, repo: Repo, errors: inout [String]) {
     let rootURL = repo.root.appendingPathComponent(root)
     let lockURL = rootURL.appendingPathComponent("Package.resolved")
-    guard FileManager.default.fileExists(atPath: lockURL.path) else {
+    if !FileManager.default.fileExists(atPath: lockURL.path) {
       // No lockfile is legal exactly when nothing resolves remotely (a
-      // manifest whose dependencies are all local paths). A manifest that declares a
-      // remote dependency without a committed lock is the gap the check
-      // exists for — the resolved set IS the receipt. The sweep recurses
+      // manifest whose dependencies are all local paths). The sweep recurses
       // through `.package(path:` edges — the mirror of the Gradle
-      // `project(...)` recursion — because path deps never enter a lockfile
-      // and this check runs BEFORE the lanes: a remote artifact declared
-      // behind a path dep would otherwise stay invisible until a resolution
-      // materializes the root's lockfile, which a fresh checkout (every CI
-      // run) never has.
+      // `project(...)` recursion — because path deps never enter a lockfile.
       var seen: Set<String> = []
-      checkManifestTree(rootURL, root: root, repo: repo, via: [], seen: &seen, errors: &errors)
-      return
+      var remote: [[String]] = []
+      collectRemoteDeclarations(
+        rootURL, root: root, repo: repo, via: [], seen: &seen, remote: &remote, errors: &errors)
+      if remote.isEmpty { return }
+      // A remote declaration and no lockfile: the lockfile is a build product
+      // that any resolution of the root writes, and a fresh checkout has none,
+      // so the check resolves the root here and reads what that wrote.
+      if let failure = resolvePackage(at: rootURL, label: root) {
+        errors.append(
+          "[host-lane] host-lane root `\(root)` declares remote dependencies and has no"
+            + " Package.resolved, and `swift package resolve` there failed (\(failure)) —"
+            + " the resolved set is what this check reads")
+        return
+      }
+      print("host-lane: resolved `\(root)` — it had no Package.resolved")
+      guard FileManager.default.fileExists(atPath: lockURL.path) else {
+        errors.append(
+          "[host-lane] host-lane root `\(root)` declares remote dependencies, and"
+            + " `swift package resolve` there wrote no Package.resolved")
+        return
+      }
     }
     guard let data = try? Data(contentsOf: lockURL),
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -165,13 +179,28 @@ enum HostLane {
     }
   }
 
+  /// `swift package resolve` in *dir*, output to a log file. Nil on exit 0;
+  /// otherwise the exit code and the log path, or the launch error.
+  static func resolvePackage(at dir: URL, label: String) -> String? {
+    let logName = "resolve-" + label.replacingOccurrences(of: "/", with: "-")
+    do {
+      let result = Lanes.finish(
+        try Lanes.launch(["swift", "package", "resolve"], cwd: dir, logName: logName))
+      if result.exitCode == 0 { return nil }
+      return "exit \(result.exitCode), log \(result.logURL.path)"
+    } catch {
+      return "\(error)"
+    }
+  }
+
   /// The lockless half of check 1: walks a package's manifest and every
-  /// `.package(path:` child (cycle-guarded), flagging any `.package(url:`
-  /// declaration in the tree — with no lockfile, the manifests ARE the only
-  /// receipt of what a resolution would fetch.
-  private static func checkManifestTree(
+  /// `.package(path:` child (cycle-guarded), collecting the path chain of each
+  /// `.package(url:` declaration in the tree — with no lockfile, the manifests
+  /// are the only statement of what a resolution would fetch. A child the root
+  /// declares but the sweep cannot read is an error at the declaring edge.
+  static func collectRemoteDeclarations(
     _ packageDir: URL, root: String, repo: Repo, via: [String], seen: inout Set<String>,
-    errors: inout [String]
+    remote: inout [[String]], errors: inout [String]
   ) {
     let canonical = packageDir.standardizedFileURL.resolvingSymlinksInPath().path
     if seen.contains(canonical) { return }
@@ -190,19 +219,7 @@ enum HostLane {
     }
     let uncommented = strippedOfLineComments(source)
     if uncommented.contains(".package(url:") {
-      if via.isEmpty {
-        errors.append(
-          "[host-lane] host-lane root `\(root)` declares remote dependencies but has no"
-            + " committed Package.resolved — the resolved set IS the receipt: run"
-            + " `swift package resolve` there and commit the lock")
-      } else {
-        errors.append(
-          "[host-lane] host-lane root `\(root)` reaches remote dependencies through a"
-            + " path dependency (\(via.joined(separator: " → "))) and has no committed"
-            + " Package.resolved — the resolved set IS the receipt: run"
-            + " `swift package resolve` at the root and commit the lock, and expect the"
-            + " resolved-set rule to gate what appears there")
-      }
+      remote.append(via)
     }
     for path in pathDependencyPaths(inManifest: uncommented) {
       let child =
@@ -215,8 +232,9 @@ enum HostLane {
       let label =
         childPath.hasPrefix(rootPath + "/")
         ? String(childPath.dropFirst(rootPath.count + 1)) : path
-      checkManifestTree(
-        child, root: root, repo: repo, via: via + [label], seen: &seen, errors: &errors)
+      collectRemoteDeclarations(
+        child, root: root, repo: repo, via: via + [label], seen: &seen, remote: &remote,
+        errors: &errors)
     }
   }
 

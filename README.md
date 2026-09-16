@@ -7,7 +7,7 @@ The open `duet` CLI — the verification toolchain for
 verification, scenario-driven recording, the replay-protocol lane, the
 manifest and declaration checks (`lint`, `doctor`), the mutation drill, and
 the codegen verbs (sum coders, generated mocks, design tokens). Current
-release: **0.25.0** — [CHANGELOG.md](CHANGELOG.md) states what each release
+release: **0.26.0** — [CHANGELOG.md](CHANGELOG.md) states what each release
 carries; a new or changed gate is a minor, and pre-1.0 minors are breaking by
 family convention.
 
@@ -88,7 +88,9 @@ duet version             # the toolchain version, matching the release tag; work
   multi-package repos with subtree packages are first-class; JSON:
   `lanes.swift` is an array). The host-lane rule (`HostLane.swift`,
   toolchain-owned so no adopter copies a lint): a gated unit resolves the Duet
-  family only — Swift host-root lockfiles pin family identities only, gated
+  family only — Swift host-root lockfiles pin family identities only (a root
+  that declares a remote dependency and has no `Package.resolved` is resolved
+  first, and the file that writes is what the check reads), gated
   Kotlin modules declare the family plugin/dependency allowlist only
   (recursing `project(...)` edges), and kernel-shape declarations (reducers,
   State/Action/EffectPayload) live in gated packages only.
@@ -177,13 +179,7 @@ duet version             # the toolchain version, matching the release tag; work
   via a refining protocol, or via a superclass) declared
   `@unchecked Sendable` in non-test sources. The compiler accepts that stamp
   with no diagnostic even under complete concurrency checking, so only a
-  lint can hold the rule. Third row: a Swift package outside the manifest
-  that declares a test target and has no `Package.resolved` — nothing has
-  ever resolved it as a root, so those tests have never run anywhere. Two
-  shapes are exempt because for them the missing lock means nothing: a
-  package whose dependencies are all local paths (SwiftPM writes it no lock
-  ever), and a member of an aggregate `.xcworkspace` (the workspace holds
-  the one lock for all its members). Read-only; exit 1 lists findings.
+  lint can hold the rule. Read-only; exit 1 lists findings.
 - `duet mutate [<name>]` — the mutation drill (test the tests): seed each
   behavioral mutation from `parity/mutations.json` one at a time
   (exact-string substitution that must match the file exactly once), run the

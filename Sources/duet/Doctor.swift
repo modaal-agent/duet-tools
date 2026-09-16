@@ -44,15 +44,6 @@ import Foundation
 /// conformance came from, and says so outright when the name is declared
 /// in more than one place.
 ///
-/// **[lanes]** — a Swift package declaring a test target that no lane has
-/// ever built. `verify` already prints every build unit outside the
-/// manifest, but that list is long and mixes packages another lane covers
-/// with packages nothing runs at all, so it gets acknowledged rather than
-/// acted on. This row is its narrow half: a package with no
-/// `Package.resolved` has never been resolved as a root, so a test target
-/// it declares has never run anywhere. `Inventory.declaresUnresolvedTests`
-/// carries the two conditions that keep it from over-firing.
-///
 /// Exit 0 with a scan summary when the rows are clean; exit 1 listing
 /// findings otherwise. Doctor never rewrites anything.
 enum Doctor {
@@ -500,15 +491,8 @@ enum Doctor {
     }
     sources.sort { $0.path < $1.path }
     let workerRows = workerFindings(files: sources)
-    let laneRows = Inventory.coverage(repo: repo, manifest: manifest)
-      .swiftPackagesWithUnrunTests
-      .map { path in
-        "\(path) declares a test target and has no Package.resolved — nothing has ever "
-          + "resolved it as a root, so those tests have never run. Add a lane step that "
-          + "builds it (`swift test` there, or its scheme), then commit the lock it writes."
-      }
 
-    let findings = declarationRows + workerRows + laneRows
+    let findings = declarationRows + workerRows
     let targetsChecked = targetCount(projectJSON: projectJSON)
 
     if options.json {
