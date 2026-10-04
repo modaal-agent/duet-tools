@@ -7,7 +7,7 @@ The open `duet` CLI — the verification toolchain for
 verification, scenario-driven recording, the replay-protocol lane, the
 manifest and declaration checks (`lint`, `doctor`), the mutation drill, and
 the codegen verbs (sum coders, generated mocks, design tokens). Current
-release: **0.26.0** — [CHANGELOG.md](CHANGELOG.md) states what each release
+release: **0.27.0** — [CHANGELOG.md](CHANGELOG.md) states what each release
 carries; a new or changed gate is a minor, and pre-1.0 minors are breaking by
 family convention.
 
@@ -194,20 +194,24 @@ duet version             # the toolchain version, matching the release tag; work
   permanent negative control. Minutes, not seconds (the full suite runs once
   per row plus a baseline), which is why this verb is not on the MCP surface.
 - `duet design-tokens [--check]` — the design-token codegen verb. Reads
-  `parity/design-tokens.yaml` — one app-authored master carrying the semantic
-  colour, type and gradient vocabularies and their values
-  ([contracts/design-tokens.md](contracts/design-tokens.md) is the grammar) —
-  and writes each declared language's vocabulary enums and value tables into
-  that target's output directory. Both languages come from one input in one
-  declaration order, so their case lists and values cannot diverge. What stays
-  hand-authored is what has no twin: the role bindings (Material slots and
-  Apple roles are different sets), the resolvers that turn a family token and
-  its axes into a registered face, and the theme registration. `--check`
-  regenerates in memory and compares whole files — the generator is compiled
-  in and a run costs milliseconds, so there is no fingerprint block and a
-  hand-edit anywhere in a generated file is red; a file the config no longer
-  declares is reported as orphaned. A repo with no config generates nothing
-  and passes.
+  `parity/design-tokens.yaml` ([contracts/design-tokens.md](contracts/design-tokens.md)):
+  at version 2 it names W3C Design Tokens (DTCG 2025.10) files through a
+  resolver — one colour file per appearance, type, gradients — which design
+  tools read and write too; at version 1 it carries the tokens. It writes
+  each declared target's output: the Swift and Kotlin vocabulary enums and
+  value tables, and the web target's `tokens.css`, `tokens.json` and font
+  files. Every target comes from one input in one declaration order, so their
+  case lists and values cannot diverge. What stays hand-authored is what has
+  no twin: the role bindings (Material slots and Apple roles are different
+  sets), the resolvers that turn a family token and its axes into a
+  registered face, and the theme registration. `--check` regenerates in
+  memory and compares whole files — the generator is compiled in and a run
+  costs milliseconds, so there is no fingerprint block and a hand-edit
+  anywhere in a generated file is red; a file the config no longer declares
+  is reported as orphaned. A repo with no config generates nothing and
+  passes. `duet design-tokens migrate` rewrites a version-1 config as
+  version 2. `Tests/terrazzo/` cross-checks the version-2 fixture against an
+  independent DTCG implementation (development only; needs Node).
 - `duet mcp` — the same verification verbs as a stdio MCP server
   (`duet_verify`, `duet_lint`, `duet_record`, `duet_explain`,
   `duet_materialize`, `duet_protocol_run`, `duet_scope`, `duet_lanes`,
@@ -252,7 +256,7 @@ parser of both files:
 | contract | fixes |
 | --- | --- |
 | [`manifest.md`](contracts/manifest.md) | `parity/manifest.yaml` — the features, chains, presentation ledger and `mocks:` generator rows a repo declares, and the plan (`duet lint --json`) the toolchain derives from it |
-| [`design-tokens.md`](contracts/design-tokens.md) | `parity/design-tokens.yaml` — the semantic colour, type and gradient vocabularies and the generated shape `duet design-tokens` writes per language |
+| [`design-tokens.md`](contracts/design-tokens.md) | `parity/design-tokens.yaml` and the DTCG token files it names — the semantic colour, type and gradient vocabularies, and the generated shape `duet design-tokens` writes per target |
 
 The framework's own contracts (kernel, serialization, replay protocol,
 presentation, mock dialect) live in the

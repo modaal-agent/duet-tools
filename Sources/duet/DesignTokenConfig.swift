@@ -58,17 +58,71 @@ struct DesignTokenConfig {
     case fixed(ColorValue)
   }
 
-  enum FontFamily: String, CaseIterable {
-    case serif, sans, mono
+  /// A family token's name. The YAML grammar names the engine's three; a
+  /// DTCG source names its own `fontFamily` tokens, and the Swift target's
+  /// `FontFamilyToken` gets one case per declared family.
+  struct FontFamily: Hashable {
+    let rawValue: String
 
-    /// The engine enum's entry spelling.
-    var kotlinEntry: String {
-      switch self {
-      case .serif: return "Serif"
-      case .sans: return "Sans"
-      case .mono: return "Mono"
+    init?(rawValue: String) {
+      guard let first = rawValue.first, first.isLetter, first.isLowercase,
+            rawValue.allSatisfy({ $0.isLetter || $0.isNumber })
+      else { return nil }
+      self.rawValue = rawValue
+    }
+
+    static let serif = FontFamily(rawValue: "serif")!
+    static let sans = FontFamily(rawValue: "sans")!
+    static let mono = FontFamily(rawValue: "mono")!
+    /// The engine's three, in its order.
+    static let allCases: [FontFamily] = [.serif, .sans, .mono]
+
+    /// The Kotlin engine's own entry for this family (`FontFamilyToken.Sans`);
+    /// nil for a family the engine does not name.
+    var kotlinEntry: String? {
+      switch rawValue {
+      case "serif": return "Serif"
+      case "sans": return "Sans"
+      case "mono": return "Mono"
+      default: return nil
       }
     }
+
+    /// The entry in a generated `SemanticFontFamily` enum: `display` → `Display`.
+    var kotlinEnumEntry: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
+  }
+
+  /// A font file the web target copies beside the stylesheet and declares
+  /// with `@font-face`. Font resources stay app-owned on Apple and Android;
+  /// the web target is the one that serves files.
+  struct FontFile {
+    /// Repo-relative path of the file.
+    var source: String
+    /// The face's `font-weight`: `600`, or a variable face's range `100 900`.
+    var weight: String
+    var data: Data
+
+    var fileName: String { (source as NSString).lastPathComponent }
+
+    /// The `format()` hint for the file's extension.
+    var format: String? {
+      switch (source as NSString).pathExtension.lowercased() {
+      case "ttf": return "truetype"
+      case "otf": return "opentype"
+      case "woff": return "woff"
+      case "woff2": return "woff2"
+      default: return nil
+      }
+    }
+  }
+
+  /// A family's files, declared under the name its stack starts with.
+  struct FontFace {
+    var family: FontFamily
+    /// The `font-family` the `@font-face` rules declare: the first name in
+    /// the family's stack, which the stack then finds.
+    var name: String
+    var files: [FontFile]
   }
 
   struct ColorToken {
@@ -121,9 +175,28 @@ struct DesignTokenConfig {
     var tokens: [Token]
   }
 
+  /// The web target: a stylesheet of custom properties and font classes, and
+  /// a JSON manifest of the same tokens for tools that list them.
+  struct CSSTarget {
+    var output: String
+    /// The font stack each family token resolves to. Families the config does
+    /// not name get the platform's system stack.
+    var families: [FontFamily: String]
+    /// The font files to copy into `<output>/fonts/` and declare, in the
+    /// families' declaration order.
+    var faces: [FontFace] = []
+  }
+
   var version: Int
+  /// The repo-relative file the tokens were read from, named in every
+  /// generated file's banner.
+  var source: String = DesignTokenConfig.relativePath
   var swift: SwiftTarget?
   var kotlin: KotlinTarget?
+  var css: CSSTarget? = nil
+  /// The families, in declaration order: the engine's three for the YAML
+  /// grammar, the `fontFamily` tokens for a DTCG source.
+  var families: [FontFamily] = FontFamily.allCases
   var colors: [Group<ColorToken>]
   var fonts: [Group<FontToken>]
   var gradients: [GradientToken]
@@ -157,6 +230,8 @@ extension DesignTokenConfig {
   }
 
   /// Loads and validates the config. Returns nil when the repo declares none.
+  /// Version 1 carries the tokens in this grammar; version 2 names a DTCG
+  /// resolver (`tokens:`) and carries only the targets.
   static func load(repo: Repo) throws -> DesignTokenConfig? {
     let file = url(in: repo)
     guard FileManager.default.fileExists(atPath: file.path) else { return nil }
@@ -166,7 +241,27 @@ extension DesignTokenConfig {
     } catch {
       throw DesignTokenConfigError.unreadable(path: relativePath, reason: "\(error)")
     }
+    if let root = (try? Yams.load(yaml: text)) as? [String: Any], root["version"] as? Int == dtcgVersion {
+      return try loadDTCG(root, configURL: file)
+    }
     return try parse(text, path: relativePath)
+  }
+
+  /// The config version that names a DTCG resolver instead of carrying tokens.
+  static let dtcgVersion = 2
+
+  /// Version 2: `tokens:` (a resolver path relative to this file) and the
+  /// targets. The token vocabularies are the resolver's.
+  static func loadDTCG(_ root: [String: Any], configURL: URL) throws -> DesignTokenConfig {
+    let reader = Reader(path: relativePath)
+    try reader.keys(root, known: ["version", "tokens", "swift", "kotlin", "css"], at: "top level")
+    let tokens = try reader.string(root, "tokens", at: "top level")
+    let targets = try reader.targets(root, cssFamilies: false)
+    let parity = configURL.deletingLastPathComponent()
+    let resolver = parity.appendingPathComponent(tokens)
+    return try DTCGSource.load(
+      resolver: resolver, relativePath: "parity/" + tokens, targets: targets,
+      repoRoot: parity.deletingLastPathComponent())
   }
 
   static func parse(_ text: String, path: String) throws -> DesignTokenConfig {
@@ -186,7 +281,7 @@ extension DesignTokenConfig {
   /// The strict schema walk. Every `keys(…)` call states the whole key set for
   /// its position, so an unknown key is caught where it sits rather than
   /// ignored.
-  private struct Reader {
+  struct Reader {
     let path: String
 
     func fail(_ message: String) -> DesignTokenConfigError {
@@ -260,15 +355,34 @@ extension DesignTokenConfig {
     }
 
     func config(_ root: [String: Any]) throws -> DesignTokenConfig {
-      try keys(root, known: ["version", "swift", "kotlin", "colors", "fonts", "gradients"],
+      try keys(root, known: ["version", "swift", "kotlin", "css", "colors", "fonts", "gradients"],
                at: "top level")
       guard let version = root["version"] as? Int else {
         throw fail("top level: missing 'version' (this toolchain reads version \(DesignTokenConfig.currentVersion))")
       }
       guard version == DesignTokenConfig.currentVersion else {
-        throw fail("version \(version) is not a schema this toolchain reads (it reads version \(DesignTokenConfig.currentVersion))")
+        throw fail("version \(version) is not a schema this toolchain reads (it reads versions \(DesignTokenConfig.currentVersion) and \(DesignTokenConfig.dtcgVersion))")
       }
 
+      let (swiftTarget, kotlinTarget, cssTarget) = try targets(root, cssFamilies: true)
+
+      let colors = try colorGroups(root)
+      let fonts = try fontGroups(root, requireTextStyle: swiftTarget != nil)
+      let gradients = try gradientTokens(root)
+
+      try assertUniqueNames(colors.flatMap(\.tokens).map(\.name), vocabulary: "colors")
+      try assertUniqueNames(fonts.flatMap(\.tokens).map(\.name), vocabulary: "fonts")
+      try assertUniqueNames(gradients.map(\.name), vocabulary: "gradients")
+
+      return DesignTokenConfig(version: version, swift: swiftTarget, kotlin: kotlinTarget,
+                         css: cssTarget, colors: colors, fonts: fonts, gradients: gradients)
+    }
+
+    /// The `swift:`, `kotlin:` and `css:` blocks. `cssFamilies` is false for a
+    /// DTCG source, whose stacks are its `fontFamily` tokens' values.
+    func targets(_ root: [String: Any], cssFamilies: Bool) throws
+      -> (DesignTokenConfig.SwiftTarget?, DesignTokenConfig.KotlinTarget?, DesignTokenConfig.CSSTarget?)
+    {
       var swiftTarget: DesignTokenConfig.SwiftTarget?
       if let raw = root["swift"] {
         let block = try map(raw, at: "swift")
@@ -288,20 +402,27 @@ extension DesignTokenConfig {
           engine: try string(block, "engine", at: "kotlin"),
           palette: try string(block, "palette", at: "kotlin"))
       }
-      guard swiftTarget != nil || kotlinTarget != nil else {
-        throw fail("declare at least one of 'swift:' or 'kotlin:' — a config with neither generates nothing")
+      var cssTarget: DesignTokenConfig.CSSTarget?
+      if let raw = root["css"] {
+        let block = try map(raw, at: "css")
+        try keys(block, known: cssFamilies ? ["output", "families"] : ["output"], at: "css")
+        var families: [DesignTokenConfig.FontFamily: String] = [:]
+        if let rawFamilies = block["families"] {
+          let familyMap = try map(rawFamilies, at: "css.families")
+          try keys(familyMap, known: Set(DesignTokenConfig.FontFamily.allCases.map(\.rawValue)), at: "css.families")
+          for family in DesignTokenConfig.FontFamily.allCases {
+            if let stack = try optionalString(familyMap, family.rawValue, at: "css.families") {
+              families[family] = stack
+            }
+          }
+        }
+        cssTarget = .init(output: try string(block, "output", at: "css"), families: families)
+      }
+      guard swiftTarget != nil || kotlinTarget != nil || cssTarget != nil else {
+        throw fail("declare at least one of 'swift:', 'kotlin:' or 'css:' — a config with none generates nothing")
       }
 
-      let colors = try colorGroups(root)
-      let fonts = try fontGroups(root, requireTextStyle: swiftTarget != nil)
-      let gradients = try gradientTokens(root)
-
-      try assertUniqueNames(colors.flatMap(\.tokens).map(\.name), vocabulary: "colors")
-      try assertUniqueNames(fonts.flatMap(\.tokens).map(\.name), vocabulary: "fonts")
-      try assertUniqueNames(gradients.map(\.name), vocabulary: "gradients")
-
-      return DesignTokenConfig(version: version, swift: swiftTarget, kotlin: kotlinTarget,
-                         colors: colors, fonts: fonts, gradients: gradients)
+      return (swiftTarget, kotlinTarget, cssTarget)
     }
 
     func assertUniqueNames(_ names: [String], vocabulary: String) throws {
@@ -386,7 +507,9 @@ extension DesignTokenConfig {
                            "tracking", "opticalSize", "softness", "width", "swift"],
                    at: at)
           let familyName = try string(entry, "family", at: at)
-          guard let family = DesignTokenConfig.FontFamily(rawValue: familyName) else {
+          guard let family = DesignTokenConfig.FontFamily(rawValue: familyName),
+                DesignTokenConfig.FontFamily.allCases.contains(family)
+          else {
             let allowed = DesignTokenConfig.FontFamily.allCases.map(\.rawValue).joined(separator: ", ")
             throw fail("\(at): family '\(familyName)' is not one of: \(allowed)")
           }

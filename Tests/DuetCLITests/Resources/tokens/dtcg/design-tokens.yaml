@@ -1,0 +1,25 @@
+# The design-token generator config. The tokens themselves are W3C Design
+# Tokens (DTCG 2025.10) files: design-tokens.resolver.json names them, one
+# colour file per appearance, one for type, one for gradients.
+#
+# `duet design-tokens` reads the tokens and writes the targets below;
+# `duet design-tokens --check` fails while a generated file disagrees. Edit
+# values in the token files (or in a design tool that reads and writes
+# DTCG), regenerate, and commit the regenerated sources.
+
+version: 2
+tokens: design-tokens.resolver.json
+
+swift:
+  output: src-ios/Sources/Theming/Generated
+  engine: DuetTheming
+  theme: MainTheme
+
+kotlin:
+  output: src-kmp/theming/src/commonMain/kotlin/com/example/theming/Generated
+  package: com.example.theming
+  engine: dev.modaal.duet.services.theming
+  palette: MainPalette
+
+css:
+  output: web/shared

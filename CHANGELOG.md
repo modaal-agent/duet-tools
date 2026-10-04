@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.27.0 — 2026-10-04
+
+### Added — the token source in the W3C Design Tokens format
+
+`parity/design-tokens.yaml` version 2 names a resolver document in the Design
+Tokens Community Group format, 2025.10 (`tokens: design-tokens.resolver.json`),
+and keeps only the targets. `duet design-tokens` reads the resolver and the
+token files it names: `color`, `fontFamily`, `typography` and `gradient`
+tokens, aliases resolved per appearance, one modifier `appearance` with the
+contexts `light` and `dark`. A colour or gradient whose values are equal in
+both appearances generates one value. A value the targets cannot draw is
+refused by name: a `hex` that disagrees with its components, a colour space
+other than sRGB, a size in `rem`, a line height given as a dimension, a token
+defined only for the dark appearance, an alias to a missing token, unevenly
+spaced gradient stops, a misspelt key, a newer resolver version. Token types
+no target has a vocabulary for are skipped with a notice.
+`$extensions["dev.modaal.duet"]` carries `textStyle`, `axes`, `note` and a
+family's `files`. contracts/design-tokens.md states both versions.
+
+Version 1 is read as before.
+
+### Added — `duet design-tokens migrate`
+
+Rewrites a version-1 config as version 2: the resolver, one colour file per
+appearance (each holding every colour), a type file and a gradient file under
+`parity/design-tokens/`, and a config that keeps the targets. The generated
+files after `duet design-tokens` differ from the version-1 ones in the line
+naming their source only. It refuses a config already at version 2 and a
+target file that exists.
+
+### Added — the web target
+
+`css: {output: <dir>}` writes `tokens.css` (one custom property per colour
+and per gradient's stop list, light on `:root` and dark under
+`prefers-color-scheme: dark`; one `.font-<name>` class per type token;
+`--font-family-<family>` per family), `tokens.json` (every token with its CSS
+name, its values per appearance, its metrics and prose), and a copy of each
+font file a family's `files` names under `<dir>/fonts/`, declared with
+`@font-face`. `--check` covers all of them; a file in `fonts/` the config no
+longer names is reported as orphaned. At version 1, `css.families` sets a
+family's stack.
+
+### Added — app-declared font families on the Kotlin target
+
+A config that declares a family other than `serif`, `sans` and `mono`
+generates `SemanticFontFamily.kt`, `enum class SemanticFontFamily :
+FontFamilyToken` with one entry per family, and the palette names its
+entries. It compiles against a theming engine whose `FontFamilyToken` is an
+interface. A config with the engine's three families generates the Kotlin it
+generated before.
+
+### Changed — `design-tokens` finds its repo by its config
+
+`duet design-tokens` runs in a tree that has `parity/design-tokens.yaml` and
+no `parity/fixtures/`, such as an app that generates its theme and keeps no
+parity fixtures.
+
+### Changed — `tokens.json` and the token files have one printer
+
+Two-space indentation, keys in document order, an array of scalars on one
+line, whole numbers without a fraction.
+
 ## 0.26.0 — 2026-09-17
 
 ### Changed — the host-lane check resolves a root whose `Package.resolved` is missing

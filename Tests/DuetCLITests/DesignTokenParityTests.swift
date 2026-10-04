@@ -288,7 +288,7 @@ final class DesignTokenParityTests: XCTestCase {
     var config = try goldenConfig()
     config.gradients = []
     let files = DesignTokensEmitter.emit(config: config)
-    XCTAssertEqual(files.count, 6, "three files per declared language")
+    XCTAssertEqual(files.count, 8, "three files per declared language, two for the web target")
     XCTAssertFalse(files.contains { $0.path.contains("SemanticGradient") })
     let swiftPalette = try generated("Generated/MainThemePalette.swift", from: files)
     XCTAssertFalse(swiftPalette.contains("gradientSet"))
@@ -297,10 +297,13 @@ final class DesignTokenParityTests: XCTestCase {
     XCTAssertFalse(kotlinPalette.contains("fun gradient"))
     XCTAssertFalse(kotlinPalette.contains("GradientToken"))
 
+    // The Kotlin target also owns the family enum a config with families of
+    // its own generates; this config names only the engine's three.
     let owned = DesignTokensEmitter.ownedPaths(config: config)
-    XCTAssertEqual(owned.count, 8)
+    XCTAssertEqual(owned.count, 11)
     XCTAssertEqual(owned.subtracting(files.map(\.path)).sorted(),
                    ["src-ios/Sources/Theming/Generated/SemanticGradient.swift",
+                    "src-kmp/theming/src/commonMain/kotlin/com/example/theming/Generated/SemanticFontFamily.kt",
                     "src-kmp/theming/src/commonMain/kotlin/com/example/theming/Generated/SemanticGradient.kt"])
   }
 }

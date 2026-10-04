@@ -20,9 +20,16 @@ struct Repo {
   /// Walks up from the working directory to the directory containing parity/fixtures —
   /// the same root convention both test runners use.
   static func discover(from start: String = FileManager.default.currentDirectoryPath) -> Repo? {
+    discover(marker: "parity/fixtures", from: start)
+  }
+
+  /// Walks up from *start* to the directory containing *marker*.
+  /// `design-tokens` also accepts `parity/design-tokens.yaml`: an app that
+  /// generates its theme from tokens may have no parity fixtures.
+  static func discover(marker: String, from start: String = FileManager.default.currentDirectoryPath) -> Repo? {
     var directory = URL(fileURLWithPath: start)
     while directory.path != "/" {
-      let candidate = directory.appendingPathComponent("parity/fixtures")
+      let candidate = directory.appendingPathComponent(marker)
       if FileManager.default.fileExists(atPath: candidate.path) {
         return Repo(root: directory)
       }

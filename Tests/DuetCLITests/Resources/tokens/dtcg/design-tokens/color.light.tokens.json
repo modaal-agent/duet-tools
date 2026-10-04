@@ -1,0 +1,194 @@
+{
+  "color": {
+    "$type": "color",
+    "Labels": {
+      "labelPrimary": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.102, 0.102, 0.102],
+          "hex": "#1a1a1a"
+        }
+      },
+      "labelSecondary": {
+        "$description": "Supporting text one step below the primary label: subtitles, helper text, and secondary values that still have to read easily.\nNot a caption tier — the caption tokens are smaller and quieter, and swapping one for the other changes the hierarchy rather than the weight.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.4196, 0.4196, 0.4196],
+          "hex": "#6b6b6b"
+        }
+      },
+      "labelDisabled": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.6588, 0.6588, 0.6588],
+          "hex": "#a8a8a8"
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "note": "The one label that is allowed to fail contrast — nothing is read from it."
+          }
+        }
+      },
+      "labelOnAccent": {
+        "$description": "Label over an accent fill, in both appearances.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [1, 1, 1],
+          "hex": "#ffffff"
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "note": "Fixed on purpose: the fill it sits on does not invert."
+          }
+        }
+      }
+    },
+    "Surfaces": {
+      "surfacePrimary": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.9843, 0.9804, 0.9686],
+          "hex": "#fbfaf7"
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "note": "The page. Warm off-white rather than pure white."
+          }
+        }
+      },
+      "surfaceRaised": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [1, 1, 1],
+          "hex": "#ffffff"
+        }
+      },
+      "surfaceScrim": {
+        "$description": "Modal scrim — flat, no blur.",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.102, 0.102, 0.102],
+          "alpha": 0.24,
+          "hex": "#1a1a1a"
+        }
+      }
+    },
+    "Separators and fills": {
+      "separatorHairline": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.102, 0.102, 0.102],
+          "alpha": 0.26,
+          "hex": "#1a1a1a"
+        }
+      },
+      "fillPrimary": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.102, 0.102, 0.102],
+          "alpha": 0.08,
+          "hex": "#1a1a1a"
+        }
+      },
+      "fillGrid": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0, 0, 0],
+          "alpha": 0.05,
+          "hex": "#000000"
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "note": "Black and white rather than the ink and paper tokens: a grid line reads as a tint of the surface under it, whatever that surface is."
+          }
+        }
+      }
+    },
+    "Interactive": {
+      "interactivePrimary": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.102, 0.102, 0.102],
+          "hex": "#1a1a1a"
+        }
+      },
+      "interactivePrimaryPressed": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.102, 0.102, 0.102],
+          "alpha": 0.85,
+          "hex": "#1a1a1a"
+        }
+      },
+      "interactiveDisabledLabel": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.102, 0.102, 0.102],
+          "alpha": 0.3,
+          "hex": "#1a1a1a"
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "note": "0.3 × 255 is 76.5 — the one alpha in this palette that lands exactly between two bytes, and the byte the Kotlin table carries is 0x4D."
+          }
+        }
+      },
+      "interactiveSelected": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.2392, 0.1804, 0.3608],
+          "alpha": 0.12,
+          "hex": "#3d2e5c"
+        }
+      }
+    },
+    "Feedback": {
+      "feedbackSuccess": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.2471, 0.4784, 0.2745],
+          "hex": "#3f7a46"
+        }
+      },
+      "feedbackSuccessSurface": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.2471, 0.4784, 0.2745],
+          "alpha": 0.1,
+          "hex": "#3f7a46"
+        }
+      },
+      "feedbackError": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.702, 0.149, 0.1176],
+          "hex": "#b3261e"
+        }
+      },
+      "feedbackErrorSurface": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [0.702, 0.149, 0.1176],
+          "alpha": 0.1,
+          "hex": "#b3261e"
+        }
+      }
+    },
+    "accent": {
+      "$description": "Accent — indicators and active hairlines. Never a fill.",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0.2392, 0.1804, 0.3608],
+        "hex": "#3d2e5c"
+      }
+    },
+    "shadowAmbient": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [0, 0, 0],
+        "alpha": 0.16,
+        "hex": "#000000"
+      }
+    }
+  }
+}

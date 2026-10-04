@@ -89,7 +89,7 @@ final class DesignTokensTests: XCTestCase {
   func testGoldenConfigGeneratesTheExpectedFiles() throws {
     let config = try goldenConfig()
     let files = DesignTokensEmitter.emit(config: config)
-    XCTAssertEqual(files.count, 8, "four files per declared language")
+    XCTAssertEqual(files.count, 10, "four files per declared language, two for the web target")
     for file in files {
       let name = (file.path as NSString).lastPathComponent
       let expected = try String(contentsOf: try resource("tokens/expected/\(name)"), encoding: .utf8)
@@ -275,7 +275,7 @@ final class DesignTokensTests: XCTestCase {
         engine: DuetTheming
         theme: MainTheme
       """, with: "")
-    assertThrows(noTarget, contains: "declare at least one of 'swift:' or 'kotlin:'")
+    assertThrows(noTarget, contains: "declare at least one of 'swift:', 'kotlin:' or 'css:'")
   }
 
   func testAKotlinOnlyConfigEmitsOnlyKotlinFiles() throws {
@@ -320,11 +320,11 @@ final class DesignTokensTests: XCTestCase {
     let repo = try makeRepo(config: try goldenConfigText())
     let config = try XCTUnwrap(try DesignTokenConfig.load(repo: repo))
     let written = try DesignTokensVerb.regenerate(repo: repo, config: config, check: false)
-    XCTAssertEqual(written.written.count, 8)
+    XCTAssertEqual(written.written.count, 10)
     XCTAssertFalse(written.failed)
 
     let checked = try DesignTokensVerb.regenerate(repo: repo, config: config, check: true)
-    XCTAssertEqual(checked.upToDate, 8)
+    XCTAssertEqual(checked.upToDate, 10)
     XCTAssertFalse(checked.failed)
   }
 
@@ -360,7 +360,7 @@ final class DesignTokensTests: XCTestCase {
 
     let checked = try DesignTokensVerb.regenerate(
       repo: repo, config: try XCTUnwrap(try DesignTokenConfig.load(repo: repo)), check: true)
-    XCTAssertEqual(checked.stale.count, 2, "both palettes carry the value")
+    XCTAssertEqual(checked.stale.count, 4, "both palettes and the web target's two files carry the value")
     XCTAssertTrue(checked.stale.contains { $0.hasSuffix("MainThemePalette.swift") })
     XCTAssertTrue(checked.stale.contains { $0.hasSuffix("MainPalette.kt") })
   }

@@ -1,0 +1,236 @@
+{
+  "fontFamily": {
+    "$type": "fontFamily",
+    "serif": {
+      "$value": ["Source Serif 4", "ui-serif", "Georgia", "serif"]
+    },
+    "sans": {
+      "$value": ["-apple-system", "BlinkMacSystemFont", "SF Pro Text", "system-ui", "Roboto", "sans-serif"]
+    },
+    "mono": {
+      "$value": ["ui-monospace", "SF Mono", "Menlo", "monospace"]
+    }
+  },
+  "typography": {
+    "$type": "typography",
+    "Display — the serif face": {
+      "largeTitle": {
+        "$description": "The largest title on a screen: top-level navigation titles, onboarding and hero surfaces.",
+        "$value": {
+          "fontFamily": "{fontFamily.serif}",
+          "fontWeight": 400,
+          "fontSize": {
+            "value": 34,
+            "unit": "px"
+          },
+          "lineHeight": 1.205882,
+          "letterSpacing": {
+            "value": -0.34,
+            "unit": "px"
+          }
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "textStyle": "largeTitle",
+            "axes": {
+              "opticalSize": 144,
+              "softness": 50
+            },
+            "note": "Large `opsz` and high `SOFT` — the display cut, not the body cut scaled up."
+          }
+        }
+      },
+      "title2": {
+        "$description": "Section heading inside a screen.",
+        "$value": {
+          "fontFamily": "{fontFamily.serif}",
+          "fontWeight": 500,
+          "fontSize": {
+            "value": 22,
+            "unit": "px"
+          },
+          "lineHeight": 1.272727,
+          "letterSpacing": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "textStyle": "title2",
+            "axes": {
+              "opticalSize": 48,
+              "softness": 30
+            }
+          }
+        }
+      }
+    },
+    "Body — the serif face at reading sizes": {
+      "bodyRegular": {
+        "$description": "Default body text — paragraphs, list rows, descriptions.",
+        "$value": {
+          "fontFamily": "{fontFamily.serif}",
+          "fontWeight": 400,
+          "fontSize": {
+            "value": 17,
+            "unit": "px"
+          },
+          "lineHeight": 1.529412,
+          "letterSpacing": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "textStyle": "body",
+            "axes": {
+              "opticalSize": 17,
+              "softness": 20
+            },
+            "note": "`opsz` tracks the point size here rather than the display sizes above."
+          }
+        }
+      },
+      "bodyEmphasized": {
+        "$value": {
+          "fontFamily": "{fontFamily.serif}",
+          "fontWeight": 600,
+          "fontSize": {
+            "value": 17,
+            "unit": "px"
+          },
+          "lineHeight": 1.529412,
+          "letterSpacing": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "textStyle": "body",
+            "axes": {
+              "opticalSize": 17,
+              "softness": 20
+            }
+          }
+        }
+      }
+    },
+    "Chrome — the sans face": {
+      "headline": {
+        "$description": "Inline title for collapsed navigation bars, key values, and card titles. A UI title, not a content heading.",
+        "$value": {
+          "fontFamily": "{fontFamily.sans}",
+          "fontWeight": 600,
+          "fontSize": {
+            "value": 17,
+            "unit": "px"
+          },
+          "lineHeight": 1.294118,
+          "letterSpacing": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "textStyle": "headline",
+            "axes": {
+              "width": 100
+            }
+          }
+        }
+      },
+      "subheadRegular": {
+        "$value": {
+          "fontFamily": "{fontFamily.sans}",
+          "fontWeight": 400,
+          "fontSize": {
+            "value": 15,
+            "unit": "px"
+          },
+          "lineHeight": 1.333333,
+          "letterSpacing": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "textStyle": "subheadline",
+            "axes": {
+              "width": 100
+            }
+          }
+        }
+      }
+    },
+    "Labels — the mono face": {
+      "footnoteRegular": {
+        "$description": "Metadata, timestamps, and quiet supporting information.",
+        "$value": {
+          "fontFamily": "{fontFamily.mono}",
+          "fontWeight": 400,
+          "fontSize": {
+            "value": 13,
+            "unit": "px"
+          },
+          "lineHeight": 1.307692,
+          "letterSpacing": {
+            "value": 1.04,
+            "unit": "px"
+          }
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "textStyle": "footnote",
+            "note": "Every mono label carries 0.08 em of tracking; the face is set in ALLCAPS at these sizes and reads tight without it."
+          }
+        }
+      },
+      "footnoteMedium": {
+        "$value": {
+          "fontFamily": "{fontFamily.mono}",
+          "fontWeight": 500,
+          "fontSize": {
+            "value": 13,
+            "unit": "px"
+          },
+          "lineHeight": 1.307692,
+          "letterSpacing": {
+            "value": 1.04,
+            "unit": "px"
+          }
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "textStyle": "footnote",
+            "note": "The same 13/17 metrics as `footnoteRegular` — medium is a weight step, not a size step, so a regular-to-medium swap must not resize the text."
+          }
+        }
+      },
+      "captionRegular": {
+        "$value": {
+          "fontFamily": "{fontFamily.mono}",
+          "fontWeight": 400,
+          "fontSize": {
+            "value": 11,
+            "unit": "px"
+          },
+          "lineHeight": 1.272727,
+          "letterSpacing": {
+            "value": 0.88,
+            "unit": "px"
+          }
+        },
+        "$extensions": {
+          "dev.modaal.duet": {
+            "textStyle": "caption1"
+          }
+        }
+      }
+    }
+  }
+}

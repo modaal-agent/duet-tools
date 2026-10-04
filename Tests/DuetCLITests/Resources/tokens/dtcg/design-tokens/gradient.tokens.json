@@ -1,0 +1,45 @@
+{
+  "gradient": {
+    "$type": "gradient",
+    "surfaceWash": {
+      "$description": "The one gradient the design system keeps.",
+      "$value": [
+        {
+          "color": "{color.Labels.labelOnAccent}",
+          "position": 0
+        },
+        {
+          "color": {
+            "colorSpace": "srgb",
+            "components": [0.9843, 0.9804, 0.9686],
+            "hex": "#fbfaf7"
+          },
+          "position": 1
+        }
+      ],
+      "$extensions": {
+        "dev.modaal.duet": {
+          "note": "Both stops are the raised surface at different alphas, so the wash reads as a fade rather than as a second colour."
+        }
+      }
+    },
+    "surfaceHero": {
+      "$description": "The wash behind a hero header.",
+      "$value": [
+        {
+          "color": "{color.Surfaces.surfacePrimary}",
+          "position": 0
+        },
+        {
+          "color": "{color.Surfaces.surfaceRaised}",
+          "position": 1
+        }
+      ],
+      "$extensions": {
+        "dev.modaal.duet": {
+          "note": "The two-appearance form: each appearance runs down its own surface ramp, so the wash inverts with the page instead of staying a light wash on a dark ground."
+        }
+      }
+    }
+  }
+}

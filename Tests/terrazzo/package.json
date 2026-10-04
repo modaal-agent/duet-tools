@@ -1,0 +1,12 @@
+{
+  "name": "duet-tools-terrazzo-check",
+  "private": true,
+  "type": "module",
+  "description": "Development-only: an independent DTCG implementation resolves the test fixture to the golden values. npm install, then npm run check.",
+  "scripts": {
+    "check": "node check.mjs"
+  },
+  "dependencies": {
+    "@terrazzo/parser": "2.7.1"
+  }
+}

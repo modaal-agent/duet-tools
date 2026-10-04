@@ -1,8 +1,8 @@
 # The golden config: a fictional app's design-token master, sized to cover
 # every form the schema accepts rather than to be large.
 #
-# Covered here, and asserted by the goldens beside it: both language targets;
-# groups with and without a heading; the two-appearance and one-value colour
+# Covered here, and asserted by the goldens beside it: all three targets, the
+# web target with a family stack of its own; groups with and without a heading; the two-appearance and one-value colour
 # forms; alpha on each; the half-byte alpha tie (0.3 × 255 = 76.5); single- and
 # multi-paragraph docs; palette notes; all three font families; every optional
 # axis present and absent; tracking present and absent; both gradient forms.
@@ -19,6 +19,11 @@ kotlin:
   package: com.example.theming
   engine: dev.modaal.duet.services.theming
   palette: MainPalette
+
+css:
+  output: web/shared
+  families:
+    serif: '"Source Serif 4", ui-serif, Georgia, serif'
 
 colors:
   - group: Labels

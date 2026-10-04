@@ -192,14 +192,24 @@ let usage = """
         `duet record` regenerates first, and `record --check` gates coder drift
         — the standalone verb covers a first generation on a new type.
     duet design-tokens [--check] [--json]
-        (re)generate both languages' design-token sources from
-        parity/design-tokens.yaml (grammar in contracts/design-tokens.md): the
-        vocabulary enums and the value tables, into each declared target's
-        output directory. --check regenerates in memory and compares — a
-        stale file or a hand-edit is named and exits 1, and a file the
-        config no longer declares is reported as orphaned. The role
-        bindings, the font resolvers and the theme registration stay
-        hand-authored; a repo with no config generates nothing and passes.
+        (re)generate the design-token sources from parity/design-tokens.yaml
+        (contracts/design-tokens.md): at version 2 it names W3C Design
+        Tokens (DTCG 2025.10) files through a resolver, at version 1 it
+        carries the tokens. Each declared target gets its output: the Swift
+        and Kotlin vocabulary enums and value tables, and the web target's
+        tokens.css, tokens.json and font files. --check regenerates in
+        memory and compares — a stale file or a hand-edit is named and exits
+        1, and a file the config no longer declares is reported as orphaned.
+        The role bindings, the font resolvers and the theme registration
+        stay hand-authored; a repo with no config generates nothing and
+        passes. Found by parity/design-tokens.yaml or parity/fixtures.
+    duet design-tokens migrate [--json]
+        rewrite a version-1 parity/design-tokens.yaml as version 2: the
+        tokens move to parity/design-tokens.resolver.json and the token
+        files under parity/design-tokens/ (one colour file per appearance,
+        type, gradients), and the config keeps the targets. Run
+        `duet design-tokens` after it; the generated code is unchanged
+        except its source line.
     duet scope <path> [--json]
         which gates govern a file (and the authoring loop for it) — the
         module→gates map, derived from the manifest: fixture → its owning
@@ -244,7 +254,8 @@ let usage = """
         print the toolchain version (matches the release tag), so gate
         receipts can record which toolchain ran. Works outside a repo.
 
-  Run from anywhere inside the repo (root is found via parity/fixtures).
+  Run from anywhere inside the repo (root is found via parity/fixtures;
+  design-tokens also finds it via parity/design-tokens.yaml).
   """
 
 guard let options = Options.parse(CommandLine.arguments), let command = options.command
@@ -266,9 +277,14 @@ if command == "version" {
 if command == "assert-replayed" {
   exit(AssertReplayed.run(options: options))
 }
-guard let repo = Repo.discover() else {
-  FileHandle.standardError.write(
-    Data("duet: not inside a parity repo (no parity/fixtures found walking up)\n".utf8))
+let discovered = command == "design-tokens"
+  ? Repo.discover(marker: DesignTokenConfig.relativePath) ?? Repo.discover()
+  : Repo.discover()
+guard let repo = discovered else {
+  let looked = command == "design-tokens"
+    ? "no \(DesignTokenConfig.relativePath) or parity/fixtures found walking up"
+    : "no parity/fixtures found walking up"
+  FileHandle.standardError.write(Data("duet: not inside a parity repo (\(looked))\n".utf8))
   exit(2)
 }
 

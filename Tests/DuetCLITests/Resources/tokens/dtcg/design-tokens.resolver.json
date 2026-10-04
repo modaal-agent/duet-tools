@@ -1,0 +1,43 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/resolver.json",
+  "name": "App design tokens",
+  "version": "2025.10",
+  "sets": {
+    "styles": {
+      "sources": [
+        {
+          "$ref": "design-tokens/type.tokens.json"
+        },
+        {
+          "$ref": "design-tokens/gradient.tokens.json"
+        }
+      ]
+    }
+  },
+  "modifiers": {
+    "appearance": {
+      "description": "The system appearance: one colour file per appearance, each with every colour.",
+      "contexts": {
+        "light": [
+          {
+            "$ref": "design-tokens/color.light.tokens.json"
+          }
+        ],
+        "dark": [
+          {
+            "$ref": "design-tokens/color.dark.tokens.json"
+          }
+        ]
+      },
+      "default": "light"
+    }
+  },
+  "resolutionOrder": [
+    {
+      "$ref": "#/modifiers/appearance"
+    },
+    {
+      "$ref": "#/sets/styles"
+    }
+  ]
+}
