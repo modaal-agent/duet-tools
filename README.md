@@ -199,8 +199,8 @@ duet version             # the toolchain version, matching the release tag; work
   resolver — one colour file per appearance, type, gradients — which design
   tools read and write too; at version 1 it carries the tokens. It writes
   each declared target's output: the Swift and Kotlin vocabulary enums and
-  value tables, and the web target's `tokens.css`, `tokens.json` and font
-  files. Every target comes from one input in one declaration order, so their
+  value tables, the spacing and corner-radius constants, and the web target's
+  `tokens.css`, `tokens.json` and font files. Every target comes from one input in one declaration order, so their
   case lists and values cannot diverge. What stays hand-authored is what has
   no twin: the role bindings (Material slots and Apple roles are different
   sets), the resolvers that turn a family token and its axes into a
@@ -256,7 +256,7 @@ parser of both files:
 | contract | fixes |
 | --- | --- |
 | [`manifest.md`](contracts/manifest.md) | `parity/manifest.yaml` — the features, chains, presentation ledger and `mocks:` generator rows a repo declares, and the plan (`duet lint --json`) the toolchain derives from it |
-| [`design-tokens.md`](contracts/design-tokens.md) | `parity/design-tokens.yaml` and the DTCG token files it names — the semantic colour, type and gradient vocabularies, and the generated shape `duet design-tokens` writes per target |
+| [`design-tokens.md`](contracts/design-tokens.md) | `parity/design-tokens.yaml` and the DTCG token files it names — the semantic colour, type and gradient vocabularies, the spacing and corner-radius scales, and the generated shape `duet design-tokens` writes per target |
 
 The framework's own contracts (kernel, serialization, replay protocol,
 presentation, mock dialect) live in the

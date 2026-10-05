@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.28.0 — 2026-10-05
+
+### Added — spacing and corner-radius scales
+
+`duet design-tokens` reads `dimension` tokens in `px` under the top-level
+`spacing` and `radius` groups of a version-2 source. Each scale generates
+constants beside its names: `SemanticSpacing.swift` and `SemanticRadius.swift`
+(`public static let <key>: CGFloat`, in points) and `SemanticSpacing.kt` and
+`SemanticRadius.kt` (`const val <key>: Float`, in dp). The web target writes
+`--spacing-<key>` and `--radius-<key>` on `:root` and lists the scales under
+`spacing` and `radii` in `tokens.json`. A config without the scales
+generates the same files as 0.27.0. A length that differs between the
+appearances, a key that is not lowerCamelCase, a size in `rem` and an
+extension key other than `note` are refused by name; a `dimension` token in
+any other group is skipped with a notice. `--check` owns the four files and
+reports one a config stops generating.
+
 ## 0.27.0 — 2026-10-04
 
 ### Added — the token source in the W3C Design Tokens format

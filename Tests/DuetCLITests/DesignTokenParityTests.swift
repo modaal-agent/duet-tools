@@ -298,12 +298,18 @@ final class DesignTokenParityTests: XCTestCase {
     XCTAssertFalse(kotlinPalette.contains("GradientToken"))
 
     // The Kotlin target also owns the family enum a config with families of
-    // its own generates; this config names only the engine's three.
+    // its own generates, and both languages own the spacing and radius
+    // constants a config with those scales generates; this config names only
+    // the engine's three families and no scale.
     let owned = DesignTokensEmitter.ownedPaths(config: config)
-    XCTAssertEqual(owned.count, 11)
+    XCTAssertEqual(owned.count, 15)
     XCTAssertEqual(owned.subtracting(files.map(\.path)).sorted(),
                    ["src-ios/Sources/Theming/Generated/SemanticGradient.swift",
+                    "src-ios/Sources/Theming/Generated/SemanticRadius.swift",
+                    "src-ios/Sources/Theming/Generated/SemanticSpacing.swift",
                     "src-kmp/theming/src/commonMain/kotlin/com/example/theming/Generated/SemanticFontFamily.kt",
-                    "src-kmp/theming/src/commonMain/kotlin/com/example/theming/Generated/SemanticGradient.kt"])
+                    "src-kmp/theming/src/commonMain/kotlin/com/example/theming/Generated/SemanticGradient.kt",
+                    "src-kmp/theming/src/commonMain/kotlin/com/example/theming/Generated/SemanticRadius.kt",
+                    "src-kmp/theming/src/commonMain/kotlin/com/example/theming/Generated/SemanticSpacing.kt"])
   }
 }

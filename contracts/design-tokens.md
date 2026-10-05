@@ -31,6 +31,7 @@ Generated — the layers that have a twin on every platform:
 | --- | --- | --- | --- |
 | vocabulary | `SemanticColor.swift`, `SemanticFont.swift`, `SemanticGradient.swift` | `SemanticColor.kt`, `SemanticFont.kt`, `SemanticGradient.kt`, and `SemanticFontFamily.kt` for a config that declares its own families | `tokens.json` |
 | values | `<theme>Palette.swift` | `<palette>.kt` | `tokens.css`, and `fonts/` |
+| length scales (vocabulary and values in one file) | `SemanticSpacing.swift`, `SemanticRadius.swift` | `SemanticSpacing.kt`, `SemanticRadius.kt` | `--spacing-<name>` and `--radius-<name>` in `tokens.css`; `spacing` and `radii` in `tokens.json` |
 
 Hand-authored — everything whose shape is one platform's alone:
 
@@ -82,6 +83,11 @@ parity/design-tokens/type.tokens.json          fontFamily and typography tokens
 parity/design-tokens/gradient.tokens.json      gradients
 ```
 
+A repo with spacing or corner-radius tokens adds a token file for them to the
+`styles` set's sources (`parity/design-tokens/dimension.tokens.json`, holding
+the `spacing` and `radius` groups): a length has one value in both
+appearances.
+
 One colour file per appearance, each holding every colour: a design tool that
 imports one file per mode creates a variable only for a token present in
 every file.
@@ -102,6 +108,7 @@ token is declared for the light appearance first.
 | `fontFamily` | a name or a list of names, the family's stack; its key names the family |
 | `typography` | `fontFamily` an alias of a `fontFamily` token; `fontWeight` 1–1000 or a weight name; `fontSize` in `px`; `lineHeight` a number, the multiple of the size; `letterSpacing` in `px` |
 | `gradient` | stops `{color, position}`, two or more, at even positions, opaque |
+| `dimension` | under the top-level `spacing` or `radius` group: `{value, unit: "px"}`, 0 or more, the same in both appearances. A dimension in any other group is skipped with a notice |
 | any other type | counted and skipped with a notice: no target has a vocabulary for it |
 
 - **Values per appearance.** Each token is resolved in both appearances. A
@@ -125,9 +132,17 @@ token is declared for the light appearance first.
   | --- | --- | --- |
   | `typography` | `textStyle` | the `UIFont.TextStyle` the cut scales against; required when a `swift:` target is declared |
   | `typography` | `axes` | `{opticalSize?, softness?, width?}`: the `opsz`, `SOFT` and `wdth` axes |
-  | `typography`, `color`, `gradient` | `note` | the value's comment in the generated tables |
+  | `typography`, `color`, `gradient`, `dimension` | `note` | the value's comment in the generated tables |
   | `fontFamily` | `files` | `[{path, weight}]`: the family's font files, `path` relative to the repository root, `weight` a number or a variable face's `[min, max]`; the web target copies and declares them |
 
+- **Length scales.** The `spacing` tokens generate `SemanticSpacing` and the
+  `radius` tokens `SemanticRadius`, each only when the config declares one:
+  a Swift `public enum` of `public static let <key>: CGFloat` constants in
+  points, and a Kotlin `object` of `const val <key>: Float` constants in dp
+  (`SemanticSpacing.m.dp` in Compose). The value sits beside the name, because
+  a length needs no engine type and no appearance. A key is a constant's name
+  in both languages, so it is lowerCamelCase letters and digits starting with
+  a letter (`xs`, `screen`, `xl2`); any other key is refused.
 - **Families.** The families are the `fontFamily` tokens, in declaration
   order. The Swift target generates `FontFamilyToken` with one case per
   family. The Kotlin target names the engine's own `FontFamilyToken.Serif`,
@@ -255,18 +270,21 @@ tools that show the app's tokens:
   class per type token (`.font-large-title`): family, weight, size and line
   height in `px`, `letter-spacing` in `em`, and `font-variation-settings` for
   the axes; `--font-family-<family>` per family, whose value is the family's
-  stack; and an `@font-face` rule per font file, under the first name in its
-  family's stack.
+  stack; one custom property per spacing step (`--spacing-screen: 16px`) and
+  per corner radius (`--radius-card: 12px`) on `:root`; and an `@font-face`
+  rule per font file, under the first name in its family's stack.
 - **`tokens.json`.** Every token with its CSS name, its light and dark values
   as CSS colours, its metrics, its group and its prose, and each family's
-  stack. A tool lists the tokens from this file, never from the token files
-  or the stylesheet.
+  stack; `spacing` and `radii` list the length scales with their `px` values,
+  and are absent when the config declares none. A tool lists the tokens from
+  this file, never from the token files or the stylesheet.
 - **`fonts/`.** A copy of each file a family's `files` names.
 
 A gradient's stop list is the whole value and the page picks the axis, as in
 `linear-gradient(180deg, var(--gradient-surface-hero))`. Names follow one
 rule, so a page and the app name a token alike: the token key in kebab case
-after `--color-`, `--gradient-`, `font-` or `--font-family-`.
+after `--color-`, `--gradient-`, `font-`, `--font-family-`, `--spacing-` or
+`--radius-`.
 
 ## `duet design-tokens migrate`
 

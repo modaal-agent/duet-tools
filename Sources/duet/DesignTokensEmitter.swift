@@ -43,11 +43,13 @@ enum DesignTokensEmitter {
     if let target = config.swift {
       let root = target.output
       paths.formUnion(["SemanticColor.swift", "SemanticFont.swift", "SemanticGradient.swift",
+                       "SemanticSpacing.swift", "SemanticRadius.swift",
                        "\(target.theme)Palette.swift"].map { "\(root)/\($0)" })
     }
     if let target = config.kotlin {
       let root = target.output
       paths.formUnion(["SemanticColor.kt", "SemanticFont.kt", "SemanticGradient.kt",
+                       "SemanticSpacing.kt", "SemanticRadius.kt",
                        "\(target.palette).kt"].map { "\(root)/\($0)" })
     }
     if let target = config.css {
@@ -104,6 +106,62 @@ enum DesignTokensEmitter {
   /// `34.0` for a whole number, `-0.01` otherwise — the Double literal form.
   static func kotlinNumber(_ value: Double) -> String {
     value == value.rounded() ? String(format: "%.1f", value) : String(value)
+  }
+
+  /// `16f` for a whole number, `0.5f` otherwise — the Float literal form.
+  static func kotlinFloat(_ value: Double) -> String {
+    value == value.rounded() ? "\(Int(value))f" : "\(value)f"
+  }
+
+  // MARK: - The length scales
+
+  /// A length scale's type, prose and tokens: the spacing and corner-radius
+  /// constants, which carry their values in the vocabulary file itself because
+  /// a length is the same in both appearances and needs no engine type.
+  struct Scale {
+    var typeName: String
+    var swiftDoc: String
+    var kotlinDoc: String
+    var groups: [DesignTokenConfig.Group<DesignTokenConfig.DimensionToken>]
+  }
+
+  static func scales(_ config: DesignTokenConfig) -> [Scale] {
+    var out: [Scale] = []
+    if !config.spacing.isEmpty {
+      out.append(.init(
+        typeName: "SemanticSpacing",
+        swiftDoc: """
+          The app's spacing scale: padding, gaps and insets, in points. A step is \
+          chosen by what it separates, never by its size — the value is the \
+          config's to change.
+          """,
+        kotlinDoc: """
+          The app's spacing scale: padding, gaps and insets, in dp — \
+          `SemanticSpacing.m.dp` in Compose. A step is chosen by what it separates, \
+          never by its size — the value is the config's to change.
+
+          Constants are lowerCamel, the spelling the Apple tree uses.
+          """,
+        groups: config.spacing))
+    }
+    if !config.radii.isEmpty {
+      out.append(.init(
+        typeName: "SemanticRadius",
+        swiftDoc: """
+          The app's corner-radius scale, in points. A radius is chosen by the \
+          surface it rounds, never by its size — the value is the config's to \
+          change.
+          """,
+        kotlinDoc: """
+          The app's corner-radius scale, in dp — `SemanticRadius.card.dp` in \
+          Compose. A radius is chosen by the surface it rounds, never by its \
+          size — the value is the config's to change.
+
+          Constants are lowerCamel, the spelling the Apple tree uses.
+          """,
+        groups: config.radii))
+    }
+    return out
   }
 
   static func hex6(_ value: UInt32) -> String {
@@ -171,9 +229,36 @@ enum DesignTokensEmitter {
           doc: "The app's gradient vocabulary.",
           groups: [(name: nil, tokens: config.gradients.map { ($0.name, $0.doc) })])))
     }
+    for scale in scales(config) {
+      files.append(.init(path: "\(target.output)/\(scale.typeName).swift",
+                         content: swiftScale(source: config.source, scale: scale)))
+    }
     files.append(.init(path: "\(target.output)/\(target.theme)Palette.swift",
                        content: swiftPalette(config: config, target: target)))
     return files
+  }
+
+  /// `public enum SemanticSpacing { public static let m: CGFloat = 16 }`.
+  private static func swiftScale(source: String, scale: Scale) -> String {
+    var out = header(generatedBanner(source))
+    out += ["#if os(iOS)", "", "import CoreGraphics", ""]
+    out += comment(scale.swiftDoc, prefix: "/// ", indent: "")
+    out.append("public enum \(scale.typeName) {")
+    for group in scale.groups {
+      if let name = group.name {
+        out.append("")
+        out.append("  // MARK: - \(name)")
+        out.append("")
+      }
+      for token in group.tokens {
+        if token.doc != nil || token.note != nil { out.append("") }
+        if let note = token.note { out += comment(note, prefix: "// ", indent: "  ") }
+        if let doc = token.doc { out += comment(doc, prefix: "/// ", indent: "  ") }
+        out.append("  public static let \(token.name): CGFloat = \(swiftNumber(token.value))")
+      }
+    }
+    out += ["}", "", "#endif", ""]
+    return render(out)
   }
 
   private static func swiftVocabulary(
@@ -426,6 +511,10 @@ enum DesignTokensEmitter {
       files.append(.init(path: "\(target.output)/SemanticFontFamily.kt",
                          content: kotlinFamilies(config: config, target: target)))
     }
+    for scale in scales(config) {
+      files.append(.init(path: "\(target.output)/\(scale.typeName).kt",
+                         content: kotlinScale(source: config.source, scale: scale, target: target)))
+    }
     files.append(.init(path: "\(target.output)/\(target.palette).kt",
                        content: kotlinPalette(config: config, target: target)))
     return files
@@ -455,6 +544,30 @@ enum DesignTokensEmitter {
     out.append("enum class SemanticFontFamily : FontFamilyToken {")
     for family in config.families {
       out.append("  \(family.kotlinEnumEntry),")
+    }
+    out += ["}", ""]
+    return render(out)
+  }
+
+  /// `object SemanticSpacing { const val m: Float = 16f }`.
+  private static func kotlinScale(
+    source: String, scale: Scale, target: DesignTokenConfig.KotlinTarget
+  ) -> String {
+    var out = header(generatedBanner(source))
+    out += ["package \(target.package)", ""]
+    out += kdoc(scale.kotlinDoc, indent: "")
+    out.append("object \(scale.typeName) {")
+    for group in scale.groups {
+      if let name = group.name {
+        out.append("")
+        out.append("  // \(name)")
+      }
+      for token in group.tokens {
+        if token.doc != nil || token.note != nil { out.append("") }
+        if let note = token.note { out += comment(note, prefix: "// ", indent: "  ") }
+        if let doc = token.doc { out += kdoc(doc, indent: "  ") }
+        out.append("  const val \(token.name): Float = \(kotlinFloat(token.value))")
+      }
     }
     out += ["}", ""]
     return render(out)

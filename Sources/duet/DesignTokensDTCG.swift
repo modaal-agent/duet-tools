@@ -12,8 +12,10 @@ import Yams
 ///
 /// What the reader takes from the format:
 /// - `color` (sRGB, `components` 0…1 with an optional `hex` that must agree,
-///   `alpha`), `typography`, `fontFamily`, `gradient`; aliases (`{a.b.c}`)
-///   resolved within each appearance. Other types are counted and skipped.
+///   `alpha`), `typography`, `fontFamily`, `gradient`, and `dimension` in `px`
+///   under the top-level `spacing` and `radius` groups; aliases (`{a.b.c}`)
+///   resolved within each appearance. Other types, and a dimension in any
+///   other group, are counted and skipped.
 /// - One modifier, `appearance`, with the contexts `light` (the default) and
 ///   `dark`. A colour or gradient whose resolved values differ between the
 ///   two is a two-appearance value; equal values are one value.
@@ -303,6 +305,16 @@ enum DTCGSource {
 
   static func ext(_ node: JSON) -> JSON? { node["$extensions"]?[extensionKey] }
 
+  /// Whether a key can be a case or constant name in every target language:
+  /// lowerCamelCase letters and digits, starting with a letter.
+  static func isIdentifier(_ name: String) -> Bool {
+    guard let first = name.first, first.isLetter, first.isLowercase else { return false }
+    return name.allSatisfy { $0.isLetter || $0.isNumber }
+  }
+
+  /// The top-level groups whose `dimension` tokens are a vocabulary.
+  static let dimensionScales: Set<String> = ["spacing", "radius"]
+
   // MARK: - Values
 
   static func color(_ raw: JSON, in tree: JSON, at where_: String, file: String) throws -> DesignTokenConfig.ColorValue {
@@ -402,6 +414,8 @@ enum DTCGSource {
     var colors: [DesignTokenConfig.Group<DesignTokenConfig.ColorToken>] = []
     var fonts: [DesignTokenConfig.Group<DesignTokenConfig.FontToken>] = []
     var gradients: [DesignTokenConfig.GradientToken] = []
+    var spacing: [DesignTokenConfig.Group<DesignTokenConfig.DimensionToken>] = []
+    var radii: [DesignTokenConfig.Group<DesignTokenConfig.DimensionToken>] = []
     var families: [DesignTokenConfig.FontFamily: String] = [:]
     var declaredFamilies: [DesignTokenConfig.FontFamily] = []
     var faces: [DesignTokenConfig.FontFace] = []
@@ -440,6 +454,7 @@ enum DTCGSource {
     }
     let extensionKeys: [String: Set<String>] = [
       "color": ["note"], "gradient": ["note"], "fontFamily": ["files"], "typography": ["note", "textStyle", "axes"],
+      "dimension": ["note"],
     ]
     for token in lightTokens {
       let at = "\(token.type) '\(token.id)'"
@@ -519,6 +534,30 @@ enum DTCGSource {
         // A gradient whose stops name colour tokens changes with them.
         gradients.append(.init(name: token.name, doc: doc, note: note,
                                appearance: light != dark ? .auto(light: light, dark: dark) : .fixed(light)))
+      case "dimension":
+        // A length is a vocabulary under the top-level `spacing` and `radius`
+        // groups only; a dimension anywhere else has no target.
+        guard let scale = token.path.first, dimensionScales.contains(scale) else {
+          skipped[token.type, default: 0] += 1
+          break
+        }
+        guard isIdentifier(token.name) else {
+          throw Failure(description: "\(file): \(at): the key becomes a constant in every target language — lowerCamelCase letters and digits, starting with a letter")
+        }
+        let light = try px(lightValue, in: resolved.light, at: at, file: file)
+        let dark = try px(darkValue, in: resolved.dark, at: at, file: file)
+        guard light == dark else {
+          throw Failure(description: "\(file): \(at): a \(scale) token has one value in both appearances (light \(DesignTokensJSON.number(light))px, dark \(DesignTokensJSON.number(dark))px)")
+        }
+        guard light >= 0 else {
+          throw Failure(description: "\(file): \(at): a \(scale) token is 0px or more")
+        }
+        let length = DesignTokenConfig.DimensionToken(name: token.name, doc: doc, note: note, value: light)
+        if scale == "spacing" {
+          append(length, heading: token.heading, to: &spacing)
+        } else {
+          append(length, heading: token.heading, to: &radii)
+        }
       default:
         skipped[token.type, default: 0] += 1
       }
@@ -532,6 +571,8 @@ enum DTCGSource {
       colors: colors, fonts: fonts, gradients: gradients)
     config.source = relativePath
     config.families = declaredFamilies
+    config.spacing = spacing
+    config.radii = radii
     return config
   }
 }

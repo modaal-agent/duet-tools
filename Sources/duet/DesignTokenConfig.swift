@@ -167,6 +167,15 @@ struct DesignTokenConfig {
     var appearance: GradientAppearance
   }
 
+  /// A length on the app's spacing or corner-radius scale. The value is the
+  /// token's `px`, read as points on Apple, dp on Android and px on the web.
+  struct DimensionToken {
+    var name: String
+    var doc: String?
+    var note: String?
+    var value: Double
+  }
+
   /// A run of tokens under one heading. The heading is emitted as a section
   /// comment in both languages' vocabulary and value files, which is what
   /// keeps the two trees' grouping one decision instead of two.
@@ -200,6 +209,12 @@ struct DesignTokenConfig {
   var colors: [Group<ColorToken>]
   var fonts: [Group<FontToken>]
   var gradients: [GradientToken]
+  /// The spacing scale: `dimension` tokens under the top-level `spacing`
+  /// group of a DTCG source. The YAML grammar declares none.
+  var spacing: [Group<DimensionToken>] = []
+  /// The corner-radius scale: `dimension` tokens under the top-level
+  /// `radius` group of a DTCG source.
+  var radii: [Group<DimensionToken>] = []
 
   var colorTokens: [ColorToken] { colors.flatMap(\.tokens) }
   var fontTokens: [FontToken] { fonts.flatMap(\.tokens) }
