@@ -208,8 +208,11 @@ duet version             # the toolchain version, matching the release tag; work
   memory and compares whole files — the generator is compiled in and a run
   costs milliseconds, so there is no fingerprint block and a hand-edit
   anywhere in a generated file is red; a file the config no longer declares
-  is reported as orphaned. A repo with no config generates nothing and
-  passes. `duet design-tokens migrate` rewrites a version-1 config as
+  is reported as orphaned. Every token follows the contract's rules R1–R8
+  (keys that compile, the scales, the extension keys); the generator reports
+  every refusal in one run with its file, rule and fix, and names the change
+  a new or removed font family needs in the app's resolvers. A repo with no
+  config generates nothing and passes. `duet design-tokens migrate` rewrites a version-1 config as
   version 2. `Tests/terrazzo/` cross-checks the version-2 fixture against an
   independent DTCG implementation (development only; needs Node).
 - `duet mcp` — the same verification verbs as a stdio MCP server

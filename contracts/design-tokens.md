@@ -108,8 +108,8 @@ token is declared for the light appearance first.
 | `fontFamily` | a name or a list of names, the family's stack; its key names the family |
 | `typography` | `fontFamily` an alias of a `fontFamily` token; `fontWeight` 1–1000 or a weight name; `fontSize` in `px`; `lineHeight` a number, the multiple of the size; `letterSpacing` in `px` |
 | `gradient` | stops `{color, position}`, two or more, at even positions, opaque |
-| `dimension` | under the top-level `spacing` or `radius` group: `{value, unit: "px"}`, 0 or more, the same in both appearances. A dimension in any other group is skipped with a notice |
-| any other type | counted and skipped with a notice: no target has a vocabulary for it |
+| `dimension` | under the top-level `spacing` or `radius` group: `{value, unit: "px"}`, 0 or more, the same in both appearances; no other type is allowed there (R4). A dimension in any other group is skipped with a notice naming the group, and scale tokens may alias it |
+| any other type | outside `spacing` and `radius`: counted and skipped with a notice naming the group, because no target has a vocabulary for it |
 
 - **Values per appearance.** Each token is resolved in both appearances. A
   colour or gradient whose two values are equal is generated as one value,
@@ -121,8 +121,9 @@ token is declared for the light appearance first.
   `round(letterSpacing / size, 6)` em: the format allows `px` and `rem` for a
   dimension, and the generated tables carry points and em.
 - **Names.** A token's key is its case name in every language and, in kebab
-  case, its CSS name. The group between the top-level group and the token
-  (`color.Labels.labelPrimary`) is its heading, emitted as a section comment.
+  case, its CSS name; it follows R1–R3 below. The group between the
+  top-level group and the token (`color.Labels.labelPrimary`) is its
+  heading, emitted as a section comment, and is not part of the name.
   `$description` is the case's doc comment.
 - **Extensions.** `$extensions["dev.modaal.duet"]` carries what the format
   has no field for, and an unknown key in it is refused. Other namespaces
@@ -134,6 +135,7 @@ token is declared for the light appearance first.
   | `typography` | `axes` | `{opticalSize?, softness?, width?}`: the `opsz`, `SOFT` and `wdth` axes |
   | `typography`, `color`, `gradient`, `dimension` | `note` | the value's comment in the generated tables |
   | `fontFamily` | `files` | `[{path, weight}]`: the family's font files, `path` relative to the repository root, `weight` a number or a variable face's `[min, max]`; the web target copies and declares them |
+  | any token | `source` | a non-empty string naming the design tool and the name the token has there (`"Figma: Labels/Primary"`); `tokens.json` copies it into the token's entry, and no code target reads it. A tool that edits the tokens from a design finds a token by it after the design changes |
 
 - **Length scales.** The `spacing` tokens generate `SemanticSpacing` and the
   `radius` tokens `SemanticRadius`, each only when the config declares one:
@@ -141,8 +143,7 @@ token is declared for the light appearance first.
   points, and a Kotlin `object` of `const val <key>: Float` constants in dp
   (`SemanticSpacing.m.dp` in Compose). The value sits beside the name, because
   a length needs no engine type and no appearance. A key is a constant's name
-  in both languages, so it is lowerCamelCase letters and digits starting with
-  a letter (`xs`, `screen`, `xl2`); any other key is refused.
+  in both languages, so it follows R1–R3 (`xs`, `screen`, `s4`).
 - **Families.** The families are the `fontFamily` tokens, in declaration
   order. The Swift target generates `FontFamilyToken` with one case per
   family. The Kotlin target names the engine's own `FontFamilyToken.Serif`,
@@ -151,7 +152,54 @@ token is declared for the light appearance first.
   `enum class SemanticFontFamily : FontFamilyToken` with one entry per family
   (`display` → `Display`), and the palette names its entries. That enum needs
   a theming engine whose `FontFamilyToken` is an interface; the app's
-  resolver switches over `SemanticFontFamily`.
+  resolver switches over `SemanticFontFamily`. Adding or removing a family
+  changes what the app's own resolvers must map (R7): a run that changes the
+  generated families prints each one and the change it needs, and `--json`
+  lists the same lines under `notices`.
+
+## Rules a token follows
+
+The token files are what an author or a tool edits; the rules below say what
+generates code that compiles, and the generator refuses every token that
+breaks one. A refusal names the token's file, its type and path, the rule and
+a fix:
+
+```
+parity/design-tokens/color.light.tokens.json: color 'color.Labels.on-light': R1 — a key is ASCII letters and digits in lowerCamelCase, starting with a lowercase letter, because it names a case or a constant in Swift and Kotlin; rename it 'onLight'
+```
+
+Every refusal in the sources is reported in one run, grouped by file in
+document order, and nothing is generated while one stands. A file that is
+not a token document (not JSON, a token without `$type`, an unknown `$` key)
+stops the run at its first error.
+
+| Rule | A token… |
+| --- | --- |
+| **R1** | has a key of ASCII letters and digits in lowerCamelCase, starting with a lowercase letter (`labelPrimary`, `s16`, `xl2`). The refusal gives the key's lowerCamelCase form (`on-light` → `onLight`); a key that starts with a digit gets the scale's letter (`spacing.4` → `s4`, `radius.2xl` → `r2xl`) or its group's word (`color.Accent.300` → `accent300`) in front. |
+| **R2** | has a key that is not a reserved name (below). The refusal suggests the key behind its group's word (`radius.default` → `radiusDefault`). |
+| **R3** | has a key no other token of its vocabulary has: the colours, the text styles, the gradients, the families, `spacing` and `radius` each name one enum or object, and groups are not part of the name. The refusal names both tokens. A key may repeat across vocabularies. |
+| **R4** | under the top-level `spacing` or `radius` group is a `dimension` in `px`, 0 or more, with one value in both appearances. A token of another type there is refused with the dimension to write. |
+| **R5** | that is a colour, or a gradient stop, is sRGB as the value table says, and has a value in both appearances; a gradient's stops sit at even positions and are opaque. |
+| **R6** | that is a text style references a family token and has a weight, a size in `px`, a line height as a multiple and a letter spacing in `px`, and a `textStyle` when a `swift:` target is declared. |
+| **R7** | that is a family has a stack, and `files` only with the face's own name first. A family beyond `serif`, `sans` and `mono` is mapped by the app's font resolvers before the app builds, and draws the system face until its `files` are registered. |
+| **R8** | carries in `$extensions["dev.modaal.duet"]` only the keys the extension table lists for its type, and `source` as a non-empty string. |
+
+**Reserved names (R2).** The keys that do not compile as a generated name:
+the Swift and Kotlin keywords that cannot name an enum case, a static
+constant or a `const val`, and the members of Kotlin's `Enum` an entry cannot
+shadow. The list was measured by compiling each candidate in the generated
+shapes (an enum case, a static constant, a `switch` or `when` arm, a member
+reference) with Swift for iOS and with Kotlin/JVM; contextual keywords that
+compiled there (`none`, `get`, `set`, `open`, `value`, `data`) are allowed.
+
+```
+as associatedtype break case catch class constructor continue default defer
+deinit do else entries enum extension fallthrough false fileprivate for fun
+func guard if import in init inout interface internal is let name nil null
+object operator ordinal package precedencegroup private protocol public repeat
+rethrows return self static struct subscript super switch this throw throws
+true try typealias typeof val var when where while
+```
 
 ## Version 1: the tokens in the config
 

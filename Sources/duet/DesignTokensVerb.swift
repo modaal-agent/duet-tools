@@ -62,6 +62,60 @@ enum DesignTokensVerb {
     return regen
   }
 
+  /// The font families the generated code on disk declares: the cases of the
+  /// Swift palette's `FontFamilyToken`, else the Kotlin target's
+  /// `SemanticFontFamily` entries (the engine's three when the palette is
+  /// there without it). Nil before the first generation and for a config
+  /// with only a web target, which has no resolver to change.
+  static func generatedFamilies(repo: Repo, config: DesignTokenConfig) -> [String]? {
+    func read(_ path: String) -> String? {
+      try? String(contentsOf: repo.root.appendingPathComponent(path), encoding: .utf8)
+    }
+    if let target = config.swift {
+      guard let text = read("\(target.output)/\(target.theme)Palette.swift"),
+            let body = text.components(separatedBy: "public enum FontFamilyToken {").dropFirst().first,
+            let block = body.components(separatedBy: "}").first
+      else { return nil }
+      return block.split(separator: "\n").compactMap { line in
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return trimmed.hasPrefix("case ") ? String(trimmed.dropFirst("case ".count)) : nil
+      }
+    }
+    if let target = config.kotlin {
+      guard read("\(target.output)/\(target.palette).kt") != nil else { return nil }
+      guard let text = read("\(target.output)/SemanticFontFamily.kt"),
+            let body = text.components(separatedBy: "enum class SemanticFontFamily : FontFamilyToken {").dropFirst().first,
+            let block = body.components(separatedBy: "}").first
+      else { return DesignTokenConfig.FontFamily.allCases.map(\.rawValue) }
+      return block.split(separator: "\n").compactMap { line in
+        let entry = line.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: ",;"))
+        return entry.isEmpty || entry.hasPrefix("/") || entry.hasPrefix("*") ? nil : entry.prefix(1).lowercased() + entry.dropFirst()
+      }
+    }
+    return nil
+  }
+
+  /// What a change to the families asks of the app's own code (R7): each
+  /// family is mapped by the hand-written font resolvers, which the
+  /// generator does not write.
+  static func familyNotices(before: [String]?, config: DesignTokenConfig) -> [String] {
+    guard let before else { return [] }
+    let after = config.families.map(\.rawValue)
+    var notices: [String] = []
+    for family in after where !before.contains(family) {
+      var line = "family '\(family)' added: R7 — map it in the app's font resolvers"
+      if let swift = config.swift {
+        line += "; the iOS build fails with \"switch must be exhaustive\" where the theme switches over \(swift.theme).FontFamilyToken until it is mapped"
+      }
+      line += "; without $extensions[\"\(DTCGSource.extensionKey)\"].files it draws the system face"
+      notices.append(line)
+    }
+    for family in before where !after.contains(family) {
+      notices.append("family '\(family)' removed: R7 — delete its case from the app's font resolvers")
+    }
+    return notices
+  }
+
   static func run(repo: Repo, options: Options) throws -> Int32 {
     if let subcommand = options.target {
       guard subcommand == "migrate" else {
@@ -81,13 +135,15 @@ enum DesignTokensVerb {
       }
       return 0
     }
+    let familiesBefore = options.check ? nil : generatedFamilies(repo: repo, config: config)
     let regen = try regenerate(repo: repo, config: config, check: options.check)
+    let notices = familyNotices(before: familiesBefore, config: config)
     if options.json {
       Lanes.emitJSON([
         "status": regen.failed ? "failed" : "passed",
         "config": DesignTokenConfig.relativePath, "declared": true,
         "written": regen.written, "stale": regen.stale, "orphans": regen.orphans,
-        "upToDate": regen.upToDate,
+        "upToDate": regen.upToDate, "notices": notices,
       ])
       return regen.failed ? 1 : 0
     }
@@ -116,6 +172,7 @@ enum DesignTokensVerb {
     for path in regen.orphans {
       print("  orphaned: \(path) — the config no longer declares it; delete the file")
     }
+    for notice in notices { print("duet design-tokens: \(notice)") }
     return regen.orphans.isEmpty ? 0 : 1
   }
 }

@@ -130,6 +130,9 @@ struct DesignTokenConfig {
     var doc: String?
     var note: String?
     var appearance: ColorAppearance
+    /// Where the token came from in a design tool, as the source names it;
+    /// the manifest carries it, no code target reads it.
+    var source: String? = nil
   }
 
   struct FontToken {
@@ -151,6 +154,7 @@ struct DesignTokenConfig {
     /// `UIFont.TextStyle` the cut scales against — the one column only the
     /// Apple side expresses, required whenever a `swift:` target is declared.
     var textStyle: String?
+    var source: String? = nil
   }
 
   /// How a gradient's stops answer the appearance. Mirrors `ColorAppearance`:
@@ -165,6 +169,7 @@ struct DesignTokenConfig {
     var doc: String?
     var note: String?
     var appearance: GradientAppearance
+    var source: String? = nil
   }
 
   /// A length on the app's spacing or corner-radius scale. The value is the
@@ -174,6 +179,7 @@ struct DesignTokenConfig {
     var doc: String?
     var note: String?
     var value: Double
+    var source: String? = nil
   }
 
   /// A run of tokens under one heading. The heading is emitted as a section
@@ -456,6 +462,9 @@ extension DesignTokenConfig {
         && name.allSatisfy { $0.isLetter || $0.isNumber }
       guard valid else {
         throw fail("\(where_): '\(name)' must be lowerCamelCase letters and digits — it becomes an enum case in both languages")
+      }
+      guard !DesignTokenRules.reserved.contains(name) else {
+        throw fail("\(where_): '\(name)' is reserved — it does not compile as a name in Swift or Kotlin")
       }
       return name
     }

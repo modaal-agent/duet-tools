@@ -236,6 +236,7 @@ enum DesignTokensCSSEmitter {
         colors.append(object([
           ("name", .string(token.name)), ("css", .string(colorProperty(token.name))), ("group", text(group.name)),
           ("light", light), ("dark", dark), ("doc", text(token.doc)), ("note", text(token.note)),
+          ("source", text(token.source)),
         ]))
       }
     }
@@ -249,7 +250,7 @@ enum DesignTokensCSSEmitter {
           ("tracking", .number(token.tracking)),
           ("opticalSize", token.opticalSize.map(JSON.number)), ("softness", token.softness.map(JSON.number)),
           ("width", token.width.map(JSON.number)),
-          ("doc", text(token.doc)), ("note", text(token.note)),
+          ("doc", text(token.doc)), ("note", text(token.note)), ("source", text(token.source)),
         ]))
       }
     }
@@ -263,7 +264,7 @@ enum DesignTokensCSSEmitter {
       gradients.append(object([
         ("name", .string(token.name)), ("css", .string(gradientProperty(token.name))),
         ("light", .array(light.map { .string(cssColor($0)) })), ("dark", .array(dark.map { .string(cssColor($0)) })),
-        ("doc", text(token.doc)), ("note", text(token.note)),
+        ("doc", text(token.doc)), ("note", text(token.note)), ("source", text(token.source)),
       ]))
     }
     func lengths(
@@ -274,6 +275,7 @@ enum DesignTokensCSSEmitter {
           object([
             ("name", .string(token.name)), ("css", .string(property(token.name))), ("group", text(group.name)),
             ("value", .number(token.value)), ("doc", text(token.doc)), ("note", text(token.note)),
+            ("source", text(token.source)),
           ])
         }
       }

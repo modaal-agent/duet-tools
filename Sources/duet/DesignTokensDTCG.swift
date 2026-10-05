@@ -13,16 +13,21 @@ import Yams
 /// What the reader takes from the format:
 /// - `color` (sRGB, `components` 0…1 with an optional `hex` that must agree,
 ///   `alpha`), `typography`, `fontFamily`, `gradient`, and `dimension` in `px`
-///   under the top-level `spacing` and `radius` groups; aliases (`{a.b.c}`)
-///   resolved within each appearance. Other types, and a dimension in any
-///   other group, are counted and skipped.
+///   under the top-level `spacing` and `radius` groups, where no other type
+///   is allowed; aliases (`{a.b.c}`) resolved within each appearance. Other
+///   types, and a dimension in any other group, are counted and skipped.
+/// - Every key a target names follows `DesignTokenRules`, and every refusal
+///   in the sources is reported in one run, each with its file, its token and
+///   its rule.
 /// - One modifier, `appearance`, with the contexts `light` (the default) and
 ///   `dark`. A colour or gradient whose resolved values differ between the
 ///   two is a two-appearance value; equal values are one value.
 /// - The vocabularies come from `$type`; a token's case name is its own key,
 ///   and the group it sits in (below the top-level group) is its heading.
 /// - `$description` is the vocabulary case's doc comment. The rest lives in
-///   `$extensions["dev.modaal.duet"]`: `note` (the value's comment),
+///   `$extensions["dev.modaal.duet"]`: `source` on any token (the design
+///   tool and the name the token came from, copied to `tokens.json`), `note`
+///   (the value's comment),
 ///   `textStyle` (the Dynamic Type style), `axes` (`opticalSize`, `softness`,
 ///   `width`); on a `fontFamily` token, `files`: the family's font files as
 ///   `{path, weight}`, `path` relative to the repository root and `weight` a
@@ -120,11 +125,14 @@ enum DTCGSource {
   // MARK: - The resolver
 
   /// One merged token tree per appearance, plus the paths the dark context's
-  /// sources define.
+  /// sources define and the file each token path last came from, so a
+  /// refusal names the file to edit.
   struct Resolved {
     var light: JSON
     var dark: JSON
     var darkPaths: Set<String>
+    var lightFiles: [String: String] = [:]
+    var darkFiles: [String: String] = [:]
   }
 
   static func resolve(resolver url: URL, relativePath: String) throws -> Resolved {
@@ -139,26 +147,29 @@ enum DTCGSource {
       throw Failure(description: "\(relativePath): 'version' must be \"\(formatVersion)\", the resolver format this toolchain reads")
     }
     let base = url.deletingLastPathComponent()
+    let directory = (relativePath as NSString).deletingLastPathComponent
     var cache: [String: JSON] = [:]
 
     /// A source: an inline token group, or `{"$ref": "file.tokens.json"}`
-    /// relative to the resolver.
-    func source(_ entry: JSON, at where_: String) throws -> JSON {
-      guard let ref = entry["$ref"] else { return entry }
+    /// relative to the resolver. Paired with the file it names, relative to
+    /// the repository root (the resolver's own path for an inline group).
+    func source(_ entry: JSON, at where_: String) throws -> (JSON, String) {
+      guard let ref = entry["$ref"] else { return (entry, relativePath) }
       guard let file = ref.string, !file.contains("#") else {
         throw Failure(description: "\(relativePath): \(where_): '$ref' must name a token file (JSON pointers into files are not read)")
       }
-      if let cached = cache[file] { return cached }
+      let label = directory.isEmpty ? file : "\(directory)/\(file)"
+      if let cached = cache[file] { return (cached, label) }
       let target = base.appendingPathComponent(file)
       guard let body = try? String(contentsOf: target, encoding: .utf8) else {
         throw Failure(description: "\(relativePath): \(where_): cannot read '\(file)'")
       }
-      let parsed = try parseJSON(body, path: file)
+      let parsed = try parseJSON(body, path: label)
       cache[file] = parsed
-      return parsed
+      return (parsed, label)
     }
 
-    func sources(_ list: JSON?, at where_: String) throws -> [JSON] {
+    func sources(_ list: JSON?, at where_: String) throws -> [(JSON, String)] {
       guard case let .array(items)? = list else { throw Failure(description: "\(relativePath): \(where_) must be an array") }
       return try items.map { try source($0, at: where_) }
     }
@@ -181,9 +192,9 @@ enum DTCGSource {
     guard case let .array(order)? = doc["resolutionOrder"], !order.isEmpty else {
       throw Failure(description: "\(relativePath): 'resolutionOrder' must be a non-empty array")
     }
-    var light: [JSON] = []
-    var dark: [JSON] = []
-    var darkOnly: [JSON] = []
+    var light: [(JSON, String)] = []
+    var dark: [(JSON, String)] = []
+    var darkOnly: [(JSON, String)] = []
     var sawAppearance = false
     for item in order {
       let (kind, name, body) = try referenced(item)
@@ -214,8 +225,20 @@ enum DTCGSource {
       throw Failure(description: "\(relativePath): resolutionOrder must include the 'appearance' modifier")
     }
     var darkPaths = Set<String>()
-    for tree in darkOnly { collectTokenPaths(tree, prefix: [], into: &darkPaths) }
-    return Resolved(light: merge(light), dark: merge(dark), darkPaths: darkPaths)
+    for (tree, _) in darkOnly { collectTokenPaths(tree, prefix: [], into: &darkPaths) }
+    /// Later sources win, as in `merge`.
+    func files(_ trees: [(JSON, String)]) -> [String: String] {
+      var out: [String: String] = [:]
+      for (tree, label) in trees {
+        var paths = Set<String>()
+        collectTokenPaths(tree, prefix: [], into: &paths)
+        for path in paths { out[path] = label }
+      }
+      return out
+    }
+    return Resolved(
+      light: merge(light.map(\.0)), dark: merge(dark.map(\.0)), darkPaths: darkPaths,
+      lightFiles: files(light), darkFiles: files(darkOnly))
   }
 
   static func isToken(_ node: JSON) -> Bool { node["$value"] != nil }
@@ -304,13 +327,6 @@ enum DTCGSource {
   }
 
   static func ext(_ node: JSON) -> JSON? { node["$extensions"]?[extensionKey] }
-
-  /// Whether a key can be a case or constant name in every target language:
-  /// lowerCamelCase letters and digits, starting with a letter.
-  static func isIdentifier(_ name: String) -> Bool {
-    guard let first = name.first, first.isLetter, first.isLowercase else { return false }
-    return name.allSatisfy { $0.isLetter || $0.isNumber }
-  }
 
   /// The top-level groups whose `dimension` tokens are a vocabulary.
   static let dimensionScales: Set<String> = ["spacing", "radius"]
@@ -420,7 +436,8 @@ enum DTCGSource {
     var declaredFamilies: [DesignTokenConfig.FontFamily] = []
     var faces: [DesignTokenConfig.FontFace] = []
     var faceFiles = Set<String>()
-    var skipped: [String: Int] = [:]
+    struct Skip: Hashable { var type: String; var group: String }
+    var skipped: [Skip: Int] = [:]
 
     func append<T>(_ token: T, heading: String?, to groups: inout [DesignTokenConfig.Group<T>]) {
       if let last = groups.indices.last, groups[last].name == heading {
@@ -430,7 +447,7 @@ enum DTCGSource {
       }
     }
 
-    func stops(_ raw: JSON, in tree: JSON, at where_: String) throws -> [DesignTokenConfig.ColorValue] {
+    func stops(_ raw: JSON, in tree: JSON, at where_: String, file: String) throws -> [DesignTokenConfig.ColorValue] {
       guard case let .array(items) = try dereference(raw, in: tree, file: file), items.count >= 2 else {
         throw Failure(description: "\(file): \(where_): a gradient needs two or more stops")
       }
@@ -447,123 +464,187 @@ enum DTCGSource {
       }
     }
 
+    // Every refusal is collected, each naming its file, its token and the
+    // rule it breaks (contracts/design-tokens.md, "Rules"), and all of them
+    // are reported together; nothing is generated while one stands.
+    var problems: [(file: String, text: String)] = []
     let lightTokens = try tokens(resolved.light, file: file)
     let lightIDs = Set(lightTokens.map(\.id))
     for id in resolved.darkPaths.sorted() where !lightIDs.contains(id) {
-      throw Failure(description: "\(file): '\(id)' is defined only for the dark appearance — declare it in the base set")
+      let darkFile = resolved.darkFiles[id] ?? file
+      problems.append((darkFile, "\(darkFile): '\(id)' is defined only for the dark appearance: R5 — declare it in the base set too"))
     }
     let extensionKeys: [String: Set<String>] = [
-      "color": ["note"], "gradient": ["note"], "fontFamily": ["files"], "typography": ["note", "textStyle", "axes"],
-      "dimension": ["note"],
+      "color": ["note", "source"], "gradient": ["note", "source"], "fontFamily": ["files", "source"],
+      "typography": ["note", "textStyle", "axes", "source"], "dimension": ["note", "source"],
     ]
+    /// The rule a token's values follow, by type.
+    let valueRules = ["color": "R5", "gradient": "R5", "typography": "R6", "fontFamily": "R7", "dimension": "R4"]
+    /// Each vocabulary's keys, with the path that took each key first (R3).
+    var keys: [String: [String: [String]]] = [:]
+    var refusedFamilies = Set<String>()
     for token in lightTokens {
       let at = "\(token.type) '\(token.id)'"
+      let file = resolved.lightFiles[token.id] ?? relativePath
+      func refuse(_ text: String) { problems.append((file, "\(file): \(at): \(text)")) }
+      if let scale = token.path.first, dimensionScales.contains(scale), token.type != "dimension" {
+        let example = token.node["$value"]?.number.map(DesignTokensJSON.number) ?? "8"
+        refuse("R4 — a token under '\(scale)' is a dimension in px: write \"$type\": \"dimension\" and \"$value\": {\"value\": \(example), \"unit\": \"px\"}")
+        continue
+      }
+      let vocabulary: String?
+      switch token.type {
+      case "color", "typography", "gradient", "fontFamily": vocabulary = token.type
+      case "dimension": vocabulary = dimensionScales.contains(token.path[0]) ? token.path[0] : nil
+      default: vocabulary = nil
+      }
+      if let vocabulary {
+        if let problem = DesignTokenRules.keyProblem(path: token.path) {
+          refuse(problem)
+          if token.type == "fontFamily" { refusedFamilies.insert(token.name) }
+        } else if let first = keys[vocabulary]?[token.name] {
+          refuse(DesignTokenRules.duplicate(path: token.path, first: first))
+        } else {
+          keys[vocabulary, default: [:]][token.name] = token.path
+        }
+      }
       if let known = extensionKeys[token.type], let owned = ext(token.node)?.pairs {
         for (key, _) in owned where !known.contains(key) {
-          throw Failure(description: "\(file): \(at): unknown key '\(key)' in $extensions[\"\(extensionKey)\"] (known: \(known.sorted().joined(separator: ", ")))")
+          refuse("R8 — unknown key '\(key)' in $extensions[\"\(extensionKey)\"] (known: \(known.sorted().joined(separator: ", ")))")
+        }
+        if let source = ext(token.node)?["source"], source.string?.isEmpty != false {
+          refuse("R8 — 'source' is a non-empty string naming the design tool and the name there, such as \"Figma: Labels/Primary\"")
         }
       }
       let doc = token.node["$description"]?.string
       let note = ext(token.node)?["note"]?.string
-      guard let darkNode = lookup(token, in: resolved.dark), let lightValue = token.node["$value"],
-            let darkValue = darkNode["$value"]
-      else { throw Failure(description: "\(file): \(at) has no value in the dark appearance") }
-      switch token.type {
-      case "color":
-        // The generated code depends on the resolved values only, never on
-        // which file holds them: equal in both appearances is one value.
-        let light = try color(lightValue, in: resolved.light, at: at, file: file)
-        let dark = try color(darkValue, in: resolved.dark, at: at, file: file)
-        let appearance: DesignTokenConfig.ColorAppearance = light == dark ? .fixed(light) : .auto(light: light, dark: dark)
-        append(.init(name: token.name, doc: doc, note: note, appearance: appearance), heading: token.heading, to: &colors)
-      case "fontFamily":
-        guard let family = DesignTokenConfig.FontFamily(rawValue: token.name) else {
-          throw Failure(description: "\(file): \(at): a family's key becomes an enum case — lowerCamelCase letters and digits")
-        }
-        declaredFamilies.append(family)
-        let names: [String]
-        switch try dereference(lightValue, in: resolved.light, file: file) {
-        case let .string(one): names = [one]
-        case let .array(list): names = list.compactMap(\.string)
-        default: throw Failure(description: "\(file): \(at): a font family is a name or a list of names")
-        }
-        let generic: Set<String> = ["serif", "sans-serif", "monospace", "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "-apple-system", "cursive", "fantasy"]
-        families[family] = names.map { $0.contains(" ") && !generic.contains($0) ? "\"\($0)\"" : $0 }.joined(separator: ", ")
-        if let rawFiles = ext(token.node)?["files"] {
-          guard let name = names.first, !generic.contains(name) else {
-            throw Failure(description: "\(file): \(at): a family with 'files' starts its stack with the face's own name")
+      let source = ext(token.node)?["source"]?.string
+      do {
+        guard let darkNode = lookup(token, in: resolved.dark), let lightValue = token.node["$value"],
+              let darkValue = darkNode["$value"]
+        else { throw Failure(description: "\(file): \(at): it has no value in the dark appearance; add it to the dark context's file") }
+        switch token.type {
+        case "color":
+          // The generated code depends on the resolved values only, never on
+          // which file holds them: equal in both appearances is one value.
+          let light = try color(lightValue, in: resolved.light, at: at, file: file)
+          let dark = try color(darkValue, in: resolved.dark, at: at, file: file)
+          let appearance: DesignTokenConfig.ColorAppearance = light == dark ? .fixed(light) : .auto(light: light, dark: dark)
+          append(.init(name: token.name, doc: doc, note: note, appearance: appearance, source: source),
+                 heading: token.heading, to: &colors)
+        case "fontFamily":
+          // A family whose key is refused is reported once, by its key.
+          guard !refusedFamilies.contains(token.name) else { break }
+          guard let family = DesignTokenConfig.FontFamily(rawValue: token.name) else {
+            throw Failure(description: "\(file): \(at): a family's key becomes an enum case — lowerCamelCase letters and digits")
           }
-          let files = try fontFiles(rawFiles, repoRoot: repoRoot, at: at, file: file)
-          for font in files where !faceFiles.insert(font.fileName).inserted {
-            throw Failure(description: "\(file): \(at): the font file name '\(font.fileName)' is used by another family")
+          declaredFamilies.append(family)
+          let names: [String]
+          switch try dereference(lightValue, in: resolved.light, file: file) {
+          case let .string(one): names = [one]
+          case let .array(list): names = list.compactMap(\.string)
+          default: throw Failure(description: "\(file): \(at): a font family is a name or a list of names")
           }
-          faces.append(.init(family: family, name: name, files: files))
+          let generic: Set<String> = ["serif", "sans-serif", "monospace", "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "-apple-system", "cursive", "fantasy"]
+          families[family] = names.map { $0.contains(" ") && !generic.contains($0) ? "\"\($0)\"" : $0 }.joined(separator: ", ")
+          if let rawFiles = ext(token.node)?["files"] {
+            guard let name = names.first, !generic.contains(name) else {
+              throw Failure(description: "\(file): \(at): a family with 'files' starts its stack with the face's own name")
+            }
+            let files = try fontFiles(rawFiles, repoRoot: repoRoot, at: at, file: file)
+            for font in files where !faceFiles.insert(font.fileName).inserted {
+              throw Failure(description: "\(file): \(at): the font file name '\(font.fileName)' is used by another family")
+            }
+            faces.append(.init(family: family, name: name, files: files))
+          }
+        case "typography":
+          let value = try dereference(lightValue, in: resolved.light, file: file)
+          let familyKey = value["fontFamily"]?.string.map { String($0.dropLast().split(separator: ".").last ?? "") }
+          // A style on a refused family is reported through the family.
+          if let familyKey, refusedFamilies.contains(familyKey) { break }
+          guard let familyRef = value["fontFamily"]?.string, familyRef.hasPrefix("{"),
+                let family = DesignTokenConfig.FontFamily(rawValue: familyKey ?? ""),
+                declaredFamilies.contains(family)
+          else {
+            throw Failure(description: "\(file): \(at): 'fontFamily' must reference a fontFamily token ({fontFamily.sans})")
+          }
+          let weightValue = try dereference(value["fontWeight"] ?? .null, in: resolved.light, file: file)
+          guard let weight = weightValue.number.map({ Int($0) }) ?? weightValue.string.flatMap({ weightNames[$0] }) else {
+            throw Failure(description: "\(file): \(at): 'fontWeight' must be 1…1000 or a weight name")
+          }
+          let size = try px(value["fontSize"], in: resolved.light, at: "\(at) fontSize", file: file)
+          guard let ratio = try dereference(value["lineHeight"] ?? .null, in: resolved.light, file: file).number else {
+            throw Failure(description: "\(file): \(at): 'lineHeight' must be a number, the multiple of the font size")
+          }
+          let spacing = try px(value["letterSpacing"], in: resolved.light, at: "\(at) letterSpacing", file: file)
+          let extras = ext(token.node)
+          let textStyle = extras?["textStyle"]?.string
+          if swift != nil, textStyle == nil {
+            throw Failure(description: "\(file): \(at): a swift target is declared, so the token needs $extensions[\"\(extensionKey)\"].textStyle")
+          }
+          let axes = extras?["axes"]
+          append(.init(
+            name: token.name, doc: doc, note: note, family: family, weight: weight, size: size,
+            lineHeight: rounded(size * ratio, 2), tracking: rounded(spacing / size, 6),
+            opticalSize: axes?["opticalSize"]?.number, softness: axes?["softness"]?.number,
+            width: axes?["width"]?.number, textStyle: textStyle, source: source),
+            heading: token.heading, to: &fonts)
+        case "gradient":
+          let light = try stops(lightValue, in: resolved.light, at: at, file: file)
+          let dark = try stops(darkValue, in: resolved.dark, at: at, file: file)
+          // A gradient whose stops name colour tokens changes with them.
+          gradients.append(.init(name: token.name, doc: doc, note: note,
+                                 appearance: light != dark ? .auto(light: light, dark: dark) : .fixed(light),
+                                 source: source))
+        case "dimension":
+          // A length is a vocabulary under the top-level `spacing` and `radius`
+          // groups only; a dimension anywhere else has no target, and scale
+          // tokens may alias it.
+          guard let scale = token.path.first, dimensionScales.contains(scale) else {
+            skipped[Skip(type: token.type, group: token.path[0]), default: 0] += 1
+            break
+          }
+          let light = try px(lightValue, in: resolved.light, at: at, file: file)
+          let dark = try px(darkValue, in: resolved.dark, at: at, file: file)
+          guard light == dark else {
+            throw Failure(description: "\(file): \(at): a \(scale) token has one value in both appearances (light \(DesignTokensJSON.number(light))px, dark \(DesignTokensJSON.number(dark))px)")
+          }
+          guard light >= 0 else {
+            throw Failure(description: "\(file): \(at): a \(scale) token is 0px or more")
+          }
+          let length = DesignTokenConfig.DimensionToken(name: token.name, doc: doc, note: note, value: light, source: source)
+          if scale == "spacing" {
+            append(length, heading: token.heading, to: &spacing)
+          } else {
+            append(length, heading: token.heading, to: &radii)
+          }
+        default:
+          skipped[Skip(type: token.type, group: token.path[0]), default: 0] += 1
         }
-      case "typography":
-        let value = try dereference(lightValue, in: resolved.light, file: file)
-        guard let familyRef = value["fontFamily"]?.string, familyRef.hasPrefix("{"),
-              let family = DesignTokenConfig.FontFamily(rawValue: String(familyRef.dropLast().split(separator: ".").last ?? "")),
-              declaredFamilies.contains(family)
-        else {
-          throw Failure(description: "\(file): \(at): 'fontFamily' must reference a fontFamily token ({fontFamily.sans})")
-        }
-        let weightValue = try dereference(value["fontWeight"] ?? .null, in: resolved.light, file: file)
-        guard let weight = weightValue.number.map({ Int($0) }) ?? weightValue.string.flatMap({ weightNames[$0] }) else {
-          throw Failure(description: "\(file): \(at): 'fontWeight' must be 1…1000 or a weight name")
-        }
-        let size = try px(value["fontSize"], in: resolved.light, at: "\(at) fontSize", file: file)
-        guard let ratio = try dereference(value["lineHeight"] ?? .null, in: resolved.light, file: file).number else {
-          throw Failure(description: "\(file): \(at): 'lineHeight' must be a number, the multiple of the font size")
-        }
-        let spacing = try px(value["letterSpacing"], in: resolved.light, at: "\(at) letterSpacing", file: file)
-        let extras = ext(token.node)
-        let textStyle = extras?["textStyle"]?.string
-        if swift != nil, textStyle == nil {
-          throw Failure(description: "\(file): \(at): a swift target is declared, so the token needs $extensions[\"\(extensionKey)\"].textStyle")
-        }
-        let axes = extras?["axes"]
-        append(.init(
-          name: token.name, doc: doc, note: note, family: family, weight: weight, size: size,
-          lineHeight: rounded(size * ratio, 2), tracking: rounded(spacing / size, 6),
-          opticalSize: axes?["opticalSize"]?.number, softness: axes?["softness"]?.number,
-          width: axes?["width"]?.number, textStyle: textStyle),
-          heading: token.heading, to: &fonts)
-      case "gradient":
-        let light = try stops(lightValue, in: resolved.light, at: at)
-        let dark = try stops(darkValue, in: resolved.dark, at: at)
-        // A gradient whose stops name colour tokens changes with them.
-        gradients.append(.init(name: token.name, doc: doc, note: note,
-                               appearance: light != dark ? .auto(light: light, dark: dark) : .fixed(light)))
-      case "dimension":
-        // A length is a vocabulary under the top-level `spacing` and `radius`
-        // groups only; a dimension anywhere else has no target.
-        guard let scale = token.path.first, dimensionScales.contains(scale) else {
-          skipped[token.type, default: 0] += 1
-          break
-        }
-        guard isIdentifier(token.name) else {
-          throw Failure(description: "\(file): \(at): the key becomes a constant in every target language — lowerCamelCase letters and digits, starting with a letter")
-        }
-        let light = try px(lightValue, in: resolved.light, at: at, file: file)
-        let dark = try px(darkValue, in: resolved.dark, at: at, file: file)
-        guard light == dark else {
-          throw Failure(description: "\(file): \(at): a \(scale) token has one value in both appearances (light \(DesignTokensJSON.number(light))px, dark \(DesignTokensJSON.number(dark))px)")
-        }
-        guard light >= 0 else {
-          throw Failure(description: "\(file): \(at): a \(scale) token is 0px or more")
-        }
-        let length = DesignTokenConfig.DimensionToken(name: token.name, doc: doc, note: note, value: light)
-        if scale == "spacing" {
-          append(length, heading: token.heading, to: &spacing)
-        } else {
-          append(length, heading: token.heading, to: &radii)
-        }
-      default:
-        skipped[token.type, default: 0] += 1
+      } catch let failure as Failure {
+        // The value helpers name the file and the token; the rule goes after
+        // them, so every refusal reads `file: token: rule — what to change`.
+        var rest = Substring(failure.description)
+        if rest.hasPrefix("\(file): ") { rest = rest.dropFirst(file.count + 2) }
+        if rest.hasPrefix(at) { rest = rest.dropFirst(at.count) }
+        while rest.hasPrefix(":") || rest.hasPrefix(" ") { rest = rest.dropFirst() }
+        refuse("\(valueRules[token.type] ?? "R5") — \(rest)")
       }
     }
-    for (type, count) in skipped.sorted(by: { $0.key < $1.key }) {
-      FileHandle.standardError.write(Data("duet design-tokens: \(count) '\(type)' token(s) have no target vocabulary; not generated\n".utf8))
+    if !problems.isEmpty {
+      // Grouped by file, each file's refusals in document order.
+      let lines = problems.enumerated()
+        .sorted { ($0.element.file, $0.offset) < ($1.element.file, $1.offset) }
+        .map(\.element.text)
+      throw Failure(description: lines.count == 1
+        ? lines[0]
+        : "\(lines.count) design-token problems; nothing was generated:\n" + lines.map { "  " + $0 }.joined(separator: "\n"))
+    }
+    for (skip, count) in skipped.sorted(by: { ($0.key.type, $0.key.group) < ($1.key.type, $1.key.group) }) {
+      let line = skip.type == "dimension"
+        ? "\(count) 'dimension' token(s) under '\(skip.group)' are not generated; alias them from 'spacing' or 'radius' to generate them"
+        : "\(count) '\(skip.type)' token(s) under '\(skip.group)' have no target vocabulary; not generated"
+      FileHandle.standardError.write(Data("duet design-tokens: \(line)\n".utf8))
     }
     var config = DesignTokenConfig(
       version: DesignTokenConfig.currentVersion, swift: swift, kotlin: kotlin,

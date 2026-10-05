@@ -81,7 +81,11 @@ final class DesignTokensDTCGTests: XCTestCase {
       }
       return .object(pairs)
     }
-    guard let index else { return value }
+    guard let index else {
+      // A missing group is created, so a test can add a token in a new group.
+      pairs.append((key, setting(.object([]), Array(path.dropFirst()), to: new)))
+      return .object(pairs)
+    }
     pairs[index].1 = setting(pairs[index].1, Array(path.dropFirst()), to: new)
     return .object(pairs)
   }
@@ -190,7 +194,7 @@ final class DesignTokensDTCGTests: XCTestCase {
   func testAColourMissingFromTheDarkFileIsRefused() throws {
     let repo = try dtcgRepo()
     try edit(repo, Self.dark, ["color", "accent"], to: nil)
-    assertRefused(repo, contains: "color 'color.accent' has no value in the dark appearance")
+    assertRefused(repo, contains: "color 'color.accent': R5 — it has no value in the dark appearance")
   }
 
   func testALiteralFamilyInATypographyTokenIsRefused() throws {
@@ -590,7 +594,8 @@ final class DesignTokensDTCGTests: XCTestCase {
   func testAScaleKeyThatIsNotAnIdentifierIsRefused() throws {
     let repo = try scalesRepo()
     try edit(repo, Self.dimension, ["spacing", "Stack", "2xl"], to: .object([("$value", Self.px(48))]))
-    assertRefused(repo, contains: "dimension 'spacing.Stack.2xl': the key becomes a constant in every target language")
+    assertRefused(repo, contains: "dimension 'spacing.Stack.2xl': R1 — a key is ASCII letters and digits in lowerCamelCase")
+    assertRefused(repo, contains: "rename it 's2xl'")
   }
 
   func testARemScaleTokenIsRefused() throws {
@@ -604,7 +609,154 @@ final class DesignTokensDTCGTests: XCTestCase {
     let repo = try scalesRepo()
     try edit(repo, Self.dimension, ["radius", "card", "$extensions"],
              to: .object([("dev.modaal.duet", .object([("textStyle", .string("body"))]))]))
-    assertRefused(repo, contains: "unknown key 'textStyle' in $extensions[\"dev.modaal.duet\"] (known: note)")
+    assertRefused(repo, contains: "R8 — unknown key 'textStyle' in $extensions[\"dev.modaal.duet\"] (known: note, source)")
+  }
+
+  // MARK: - Rules: keys that compile (R1–R3), the scales (R4), extensions (R8)
+
+  /// *path* in both colour files, holding `accent`'s value.
+  private func colour(_ repo: Repo, at path: [String]) throws {
+    for file in [Self.light, Self.dark] {
+      let tree = try read(repo, file)
+      try write(repo, file, setting(tree, path, to: try XCTUnwrap(tree["color"]?["accent"])))
+    }
+  }
+
+  func testAKeyThatIsNotLowerCamelCaseIsRefusedWithItsLowerCamelCaseForm() throws {
+    for (key, fix) in [("on-light", "onLight"), ("Primary", "primary"), ("Label Color", "labelColor")] {
+      let repo = try dtcgRepo()
+      try colour(repo, at: ["color", "Labels", key])
+      assertRefused(repo, contains: "\(Self.light): color 'color.Labels.\(key)': R1 — a key is ASCII letters and digits in lowerCamelCase")
+      assertRefused(repo, contains: "rename it '\(fix)'")
+    }
+  }
+
+  func testAScaleKeyThatStartsWithADigitIsToldTheScalesLetter() throws {
+    for (scale, key, fix) in [("spacing", "4", "s4"), ("spacing", "2xs", "s2xs"), ("radius", "2xl", "r2xl")] {
+      let repo = try scalesRepo()
+      try edit(repo, Self.dimension, [scale, key], to: .object([("$value", Self.px(4))]))
+      assertRefused(repo, contains: "dimension '\(scale).\(key)': R1")
+      assertRefused(repo, contains: "rename it '\(fix)'")
+    }
+  }
+
+  func testAColourKeyThatStartsWithADigitIsToldItsGroupsWord() throws {
+    let repo = try dtcgRepo()
+    try colour(repo, at: ["color", "Accent-yellow", "300"])
+    assertRefused(repo, contains: "rename it 'accentYellow300'")
+  }
+
+  func testEveryReservedNameIsRefusedAsAColourAndAsASpacingStep() throws {
+    XCTAssertEqual(DesignTokenRules.reserved.count, 64)
+    for key in DesignTokenRules.reserved.sorted() {
+      let repo = try scalesRepo()
+      try colour(repo, at: ["color", "Labels", key])
+      try edit(repo, Self.dimension, ["spacing", key], to: .object([("$value", Self.px(4))]))
+      assertRefused(repo, contains: "color 'color.Labels.\(key)': R2 — '\(key)' is reserved")
+      assertRefused(repo, contains: "dimension 'spacing.\(key)': R2 — '\(key)' is reserved")
+    }
+  }
+
+  func testAReservedNameIsToldItsGroupsWord() throws {
+    let repo = try scalesRepo()
+    try edit(repo, Self.dimension, ["radius", "default"], to: .object([("$value", Self.px(8))]))
+    assertRefused(repo, contains: "rename it, such as 'radiusDefault'")
+  }
+
+  func testAKeyTwoGroupsShareIsRefusedNamingBoth() throws {
+    let scales = try scalesRepo()
+    try edit(scales, Self.dimension, ["spacing", "Inset", "xs"], to: .object([("$value", Self.px(6))]))
+    assertRefused(scales, contains: "dimension 'spacing.Inset.xs': R3 — 'spacing.Stack.xs' has the key 'xs' too")
+    assertRefused(scales, contains: "rename one, such as 'insetXs'")
+    let colours = try dtcgRepo()
+    try colour(colours, at: ["color", "Surfaces", "labelPrimary"])
+    assertRefused(colours, contains: "color 'color.Surfaces.labelPrimary': R3 — 'color.Labels.labelPrimary' has the key 'labelPrimary' too")
+  }
+
+  func testAKeyRepeatedInAnotherVocabularyIsAccepted() throws {
+    let repo = try scalesRepo()
+    try colour(repo, at: ["color", "Labels", "screen"])
+    XCTAssertNoThrow(try load(repo), "spacing.Inset.screen and color.Labels.screen name cases of two enums")
+  }
+
+  func testEveryRefusalIsReportedInOneRun() throws {
+    let repo = try dtcgRepo()
+    try colour(repo, at: ["color", "Labels", "on-light"])
+    let gradients = try read(repo, Self.gradient)
+    try write(repo, Self.gradient, setting(gradients, ["gradient", "surface-hero"], to: gradients["gradient"]?["surfaceHero"]))
+    var type = try read(repo, Self.type)
+    let group = "Chrome — the sans face"
+    let style = try XCTUnwrap(type["typography"]?[group]?.pairs?.first { !$0.0.hasPrefix("$") })
+    type = setting(type, ["typography", group, "Body Large"], to: style.1)
+    type = setting(type, ["fontFamily", "default"], to: .object([("$value", .string("Georgia"))]))
+    try write(repo, Self.type, type)
+    do {
+      _ = try DesignTokenConfig.load(repo: repo)
+      XCTFail("expected four refusals")
+    } catch {
+      let text = "\(error)"
+      XCTAssertTrue(text.hasPrefix("4 design-token problems; nothing was generated:\n"), text)
+      XCTAssertTrue(text.contains("  \(Self.light): color 'color.Labels.on-light': R1"), text)
+      XCTAssertTrue(text.contains("  \(Self.gradient): gradient 'gradient.surface-hero': R1"), text)
+      XCTAssertTrue(text.contains("  \(Self.type): typography 'typography.\(group).Body Large': R1"), text)
+      XCTAssertTrue(text.contains("rename it 'bodyLarge'"), text)
+      XCTAssertTrue(text.contains("  \(Self.type): fontFamily 'fontFamily.default': R2"), text)
+    }
+  }
+
+  func testANumberUnderAScaleIsRefusedWithTheDimensionToWrite() throws {
+    let repo = try scalesRepo()
+    try edit(repo, Self.dimension, ["spacing", "Stack", "xs"],
+             to: .object([("$type", .string("number")), ("$value", .number(4))]))
+    assertRefused(repo, contains: #"number 'spacing.Stack.xs': R4 — a token under 'spacing' is a dimension in px: write "$type": "dimension" and "$value": {"value": 4, "unit": "px"}"#)
+  }
+
+  func testASourceReachesTheManifest() throws {
+    let repo = try scalesRepo()
+    func source(_ name: String) -> JSON {
+      .object([("dev.modaal.duet", .object([("source", .string("Figma: \(name)"))]))])
+    }
+    for file in [Self.light, Self.dark] {
+      try edit(repo, file, ["color", "accent", "$extensions"], to: source("Accent"))
+    }
+    try edit(repo, Self.gradient, ["gradient", "surfaceHero", "$extensions"], to: source("Hero"))
+    try edit(repo, Self.dimension, ["radius", "card", "$extensions"], to: source("Radius/12"))
+    let manifest = try XCTUnwrap(try emitted(repo).first { $0.key.hasSuffix("/tokens.json") }?.value)
+    let json = try DTCGSource.parseJSON(String(decoding: manifest, as: UTF8.self), path: "tokens.json")
+    func entry(_ list: String, _ name: String) -> JSON? {
+      guard case let .array(items)? = json[list] else { return nil }
+      return items.first { $0["name"]?.string == name }
+    }
+    XCTAssertEqual(entry("colors", "accent")?["source"]?.string, "Figma: Accent")
+    XCTAssertEqual(entry("gradients", "surfaceHero")?["source"]?.string, "Figma: Hero")
+    XCTAssertEqual(entry("radii", "card")?["source"]?.string, "Figma: Radius/12")
+    XCTAssertNil(entry("colors", "labelPrimary")?["source"], "a token without a source has no key")
+  }
+
+  func testASourceIsANonEmptyString() throws {
+    for value in [JSON.string(""), .number(3)] {
+      let repo = try dtcgRepo()
+      try edit(repo, Self.light, ["color", "accent", "$extensions"],
+               to: .object([("dev.modaal.duet", .object([("source", value)]))]))
+      assertRefused(repo, contains: "color 'color.accent': R8 — 'source' is a non-empty string")
+    }
+  }
+
+  func testAddingAndRemovingAFamilyNamesTheCodeChange() throws {
+    let repo = try dtcgRepo()
+    _ = try DesignTokensVerb.regenerate(repo: repo, config: try load(repo), check: false)
+    let before = try XCTUnwrap(DesignTokensVerb.generatedFamilies(repo: repo, config: try load(repo)))
+    XCTAssertEqual(Set(before), ["serif", "sans", "mono"])
+    let families = try load(try familiesRepo())
+    let notices = DesignTokensVerb.familyNotices(before: before, config: families)
+    XCTAssertEqual(notices.filter { $0.contains(" added: ") }.count, 1)
+    XCTAssertTrue(notices.contains { $0.hasPrefix(
+      #"family 'display' added: R7 — map it in the app's font resolvers; the iOS build fails with "switch must be exhaustive""#) },
+      "\(notices)")
+    XCTAssertTrue(notices.contains("family 'serif' removed: R7 — delete its case from the app's font resolvers"), "\(notices)")
+    XCTAssertTrue(notices.contains("family 'mono' removed: R7 — delete its case from the app's font resolvers"), "\(notices)")
+    XCTAssertEqual(DesignTokensVerb.familyNotices(before: nil, config: families), [], "no notice before the first generation")
+    XCTAssertEqual(DesignTokensVerb.familyNotices(before: before, config: try load(repo)), [])
   }
 
   // MARK: - App-declared families

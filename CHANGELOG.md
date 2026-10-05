@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.29.0 — 2026-10-05
+
+### Changed — the rules a token follows, enforced with a fix
+
+`contracts/design-tokens.md` states eight rules, R1–R8, for what generates
+code that compiles, and `duet design-tokens` refuses every token that breaks
+one. A refusal names the token's file, type and path, the rule and a fix
+(`rename it 'onLight'`, `rename it 's4'`). Every refusal in the sources is
+reported in one run, and nothing is generated while one stands; before, the
+run stopped at the first.
+
+- **Fixed: keys that generated code that does not compile.** A version-2
+  source checked only the scale keys. A colour, text-style, gradient or
+  family key that was not lowerCamelCase (`on-light`), started with a capital
+  (`Primary`), was a Swift or Kotlin keyword (`default`), or repeated another
+  token's key in the same vocabulary under a different group generated
+  Swift or Kotlin that failed to compile, and the run exited 0. They are
+  refused (R1–R3). A key that starts with a capital letter, which generated
+  a capitalised case before, is refused with its lowerCamelCase form.
+- **Reserved names (R2).** 64 keys that do not compile as a generated name
+  are refused in every vocabulary, version 1 included; the contract lists
+  them.
+- **The scales (R4).** A token of any type other than `dimension` under
+  `spacing` or `radius` is refused with the dimension to write; before, a
+  `number` there was skipped. The notice for a skipped token names its group.
+- **Families (R7).** A run that adds or removes a font family prints the
+  change the app's font resolvers need; `--json` lists it under `notices`.
+
+### Added — `source`
+
+`$extensions["dev.modaal.duet"].source`, on any token, names the design tool
+and the name the token has there (`"Figma: Labels/Primary"`). `tokens.json`
+copies it into the token's entry; no code target reads it.
+
 ## 0.28.0 — 2026-10-05
 
 ### Added — spacing and corner-radius scales
