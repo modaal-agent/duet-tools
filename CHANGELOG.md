@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.30.0 — 2026-10-06
+
+### Changed — a text style's line height is at least its face's
+
+Every target is written `max(lineHeight, faceHeight)` as a text style's line
+height, rounded up to 0.01, and the run names each style it raised with both
+values; `--json` lists the same lines under `notices`. The source keeps its
+value. `faceHeight` is the face's own line height:
+
+- the `hhea` ascender − descender + line gap of the family's font file for
+  the style's weight, for a family with `files`;
+- 1.1934 em for a family whose stack starts with a system face, and for the
+  version-1 families.
+
+A family whose first face is in no font file and is not a system face is
+written as declared, and the run names it.
+
+No platform draws a line shorter than its face, so before this a style with
+a line height under its face's laid out at the line height on the web and at
+the face's height in the apps. A source whose line heights are all at least
+their faces' generates the same files as 0.29.0.
+
+The contract's new section "Line heights" states the box every target draws:
+each line the style's line height, the face centred in it.
+
 ## 0.29.0 — 2026-10-05
 
 ### Changed — the rules a token follows, enforced with a fix

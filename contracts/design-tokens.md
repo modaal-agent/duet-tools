@@ -119,7 +119,8 @@ token is declared for the light appearance first.
 - **Type metrics.** A typography token's line height is read back as
   `round(size × lineHeight, 2)` points and its tracking as
   `round(letterSpacing / size, 6)` em: the format allows `px` and `rem` for a
-  dimension, and the generated tables carry points and em.
+  dimension, and the generated tables carry points and em. A line height
+  under the face's own is written at the face's ("Line heights" below).
 - **Names.** A token's key is its case name in every language and, in kebab
   case, its CSS name; it follows R1–R3 below. The group between the
   top-level group and the token (`color.Labels.labelPrimary`) is its
@@ -156,6 +157,41 @@ token is declared for the light appearance first.
   changes what the app's own resolvers must map (R7): a run that changes the
   generated families prints each one and the change it needs, and `--json`
   lists the same lines under `notices`.
+
+## Line heights
+
+Every target lays a text style out the way design tools and CSS do: each
+line is the style's line height tall, with the face centred in it. The web
+target writes `line-height`; the apps' hand-authored theming code draws the
+same box:
+
+- SwiftUI: leading of `lineHeight − faceHeight` between lines, and half of it
+  as padding above the first line and below the last;
+- UIKit: a paragraph style whose minimum and maximum line height are the line
+  height, and a baseline offset of half the difference;
+- Compose: the line height with `LineHeightStyle(Alignment.Center, Trim.None)`.
+
+`faceHeight` is the face's own line height at the style's size: the font's
+`hhea` ascender − descender + line gap over its units per em, which is
+`UIFont.lineHeight` on Apple and the line Android lays out. No platform draws
+a line shorter than its face: Compose grows such a line back to the face's
+height. So the generator writes `max(lineHeight, faceHeight)`, rounded up to
+0.01, as the style's line height in every target and in `tokens.json`, and the
+run names each style it raised with both values (`--json`: `notices`). The
+source keeps its value. The face it measures:
+
+- **A family with `files`:** the file for the style's weight (the variable
+  file whose range holds it, else the file of the nearest weight), read from
+  its `head` and `hhea` tables. A WOFF, WOFF2 or collection file is not read.
+- **A family whose stack starts with a system name** (`-apple-system`,
+  `system-ui`, `BlinkMacSystemFont`, `SF Pro …`, `ui-sans-serif`, `ui-serif`,
+  `ui-monospace`, `ui-rounded`, `New York`, `SF Mono`, `sans-serif`, `serif`,
+  `monospace`), and the version-1 families: 1.1934 em, the line height of
+  Apple's system faces at every size and weight. Android's system faces for
+  `sans-serif`, `serif` and `monospace` (Roboto, Noto Serif, Droid Sans Mono)
+  are 1.1719 em, under it.
+- **Any other first face:** none. Its styles are written as declared, and the
+  run names the family.
 
 ## Rules a token follows
 

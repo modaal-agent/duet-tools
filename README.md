@@ -211,7 +211,9 @@ duet version             # the toolchain version, matching the release tag; work
   is reported as orphaned. Every token follows the contract's rules R1–R8
   (keys that compile, the scales, the extension keys); the generator reports
   every refusal in one run with its file, rule and fix, and names the change
-  a new or removed font family needs in the app's resolvers. A repo with no
+  a new or removed font family needs in the app's resolvers. A text style's
+  line height is written at least its face's own, measured from the family's
+  font file or the system face, and the run names each style it raised. A repo with no
   config generates nothing and passes. `duet design-tokens migrate` rewrites a version-1 config as
   version 2. `Tests/terrazzo/` cross-checks the version-2 fixture against an
   independent DTCG implementation (development only; needs Node).

@@ -433,6 +433,7 @@ enum DTCGSource {
     var spacing: [DesignTokenConfig.Group<DesignTokenConfig.DimensionToken>] = []
     var radii: [DesignTokenConfig.Group<DesignTokenConfig.DimensionToken>] = []
     var families: [DesignTokenConfig.FontFamily: String] = [:]
+    var firstFaces: [DesignTokenConfig.FontFamily: String] = [:]
     var declaredFamilies: [DesignTokenConfig.FontFamily] = []
     var faces: [DesignTokenConfig.FontFace] = []
     var faceFiles = Set<String>()
@@ -547,6 +548,7 @@ enum DTCGSource {
           }
           let generic: Set<String> = ["serif", "sans-serif", "monospace", "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "-apple-system", "cursive", "fantasy"]
           families[family] = names.map { $0.contains(" ") && !generic.contains($0) ? "\"\($0)\"" : $0 }.joined(separator: ", ")
+          firstFaces[family] = names.first
           if let rawFiles = ext(token.node)?["files"] {
             guard let name = names.first, !generic.contains(name) else {
               throw Failure(description: "\(file): \(at): a family with 'files' starts its stack with the face's own name")
@@ -652,6 +654,8 @@ enum DTCGSource {
       colors: colors, fonts: fonts, gradients: gradients)
     config.source = relativePath
     config.families = declaredFamilies
+    config.firstFaces = firstFaces
+    config.fontFaces = faces
     config.spacing = spacing
     config.radii = radii
     return config

@@ -212,6 +212,12 @@ struct DesignTokenConfig {
   /// The families, in declaration order: the engine's three for the YAML
   /// grammar, the `fontFamily` tokens for a DTCG source.
   var families: [FontFamily] = FontFamily.allCases
+  /// Each family's first face, as its stack names it: what a text style's
+  /// line-height floor is measured by. Empty for the YAML grammar, whose
+  /// three families are the platforms' system faces.
+  var firstFaces: [FontFamily: String] = [:]
+  /// Every family's font files, whether or not a web target serves them.
+  var fontFaces: [FontFace] = []
   var colors: [Group<ColorToken>]
   var fonts: [Group<FontToken>]
   var gradients: [GradientToken]
