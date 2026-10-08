@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.31.0 — 2026-10-08
+
+### Changed — the app targets carry each line height as declared
+
+The Swift, Kotlin and `tokens.json` targets write a text style's line height
+as the source declares it, and the run no longer names a style whose line
+height is under its face's. `tokens.css` keeps writing `max(lineHeight,
+faceHeight)`, rounded up to 0.01 and measured as in 0.30.0, and its rule
+gains a comment naming the declared value where the two differ.
+
+The apps' theming code reads the face's line height from the font at run
+time and draws each line at the larger of the two; a browser draws a
+`line-height` under the face's as given, so only the web target writes the
+face's value. The contract's section "Line heights" states what each target
+writes and the box the apps' theming code draws.
+
+A source whose line heights are all at least their faces' generates the same
+files as 0.30.0. A family whose first face is in no font file and is not a
+system face is still named; its notice says that `tokens.css` writes its
+styles' line heights as declared.
+
+### Adopting
+
+**The app's theming code draws `max(lineHeight, faceHeight)`** before
+`parity/duet-tools.ref` moves to 0.31.0 (contract, "Line heights"). With a
+declared line height under the face's, code that draws the generated line
+height as given overlaps the lines of a multi-line text on Compose and UIKit;
+SwiftUI's leading, which cannot go below zero, draws the same either way.
+
 ## 0.30.0 — 2026-10-06
 
 ### Changed — a text style's line height is at least its face's

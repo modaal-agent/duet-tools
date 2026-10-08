@@ -12,7 +12,8 @@ import Foundation
 ///   values on `:root` and the dark ones under
 ///   `@media (prefers-color-scheme: dark)`; one per spacing step
 ///   (`--spacing-m`) and corner radius (`--radius-card`) in px; one class per
-///   font token (`.font-large-title`); and `--font-family-<family>` per
+///   font token (`.font-large-title`), whose `line-height` is at least the
+///   face's own (`DesignTokenLineHeights`); and `--font-family-<family>` per
 ///   family.
 /// - `tokens.json`: every token with its CSS name, its values per appearance as
 ///   CSS colour strings, its type metrics and its prose.
@@ -190,6 +191,7 @@ enum DesignTokensCSSEmitter {
       out += ["", "@media (prefers-color-scheme: dark) {", "  :root {"] + dark + ["  }", "}"]
     }
 
+    let faces = DesignTokenLineHeights.faces(config)
     for group in config.fonts {
       out.append("")
       if let name = group.name { out += ["/* \(name) */", ""] }
@@ -199,7 +201,12 @@ enum DesignTokensCSSEmitter {
         out.append("  font-family: var(\(familyProperty(token.family)));")
         out.append("  font-weight: \(token.weight);")
         out.append("  font-size: \(cssNumber(token.size))px;")
-        out.append("  line-height: \(cssNumber(token.lineHeight))px;")
+        let lineHeight = DesignTokenLineHeights.webLineHeight(token, faces)
+        if lineHeight > token.lineHeight {
+          // The apps draw a line height under the face's at the face's.
+          out.append("  /* the face's own line height; the token declares \(cssNumber(token.lineHeight))px */")
+        }
+        out.append("  line-height: \(cssNumber(lineHeight))px;")
         if token.tracking != 0 { out.append("  letter-spacing: \(cssNumber(token.tracking))em;") }
         var axes: [String] = []
         if let value = token.opticalSize { axes.append("\"opsz\" \(cssNumber(value))") }

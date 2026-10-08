@@ -5,8 +5,9 @@ import XCTest
 
 @testable import DuetCLI
 
-/// The floor under a text style's line height: a style whose line height sits
-/// under its face's own is written at the face's in every target.
+/// A text style's face line height: the Swift, Kotlin and JSON targets carry
+/// the declared line height, and `tokens.css` writes the face's where the
+/// declared one is under it.
 final class DesignTokensLineHeightTests: XCTestCase {
   typealias JSON = DTCGSource.JSON
 
@@ -78,7 +79,7 @@ final class DesignTokensLineHeightTests: XCTestCase {
   }
 
   /// A TrueType file holding only a `head` and an `hhea` table: what the
-  /// floor reads.
+  /// face measure reads.
   static func font(unitsPerEm: Int, ascender: Int, descender: Int, lineGap: Int = 0) -> Data {
     var bytes: [UInt8] = []
     func u16(_ value: Int) { bytes += [UInt8((value >> 8) & 0xFF), UInt8(value & 0xFF)] }
@@ -122,8 +123,15 @@ final class DesignTokensLineHeightTests: XCTestCase {
     try XCTUnwrap(try DesignTokenConfig.load(repo: repo))
   }
 
-  private func lineHeight(_ config: DesignTokenConfig, _ style: String) -> Double? {
-    config.fontTokens.first { $0.name == style }?.lineHeight
+  private func token(_ config: DesignTokenConfig, _ style: String) throws -> DesignTokenConfig.FontToken {
+    try XCTUnwrap(config.fontTokens.first { $0.name == style })
+  }
+
+  /// *css*'s rule for the font class of *style*.
+  private func rule(_ css: String, _ style: String) throws -> String {
+    let start = try XCTUnwrap(css.range(of: ".\(DesignTokensCSSEmitter.fontClass(style)) {"))
+    let end = try XCTUnwrap(css.range(of: "}", range: start.upperBound..<css.endIndex))
+    return String(css[start.lowerBound..<end.upperBound])
   }
 
   // MARK: - Reading a face
@@ -153,88 +161,104 @@ final class DesignTokensLineHeightTests: XCTestCase {
     XCTAssertEqual(DesignTokenLineHeights.file(for: 900, in: mixed)?.source, "Var.ttf")
   }
 
-  // MARK: - The raise
+  // MARK: - Face line heights
 
-  func testTheGoldenConfigsRaiseNothing() throws {
-    let golden = try DesignTokenConfig.parse(
+  func testTheGoldenConfigsHaveNoStyleUnderItsFace() throws {
+    let yaml = try DesignTokenConfig.parse(
       try String(contentsOf: try resource("tokens/design-tokens.yaml"), encoding: .utf8),
       path: DesignTokenConfig.relativePath)
-    var yaml = golden
-    XCTAssertEqual(DesignTokenLineHeights.raise(&yaml), .init(), "the YAML grammar's families are the system faces")
-    var dtcg = try load(try dtcgRepo())
-    let outcome = DesignTokenLineHeights.raise(&dtcg)
-    XCTAssertEqual(outcome.raised, [])
-    XCTAssertEqual(outcome.unmeasured, [.serif], "the serif stack starts with a face no file holds")
+    let yamlFaces = DesignTokenLineHeights.faces(yaml)
+    XCTAssertEqual(yamlFaces.unmeasured, [], "the YAML grammar's families are the system faces")
+    for token in yaml.fontTokens {
+      XCTAssertEqual(DesignTokenLineHeights.webLineHeight(token, yamlFaces), token.lineHeight, token.name)
+    }
+    let dtcg = try load(try dtcgRepo())
+    let dtcgFaces = DesignTokenLineHeights.faces(dtcg)
+    XCTAssertEqual(dtcgFaces.unmeasured, [.serif], "the serif stack starts with a face no file holds")
+    for token in dtcg.fontTokens {
+      XCTAssertEqual(DesignTokenLineHeights.webLineHeight(token, dtcgFaces), token.lineHeight, token.name)
+    }
   }
 
-  func testAStyleUnderItsFilesFaceIsRaisedInEveryTarget() throws {
+  func testOnlyTheWebTargetWritesTheFacesLineHeightForAStyleUnderIt() throws {
     // 1.3 em: largeTitle (34/41) and title2 (22/28) sit under it, the body
     // styles (17/26) above it.
-    var config = try load(try repoWithSerifFile(Self.font(unitsPerEm: 1000, ascender: 1000, descender: -300)))
-    let outcome = DesignTokenLineHeights.raise(&config)
-    XCTAssertEqual(outcome.raised, [
-      .init(style: "largeTitle", from: 41, to: 44.2),
-      .init(style: "title2", from: 28, to: 28.6),
-    ])
-    XCTAssertEqual(outcome.unmeasured, [])
-    XCTAssertEqual(lineHeight(config, "bodyRegular"), 26)
+    let config = try load(try repoWithSerifFile(Self.font(unitsPerEm: 1000, ascender: 1000, descender: -300)))
+    let faces = DesignTokenLineHeights.faces(config)
+    XCTAssertEqual(faces.unmeasured, [])
+    XCTAssertEqual(faces.heights["largeTitle"], 44.2)
+    XCTAssertEqual(faces.heights["title2"], 28.6)
+    XCTAssertEqual(try token(config, "largeTitle").lineHeight, 41, "the config keeps the declared value")
     let files = DesignTokensEmitter.emit(config: config)
     func content(_ suffix: String) throws -> String {
       try XCTUnwrap(files.first { $0.path.hasSuffix(suffix) }).content
     }
-    XCTAssertTrue(try content("tokens.css").contains("line-height: 44.2px;"))
-    XCTAssertTrue(try content("tokens.css").contains("line-height: 28.6px;"))
-    XCTAssertTrue(try content("MainThemePalette.swift").contains("lineHeight: 44.2,"))
-    XCTAssertTrue(try content("MainPalette.kt").contains("lineHeightSp = 44.2,"))
-    XCTAssertTrue(try content("tokens.json").contains("\"lineHeight\": 44.2"))
+    let css = try content("tokens.css")
+    XCTAssertEqual(try rule(css, "largeTitle").components(separatedBy: "\n").filter { $0.contains("line-height") || $0.contains("/*") }, [
+      "  /* the face's own line height; the token declares 41px */",
+      "  line-height: 44.2px;",
+    ])
+    XCTAssertTrue(try rule(css, "title2").contains("line-height: 28.6px;"))
+    XCTAssertTrue(try rule(css, "bodyRegular").contains("line-height: 26px;"))
+    XCTAssertFalse(try rule(css, "bodyRegular").contains("/*"), "a style at or above its face carries no comment")
+    XCTAssertTrue(try content("MainThemePalette.swift").contains("lineHeight: 41,"))
+    XCTAssertFalse(try content("MainThemePalette.swift").contains("44.2"))
+    XCTAssertTrue(try content("MainPalette.kt").contains("lineHeightSp = 41.0,"))
+    XCTAssertFalse(try content("MainPalette.kt").contains("44.2"))
+    XCTAssertTrue(try content("tokens.json").contains("\"lineHeight\": 41"))
+    XCTAssertFalse(try content("tokens.json").contains("44.2"))
   }
 
-  func testTheRaiseRoundsUpToAHundredthWithoutBinaryNoise() throws {
-    // 34 × 1.22 is 41.480000000000004 in binary; the floor is 41.48.
-    var config = try load(try repoWithSerifFile(Self.font(unitsPerEm: 1000, ascender: 970, descender: -250)))
-    _ = DesignTokenLineHeights.raise(&config)
-    XCTAssertEqual(lineHeight(config, "largeTitle"), 41.48)
+  func testTheFacesLineHeightRoundsUpToAHundredthWithoutBinaryNoise() throws {
+    // 34 × 1.22 is 41.480000000000004 in binary; the face's line height is 41.48.
+    let config = try load(try repoWithSerifFile(Self.font(unitsPerEm: 1000, ascender: 970, descender: -250)))
+    XCTAssertEqual(DesignTokenLineHeights.faces(config).heights["largeTitle"], 41.48)
   }
 
   func testASystemFirstFaceIsMeasuredByTheSystemFacesLineHeight() throws {
     let repo = try dtcgRepo()
     // headline: sans (-apple-system) at 17 with a line height of 17.
     try edit(repo, ["typography", "Chrome — the sans face", "headline", "$value", "lineHeight"], to: .number(1))
-    var config = try load(repo)
-    let outcome = DesignTokenLineHeights.raise(&config)
-    XCTAssertEqual(outcome.raised, [.init(style: "headline", from: 17, to: 20.29)], "17 × 1.1934 = 20.2878")
+    let config = try load(repo)
+    let faces = DesignTokenLineHeights.faces(config)
+    XCTAssertEqual(faces.heights["headline"], 20.29, "17 × 1.1934 = 20.2878")
+    XCTAssertEqual(DesignTokenLineHeights.webLineHeight(try token(config, "headline"), faces), 20.29)
+    XCTAssertEqual(try token(config, "headline").lineHeight, 17)
   }
 
   func testAnUnmeasuredFaceIsWrittenAsDeclaredAndNamed() throws {
-    var config = try load(try dtcgRepo())
-    let before = config.fontTokens.map(\.lineHeight)
-    let outcome = DesignTokenLineHeights.raise(&config)
-    XCTAssertEqual(config.fontTokens.map(\.lineHeight), before)
-    let notices = DesignTokenLineHeights.notices(outcome, config: config)
+    let config = try load(try dtcgRepo())
+    let faces = DesignTokenLineHeights.faces(config)
+    for token in config.fontTokens where token.family == .serif {
+      XCTAssertNil(faces.heights[token.name], token.name)
+      XCTAssertEqual(DesignTokenLineHeights.webLineHeight(token, faces), token.lineHeight, token.name)
+    }
+    let notices = DesignTokenLineHeights.notices(faces, config: config)
     XCTAssertEqual(notices.count, 1)
-    XCTAssertTrue(notices[0].hasPrefix("family 'serif': 'Source Serif 4' is in no font file this reads"), notices[0])
+    XCTAssertTrue(
+      notices[0].hasPrefix("family 'serif': 'Source Serif 4' is in no font file this reads, so tokens.css writes"),
+      notices[0])
     XCTAssertTrue(notices[0].contains(#"$extensions["dev.modaal.duet"].files"#), notices[0])
   }
 
-  func testARaisedStyleIsNamedWithBothValues() {
-    let config = DesignTokenConfig(version: 2, swift: nil, kotlin: nil, colors: [], fonts: [], gradients: [])
-    let notices = DesignTokenLineHeights.notices(
-      .init(raised: [.init(style: "title1", from: 34, to: 35.28)]), config: config)
-    XCTAssertEqual(notices, [
-      "text style 'title1': line height 34 is under its face's own, so every target is written 35.28; "
-        + "set the token to it or above to silence this",
-    ])
+  func testAStyleUnderItsFaceIsNotNamed() throws {
+    let config = try load(try repoWithSerifFile(Self.font(unitsPerEm: 1000, ascender: 1000, descender: -300)))
+    XCTAssertEqual(DesignTokenLineHeights.notices(DesignTokenLineHeights.faces(config), config: config), [])
   }
 
   // MARK: - The verb
 
-  func testTheVerbWritesTheRaisedLineHeightsAndCheckPassesOnThem() throws {
+  func testTheVerbWritesTheDeclaredLineHeightsAndTheWebOnesAndCheckPassesOnThem() throws {
     let repo = try repoWithSerifFile(Self.font(unitsPerEm: 1000, ascender: 1000, descender: -300))
     var options = Options()
     XCTAssertEqual(try DesignTokensVerb.run(repo: repo, options: options), 0)
     let css = try String(contentsOf: repo.root.appendingPathComponent("web/shared/tokens.css"), encoding: .utf8)
     XCTAssertTrue(css.contains("line-height: 44.2px;"))
+    let swift = try String(
+      contentsOf: repo.root.appendingPathComponent("src-ios/Sources/Theming/Generated/MainThemePalette.swift"),
+      encoding: .utf8)
+    XCTAssertTrue(swift.contains("lineHeight: 41,"))
     options.check = true
-    XCTAssertEqual(try DesignTokensVerb.run(repo: repo, options: options), 0, "--check compares against the raised output")
+    XCTAssertEqual(try DesignTokensVerb.run(repo: repo, options: options), 0, "--check compares against the same output")
   }
 }

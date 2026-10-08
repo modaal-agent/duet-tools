@@ -3,16 +3,16 @@
 
 import Foundation
 
-/// The floor under a text style's line height: its face's own.
+/// A text style's face line height: what the web target draws a line height
+/// under it at.
 ///
-/// Every target lays a text out the way design tools and CSS do: each line is
-/// the style's line height tall, with the face centred in it. The web target
-/// does it with `line-height`, and the apps' theming code with padding and a
-/// line-height style. No platform draws a line shorter than its face: Compose
-/// grows such a line back to the face's height, and SwiftUI's leading cannot
-/// go below zero. A style whose line height sits under its face's would
-/// therefore lay out differently per platform, so every target is written the
-/// face's height instead, and the run names the style.
+/// The Swift, Kotlin and `tokens.json` targets carry each line height as the
+/// source declares it. The apps' theming code reads the face's line height
+/// from the font at run time and draws each line `max(lineHeight,
+/// faceHeight)` tall, with the face centred in it. A browser draws a
+/// `line-height` under the face's as given, so the web target writes
+/// `max(lineHeight, faceHeight)` itself, measured here from the family's font
+/// file or the system face.
 enum DesignTokenLineHeights {
   /// The line height per em of Apple's system faces: every system design
   /// (SF Pro, New York, SF Mono, SF Pro Rounded) at every size and weight
@@ -31,17 +31,12 @@ enum DesignTokenLineHeights {
     systemNames.contains(name) || name.hasPrefix("SF Pro")
   }
 
-  /// One text style written taller than its source declares.
-  struct Raise: Equatable {
-    var style: String
-    var from: Double
-    var to: Double
-  }
-
-  struct Outcome: Equatable {
-    var raised: [Raise] = []
+  struct Faces: Equatable {
+    /// Each measured text style's face line height at its size, rounded up
+    /// to 0.01, by style name.
+    var heights: [String: Double] = [:]
     /// Families whose first face is neither a system face nor in a file this
-    /// reads: their styles are written as declared.
+    /// reads: the web target writes their styles' line heights as declared.
     var unmeasured: [DesignTokenConfig.FontFamily] = []
   }
 
@@ -91,16 +86,15 @@ enum DesignTokenLineHeights {
     return ranges.min { distance($0.1) < distance($1.1) }?.0
   }
 
-  /// Raises every text style whose line height sits under its face's own to
-  /// the face's, rounded up to 0.01.
-  static func raise(_ config: inout DesignTokenConfig) -> Outcome {
-    var outcome = Outcome()
+  /// The face line height of every text style whose face this can measure.
+  static func faces(_ config: DesignTokenConfig) -> Faces {
+    var faces = Faces()
     var measured: [String: Double?] = [:]
-    func faceHeight(_ family: DesignTokenConfig.FontFamily, _ weight: Int) -> Double? {
+    func perEm(_ family: DesignTokenConfig.FontFamily, _ weight: Int) -> Double? {
       if let face = config.fontFaces.first(where: { $0.family == family }) {
         guard let file = file(for: weight, in: face) else { return nil }
         if let known = measured[file.source] { return known }
-        let value = perEm(file.data)
+        let value = Self.perEm(file.data)
         measured[file.source] = value
         return value
       }
@@ -108,38 +102,32 @@ enum DesignTokenLineHeights {
       guard let first = config.firstFaces[family] else { return systemFace }
       return isSystemFace(first) ? systemFace : nil
     }
-    for group in config.fonts.indices {
-      for index in config.fonts[group].tokens.indices {
-        let token = config.fonts[group].tokens[index]
-        guard let perEm = faceHeight(token.family, token.weight) else {
-          if !outcome.unmeasured.contains(token.family) { outcome.unmeasured.append(token.family) }
-          continue
-        }
-        // The epsilon keeps 34 × 1.22 at 41.48: the product carries binary
-        // noise above the hundredth it is.
-        let floor = ((token.size * perEm * 100) - 1e-6).rounded(.up) / 100
-        guard token.lineHeight < floor else { continue }
-        outcome.raised.append(Raise(style: token.name, from: token.lineHeight, to: floor))
-        config.fonts[group].tokens[index].lineHeight = floor
+    for token in config.fontTokens {
+      guard let perEm = perEm(token.family, token.weight) else {
+        if !faces.unmeasured.contains(token.family) { faces.unmeasured.append(token.family) }
+        continue
       }
+      // The epsilon keeps 34 × 1.22 at 41.48: the product carries binary
+      // noise above the hundredth it is.
+      faces.heights[token.name] = ((token.size * perEm * 100) - 1e-6).rounded(.up) / 100
     }
-    return outcome
+    return faces
   }
 
-  /// One line per raised style and per unmeasured family, for the run's
-  /// output and `--json`'s `notices`.
-  static func notices(_ outcome: Outcome, config: DesignTokenConfig) -> [String] {
-    var lines = outcome.raised.map { raise in
-      "text style '\(raise.style)': line height \(DesignTokensJSON.number(raise.from)) is under its face's own, "
-        + "so every target is written \(DesignTokensJSON.number(raise.to)); set the token to it or above to silence this"
-    }
-    for family in outcome.unmeasured {
+  /// The line height the web target writes for *token*: the declared one, or
+  /// the face's where the declared one is under it.
+  static func webLineHeight(_ token: DesignTokenConfig.FontToken, _ faces: Faces) -> Double {
+    max(token.lineHeight, faces.heights[token.name] ?? token.lineHeight)
+  }
+
+  /// One line per unmeasured family, for the run's output and `--json`'s
+  /// `notices`.
+  static func notices(_ faces: Faces, config: DesignTokenConfig) -> [String] {
+    faces.unmeasured.map { family in
       let face = config.firstFaces[family].map { "'\($0)'" } ?? "its face"
-      lines.append(
-        "family '\(family.rawValue)': \(face) is in no font file this reads, so its text styles' line heights "
-          + "are written as declared; one under the face's height lays out taller in the apps than on the web. "
-          + "Name its files in $extensions[\"\(DTCGSource.extensionKey)\"].files to measure it")
+      return "family '\(family.rawValue)': \(face) is in no font file this reads, so tokens.css writes its text "
+        + "styles' line heights as declared; one under the face's height draws taller in the apps than on the web. "
+        + "Name its files in $extensions[\"\(DTCGSource.extensionKey)\"].files to measure it"
     }
-    return lines
   }
 }

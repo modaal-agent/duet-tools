@@ -124,7 +124,7 @@ enum DesignTokensVerb {
       }
       return try DesignTokensMigrate.run(repo: repo, options: options)
     }
-    guard var config = try DesignTokenConfig.load(repo: repo) else {
+    guard let config = try DesignTokenConfig.load(repo: repo) else {
       if options.json {
         Lanes.emitJSON([
           "status": "passed", "config": DesignTokenConfig.relativePath, "declared": false,
@@ -136,10 +136,9 @@ enum DesignTokensVerb {
       return 0
     }
     let familiesBefore = options.check ? nil : generatedFamilies(repo: repo, config: config)
-    let lineHeights = DesignTokenLineHeights.raise(&config)
     let regen = try regenerate(repo: repo, config: config, check: options.check)
     let notices = familyNotices(before: familiesBefore, config: config)
-      + DesignTokenLineHeights.notices(lineHeights, config: config)
+      + DesignTokenLineHeights.notices(DesignTokenLineHeights.faces(config), config: config)
     if options.json {
       Lanes.emitJSON([
         "status": regen.failed ? "failed" : "passed",
