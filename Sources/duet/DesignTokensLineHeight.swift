@@ -120,6 +120,41 @@ enum DesignTokenLineHeights {
     max(token.lineHeight, faces.heights[token.name] ?? token.lineHeight)
   }
 
+  /// Whether *value*, at the hundredth the targets write, is a whole number.
+  static func isWhole(_ value: Double) -> Bool {
+    (value * 100).rounded().truncatingRemainder(dividingBy: 100) == 0
+  }
+
+  /// The comments every target writes above a text style whose drawn values
+  /// are fractional, in the target's *unit* (`pt`, `sp`, `px`): its line
+  /// height, or its face's where the declared one is under it, which every
+  /// renderer steps; and its size. A whole value gets none.
+  static func fractionNotes(_ token: DesignTokenConfig.FontToken, _ faces: Faces, unit: String) -> [String] {
+    func number(_ value: Double) -> String { DesignTokensCSSEmitter.cssNumber((value * 100).rounded() / 100) }
+    func drift(_ height: Double) -> String {
+      let whole = height.rounded(.down)
+      return "WebKit lays each line out \(number(whole)) px tall (it floors line boxes to whole CSS px) and "
+        + "Compose rounds each line up to whole device pixels, so a block of n lines differs from "
+        + "n × \(number(height)) by up to \(number(height - whole)) × n px in WebKit and up to n device px in Compose."
+    }
+    var notes: [String] = []
+    if let face = faces.heights[token.name], face > token.lineHeight {
+      if !isWhole(face) {
+        notes.append(
+          "lineHeight \(number(token.lineHeight)) \(unit) is under the face's own line height, \(number(face)) "
+            + "\(unit). SwiftUI and Compose draw no line shorter than the face, and tokens.css writes "
+            + "\(number(face)), so lines step \(number(face)): " + drift(face))
+      }
+    } else if !isWhole(token.lineHeight) {
+      notes.append("lineHeight \(number(token.lineHeight)) \(unit) is fractional. " + drift(token.lineHeight))
+    }
+    if !isWhole(token.size) {
+      notes.append(
+        "fontSize \(number(token.size)) \(unit) is fractional. SwiftUI, Compose and WebKit draw the face at that size.")
+    }
+    return notes
+  }
+
   /// One line per unmeasured family, for the run's output and `--json`'s
   /// `notices`.
   static func notices(_ faces: Faces, config: DesignTokenConfig) -> [String] {

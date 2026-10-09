@@ -81,6 +81,55 @@
   }
 }
 
+/* A page fixed to one appearance: class="appearance-light" or
+   class="appearance-dark" on its <body> keeps that appearance's values
+   under either prefers-color-scheme. */
+.appearance-light {
+  color-scheme: light;
+  --color-label-primary: #1A1A1A;
+  --color-label-secondary: #6B6B6B;
+  --color-label-disabled: #A8A8A8;
+  --color-surface-primary: #FBFAF7;
+  --color-surface-raised: #FFFFFF;
+  --color-surface-scrim: rgba(26, 26, 26, 0.24);
+  --color-separator-hairline: rgba(26, 26, 26, 0.26);
+  --color-fill-primary: rgba(26, 26, 26, 0.08);
+  --color-fill-grid: rgba(0, 0, 0, 0.05);
+  --color-interactive-primary: #1A1A1A;
+  --color-interactive-primary-pressed: rgba(26, 26, 26, 0.85);
+  --color-interactive-disabled-label: rgba(26, 26, 26, 0.3);
+  --color-interactive-selected: rgba(61, 46, 92, 0.12);
+  --color-feedback-success: #3F7A46;
+  --color-feedback-success-surface: rgba(63, 122, 70, 0.1);
+  --color-feedback-error: #B3261E;
+  --color-feedback-error-surface: rgba(179, 38, 30, 0.1);
+  --color-accent: #3D2E5C;
+  --gradient-surface-hero: #FBFAF7, #FFFFFF;
+}
+
+.appearance-dark {
+  color-scheme: dark;
+  --color-label-primary: #F2F2F2;
+  --color-label-secondary: #9A9A9A;
+  --color-label-disabled: #565656;
+  --color-surface-primary: #141414;
+  --color-surface-raised: #1E1E1E;
+  --color-surface-scrim: rgba(0, 0, 0, 0.5);
+  --color-separator-hairline: rgba(242, 242, 242, 0.26);
+  --color-fill-primary: rgba(242, 242, 242, 0.12);
+  --color-fill-grid: rgba(255, 255, 255, 0.04);
+  --color-interactive-primary: #F2F2F2;
+  --color-interactive-primary-pressed: rgba(242, 242, 242, 0.85);
+  --color-interactive-disabled-label: rgba(242, 242, 242, 0.3);
+  --color-interactive-selected: rgba(154, 130, 196, 0.16);
+  --color-feedback-success: #7FBE86;
+  --color-feedback-success-surface: rgba(127, 190, 134, 0.14);
+  --color-feedback-error: #E7796F;
+  --color-feedback-error-surface: rgba(231, 121, 111, 0.14);
+  --color-accent: #9A82C4;
+  --gradient-surface-hero: #141414, #1E1E1E;
+}
+
 /* Display — the serif face */
 
 /* The largest title on a screen: top-level navigation titles, onboarding and

@@ -214,7 +214,11 @@ duet version             # the toolchain version, matching the release tag; work
   a new or removed font family needs in the app's resolvers. Every target
   carries a text style's line height as declared, except `tokens.css`, which
   writes at least the face's own, measured from the family's font file or the
-  system face: the line height the apps draw. A repo with no
+  system face: the line height the apps draw. A text style whose size or drawn
+  line height is fractional carries a comment in each target stating how each
+  renderer rounds it. The Swift vocabularies are `CaseIterable`, and
+  `tokens.css` declares `.appearance-light` and `.appearance-dark` for a page
+  fixed to one appearance. A repo with no
   config generates nothing and passes. `duet design-tokens migrate` rewrites a version-1 config as
   version 2. `Tests/terrazzo/` cross-checks the version-2 fixture against an
   independent DTCG implementation (development only; needs Node).

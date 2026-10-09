@@ -12,7 +12,7 @@ import DuetTheming
 
 /// The app's typography vocabulary. Chosen by hierarchy and context, never by
 /// raw size — the sizes live in the palette, one file over.
-public enum SemanticFont: FontAssetable {
+public enum SemanticFont: FontAssetable, CaseIterable {
 
   // MARK: - Display — the serif face
 

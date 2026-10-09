@@ -48,6 +48,10 @@ Hand-authored — everything whose shape is one platform's alone:
 Cross-language name and value identity holds by construction: every target
 is emitted from one input, in one declaration order.
 
+The Swift vocabularies conform to `CaseIterable`, so a test or a debug
+surface reads a whole vocabulary from `allCases`; the Kotlin vocabularies are
+enum classes, whose `entries` list theirs.
+
 ## Version 2: the targets, and a DTCG source
 
 ```yaml
@@ -195,6 +199,22 @@ naming the declared value where the two differ. The face it measures:
   are 1.1719 em, under it.
 - **Any other first face:** none. `tokens.css` writes its styles' line
   heights as declared, and the run names the family (`--json`: `notices`).
+
+**Fractional values.** Each renderer rounds a fractional line height its own
+way: WebKit lays each line box out at a whole CSS px, rounding down, and
+Compose rounds each line up to whole device pixels, so a block of `n` lines
+drifts from `n × lineHeight` along its length. A text style gets a comment
+above its entry in the Swift and Kotlin value tables and above its rule in
+`tokens.css`, after the token's own `note`, in the target's unit (`pt`, `sp`,
+`px`):
+
+- when the line height its lines step at is not a whole number at the
+  hundredth the targets write: the declared line height, or the face's where
+  the declared one is under it and the face's is fractional. `11 × 1.181818`
+  is 13.00 and gets none;
+- when its size is not a whole number.
+
+`tokens.json` carries no such comment: its `note` is the author's alone.
 
 ## Rules a token follows
 
@@ -358,8 +378,13 @@ tools that show the app's tokens:
   height in `px`, `letter-spacing` in `em`, and `font-variation-settings` for
   the axes; `--font-family-<family>` per family, whose value is the family's
   stack; one custom property per spacing step (`--spacing-screen: 16px`) and
-  per corner radius (`--radius-card: 12px`) on `:root`; and an `@font-face`
-  rule per font file, under the first name in its family's stack.
+  per corner radius (`--radius-card: 12px`) on `:root`; an `@font-face`
+  rule per font file, under the first name in its family's stack; and two
+  classes for a page fixed to one appearance, `.appearance-light` and
+  `.appearance-dark`, each redefining every colour and gradient that differs
+  by appearance at that appearance's value, with its `color-scheme`. The class
+  goes on the page's `<body>`, which keeps that appearance under either
+  `prefers-color-scheme`.
 - **`tokens.json`.** Every token with its CSS name, its light and dark values
   as CSS colours, its metrics, its group and its prose, and each family's
   stack; `spacing` and `radii` list the length scales with their `px` values,

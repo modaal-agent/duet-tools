@@ -268,7 +268,9 @@ enum DesignTokensEmitter {
     var out = header(generatedBanner(source))
     out += ["#if os(iOS)", "", "import \(engine)", ""]
     out += comment(doc, prefix: "/// ", indent: "")
-    out.append("public enum \(enumName): \(conformance) {")
+    // `CaseIterable`: a test or a debug surface reads the whole vocabulary
+    // from `allCases` instead of listing it.
+    out.append("public enum \(enumName): \(conformance), CaseIterable {")
     for group in groups {
       if let name = group.name {
         out.append("")
@@ -380,6 +382,7 @@ enum DesignTokensEmitter {
     out.append("}")
     out.append("")
     out += comment("The type values, one entry per `SemanticFont`.", prefix: "/// ", indent: "")
+    let faces = DesignTokenLineHeights.faces(config)
     out.append("extension \(theme) {")
     out.append("  public typealias _FontAsset = SemanticFont")
     out.append("")
@@ -394,6 +397,9 @@ enum DesignTokensEmitter {
       for token in group.tokens {
         out.append("")
         if let note = token.note { out += comment(note, prefix: "// ", indent: "    ") }
+        for text in DesignTokenLineHeights.fractionNotes(token, faces, unit: "pt") {
+          out += comment(text, prefix: "// ", indent: "    ")
+        }
         out.append("    case .\(token.name):")
         out.append("      return FontToken(")
         out.append("        family: .\(token.family.rawValue),")
@@ -644,6 +650,7 @@ enum DesignTokensEmitter {
     }
     out.append("    }")
     out.append("")
+    let faces = DesignTokenLineHeights.faces(config)
     out.append("  fun font(token: SemanticFont): FontToken =")
     out.append("    when (token) {")
     for group in config.fonts {
@@ -653,6 +660,9 @@ enum DesignTokensEmitter {
       }
       for token in group.tokens {
         if let note = token.note { out += comment(note, prefix: "// ", indent: "      ") }
+        for text in DesignTokenLineHeights.fractionNotes(token, faces, unit: "sp") {
+          out += comment(text, prefix: "// ", indent: "      ")
+        }
         out.append("      SemanticFont.\(token.name) ->")
         out.append("        FontToken(")
         out.append(ownFamilies

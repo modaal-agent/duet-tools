@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.32.0 — 2026-10-09
+
+### Added — a comment on a fractional size or line height
+
+A text style whose size, or whose line height its lines step at, is not a
+whole number gets a comment above its entry in the Swift and Kotlin value
+tables and above its rule in `tokens.css`, after the token's own `note`. The
+line height is the declared one, or the face's where the declared one is
+under it and the face's is fractional. The comment states, in the target's
+unit, how each renderer draws the value: WebKit lays each line box out at a
+whole CSS px, rounding down, and Compose rounds each line up to whole device
+pixels, so a block of `n` lines differs from `n × lineHeight` by up to the
+fraction times `n` px in WebKit and up to `n` device px in Compose. A value
+whole at the hundredth the targets write gets none, so `11 × 1.181818` (13.00)
+gets none. Nothing is refused and the run prints nothing new. The contract's
+section "Line heights" states the rule.
+
+### Added — `tokens.css` declares a class per appearance
+
+`.appearance-light` and `.appearance-dark` redefine every colour and gradient
+that differs by appearance at that appearance's value, with its
+`color-scheme`. A page fixed to one appearance — a splash screen drawn dark in
+both — sets the class on its `<body>` and keeps reading the same custom
+properties; the class holds under either `prefers-color-scheme`.
+
+### Added — the Swift vocabularies are `CaseIterable`
+
+`SemanticColor`, `SemanticFont` and `SemanticGradient` conform to
+`CaseIterable`, so a test or a debug surface iterates a vocabulary with
+`allCases` instead of listing its cases.
+
+### Adopting
+
+**Regenerate the token targets** with `duet design-tokens` in the commit that
+moves `parity/duet-tools.ref` to 0.32.0: the Swift vocabularies and
+`tokens.css` change for every config, and the value tables for one with a
+fractional size or line height, so `duet design-tokens --check` fails until
+they are regenerated.
+
 ## 0.31.0 — 2026-10-08
 
 ### Changed — the app targets carry each line height as declared

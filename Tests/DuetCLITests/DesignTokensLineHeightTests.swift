@@ -202,9 +202,9 @@ final class DesignTokensLineHeightTests: XCTestCase {
     XCTAssertTrue(try rule(css, "bodyRegular").contains("line-height: 26px;"))
     XCTAssertFalse(try rule(css, "bodyRegular").contains("/*"), "a style at or above its face carries no comment")
     XCTAssertTrue(try content("MainThemePalette.swift").contains("lineHeight: 41,"))
-    XCTAssertFalse(try content("MainThemePalette.swift").contains("44.2"))
+    XCTAssertFalse(try content("MainThemePalette.swift").contains("lineHeight: 44.2"))
     XCTAssertTrue(try content("MainPalette.kt").contains("lineHeightSp = 41.0,"))
-    XCTAssertFalse(try content("MainPalette.kt").contains("44.2"))
+    XCTAssertFalse(try content("MainPalette.kt").contains("lineHeightSp = 44.2"))
     XCTAssertTrue(try content("tokens.json").contains("\"lineHeight\": 41"))
     XCTAssertFalse(try content("tokens.json").contains("44.2"))
   }
@@ -260,5 +260,143 @@ final class DesignTokensLineHeightTests: XCTestCase {
     XCTAssertTrue(swift.contains("lineHeight: 41,"))
     options.check = true
     XCTAssertEqual(try DesignTokensVerb.run(repo: repo, options: options), 0, "--check compares against the same output")
+  }
+
+  // MARK: - Fractional values
+
+  private static let body = ["typography", "Body — the serif face at reading sizes", "bodyRegular", "$value"]
+  private static let headline = ["typography", "Chrome — the sans face", "headline", "$value"]
+
+  private func px(_ value: Double) -> JSON { .object([("value", .number(value)), ("unit", .string("px"))]) }
+
+  private func emitted(_ repo: Repo) throws -> (swift: String, kotlin: String, css: String) {
+    let files = DesignTokensEmitter.emit(config: try load(repo))
+    func content(_ suffix: String) throws -> String {
+      try XCTUnwrap(files.first { $0.path.hasSuffix(suffix) }).content
+    }
+    return (try content("MainThemePalette.swift"), try content("MainPalette.kt"), try content("tokens.css"))
+  }
+
+  /// The comments above *marker* in *text*, as one line of prose: a Swift or
+  /// Kotlin entry's `//` lines, or what follows the previous rule in CSS.
+  private func comments(_ text: String, above marker: String) throws -> String {
+    let lines = text.components(separatedBy: "\n")
+    let at = try XCTUnwrap(lines.firstIndex { $0.contains(marker) }, marker)
+    var start = at
+    if marker.hasPrefix(".") {
+      while start > 0, lines[start - 1] != "}" { start -= 1 }
+    } else {
+      while start > 0, lines[start - 1].trimmingCharacters(in: .whitespaces).hasPrefix("//") { start -= 1 }
+    }
+    return lines[start..<at]
+      .map { line in
+        var line = line.trimmingCharacters(in: .whitespaces)
+        for mark in ["//", "/*", "*/"] { line = line.replacingOccurrences(of: mark, with: "") }
+        return line.trimmingCharacters(in: .whitespaces)
+      }
+      .filter { !$0.isEmpty }
+      .joined(separator: " ")
+  }
+
+  func testAFractionalSizeAndLineHeightAreCommentedInEveryTarget() throws {
+    let repo = try dtcgRepo()
+    try edit(repo, Self.body + ["fontSize"], to: px(16.5))
+    try edit(repo, Self.body + ["lineHeight"], to: .number(1.5))
+    let (swift, kotlin, css) = try emitted(repo)
+    let lineHeight = "is fractional. WebKit lays each line out 24 px tall (it floors line boxes to whole CSS px) and "
+      + "Compose rounds each line up to whole device pixels, so a block of n lines differs from n × 24.75 by up to "
+      + "0.75 × n px in WebKit and up to n device px in Compose."
+    let size = "is fractional. SwiftUI, Compose and WebKit draw the face at that size."
+    for (text, marker, unit) in [
+      (swift, "case .bodyRegular:", "pt"), (kotlin, "SemanticFont.bodyRegular ->", "sp"), (css, ".font-body-regular {", "px"),
+    ] {
+      let above = try comments(text, above: marker)
+      XCTAssertTrue(above.contains("lineHeight 24.75 \(unit) \(lineHeight)"), above)
+      XCTAssertTrue(above.contains("fontSize 16.5 \(unit) \(size)"), above)
+    }
+  }
+
+  func testWholeValuesAndAWholeProductGetNoComment() throws {
+    let repo = try dtcgRepo()
+    // 11 × 1.181818 is 13.00 at the hundredth the targets write.
+    try edit(repo, Self.body + ["fontSize"], to: px(11))
+    try edit(repo, Self.body + ["lineHeight"], to: .number(1.181818))
+    let (swift, kotlin, css) = try emitted(repo)
+    for text in [swift, kotlin, css] {
+      XCTAssertFalse(text.contains("is fractional"))
+      XCTAssertFalse(text.contains("is under the face's own line height"))
+    }
+  }
+
+  func testAStyleUnderAFractionalFaceHeightIsCommentedWithTheFaces() throws {
+    let repo = try dtcgRepo()
+    // headline: sans (-apple-system) at 17 with a line height of 17; the
+    // face's is 20.29.
+    try edit(repo, Self.headline + ["lineHeight"], to: .number(1))
+    let (swift, _, css) = try emitted(repo)
+    let above = try comments(swift, above: "case .headline:")
+    XCTAssertTrue(above.contains(
+      "lineHeight 17 pt is under the face's own line height, 20.29 pt. SwiftUI and Compose draw no line shorter "
+        + "than the face, and tokens.css writes 20.29, so lines step 20.29: WebKit lays each line out 20 px tall"), above)
+    XCTAssertTrue(above.contains("by up to 0.29 × n px in WebKit"), above)
+    XCTAssertFalse(above.contains("is fractional"), above)
+    XCTAssertTrue(try comments(css, above: ".font-headline {").contains("20.29 px"))
+  }
+
+  func testAStyleUnderAWholeFaceHeightGetsNoComment() throws {
+    // 1.5 em: largeTitle (34/41) under 51, title2 (22/28) under 33.
+    let repo = try repoWithSerifFile(Self.font(unitsPerEm: 1000, ascender: 1000, descender: -500))
+    let (swift, kotlin, _) = try emitted(repo)
+    for text in [swift, kotlin] {
+      XCTAssertFalse(text.contains("is under the face's own line height"))
+    }
+  }
+
+  func testTheTokensOwnNoteStaysAboveTheGeneratedComment() throws {
+    // 1.3 em: largeTitle 34/41 is under 44.2, and the fixture gives it a note.
+    let repo = try repoWithSerifFile(Self.font(unitsPerEm: 1000, ascender: 1000, descender: -300))
+    let (swift, kotlin, _) = try emitted(repo)
+    for (text, marker) in [(swift, "case .largeTitle:"), (kotlin, "SemanticFont.largeTitle ->")] {
+      let above = try comments(text, above: marker)
+      let note = try XCTUnwrap(above.range(of: "Large `opsz` and high `SOFT`"), above)
+      let generated = try XCTUnwrap(above.range(of: "lineHeight 41"), above)
+      XCTAssertLessThan(note.lowerBound, generated.lowerBound)
+    }
+  }
+
+  func testCheckPassesAfterARegenerationWithFractionalValues() throws {
+    let repo = try dtcgRepo()
+    try edit(repo, Self.body + ["fontSize"], to: px(16.5))
+    var options = Options()
+    XCTAssertEqual(try DesignTokensVerb.run(repo: repo, options: options), 0)
+    options.check = true
+    XCTAssertEqual(try DesignTokensVerb.run(repo: repo, options: options), 0)
+  }
+
+  // MARK: - Appearance classes and the vocabularies
+
+  func testTheAppearanceClassesRedefineEveryValueThatDiffersByAppearance() throws {
+    let config = try load(try dtcgRepo())
+    let css = try XCTUnwrap(DesignTokensEmitter.emit(config: config).first { $0.path.hasSuffix("tokens.css") }).content
+    let light = try XCTUnwrap(css.range(of: ".appearance-light {\n  color-scheme: light;\n"))
+    let dark = try XCTUnwrap(css.range(of: ".appearance-dark {\n  color-scheme: dark;\n"))
+    for token in config.colorTokens {
+      guard case let .auto(lightValue, darkValue) = token.appearance else { continue }
+      let property = DesignTokensCSSEmitter.colorProperty(token.name)
+      let lightLine = "  \(property): \(DesignTokensCSSEmitter.cssColor(lightValue));"
+      let darkLine = "  \(property): \(DesignTokensCSSEmitter.cssColor(darkValue));"
+      XCTAssertNotNil(css.range(of: lightLine, range: light.upperBound..<dark.lowerBound), lightLine)
+      XCTAssertNotNil(css.range(of: darkLine, range: dark.upperBound..<css.endIndex), darkLine)
+    }
+  }
+
+  func testTheSwiftVocabulariesListTheirCases() throws {
+    let files = DesignTokensEmitter.emit(config: try load(try dtcgRepo()))
+    for (name, conformance) in [
+      ("SemanticColor", "ColorAssetable"), ("SemanticFont", "FontAssetable"), ("SemanticGradient", "GradientAssetable"),
+    ] {
+      let file = try XCTUnwrap(files.first { $0.path.hasSuffix("/\(name).swift") }, name)
+      XCTAssertTrue(file.content.contains("public enum \(name): \(conformance), CaseIterable {"), name)
+    }
   }
 }

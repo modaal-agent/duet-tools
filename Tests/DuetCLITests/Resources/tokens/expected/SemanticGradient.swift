@@ -11,7 +11,7 @@
 import DuetTheming
 
 /// The app's gradient vocabulary.
-public enum SemanticGradient: GradientAssetable {
+public enum SemanticGradient: GradientAssetable, CaseIterable {
 
   /// The one gradient the design system keeps.
   case surfaceWash

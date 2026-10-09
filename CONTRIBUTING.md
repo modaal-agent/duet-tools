@@ -9,6 +9,13 @@
 - **CHANGELOG entries describe the CLI surface in its own terms.** An entry
   names the verb or flag and its observable behavior; it does not cite
   external planning documents.
+- **Every instruction to adopters goes under the release's `### Adopting`
+  heading.** A repo that pins the toolchain reads that heading to learn what
+  it changes when its pin crosses the release, in the same commit as the pin
+  move: an edit to make, a file to delete, a step to add to its own workflow,
+  a pin to raise, or a new refusal or error it can meet and its fix. The
+  running text of the entry describes the change; it does not carry an
+  instruction that appears nowhere under `### Adopting`.
 - **A release cut sets the version in the commit that gets tagged** (the
   family convention — see the `duet` repo's CONTRIBUTING, rule 7). The version
   of record is `duetToolsVersion` in `Sources/duet/Version.swift`; `duet version`

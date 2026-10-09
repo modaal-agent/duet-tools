@@ -15,7 +15,7 @@ import DuetTheming
 ///
 /// A token is chosen by what it means, never by what it looks like: the value
 /// behind it is the config's to change.
-public enum SemanticColor: ColorAssetable {
+public enum SemanticColor: ColorAssetable, CaseIterable {
 
   // MARK: - Labels
 

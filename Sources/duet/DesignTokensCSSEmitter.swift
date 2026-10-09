@@ -190,6 +190,7 @@ enum DesignTokensCSSEmitter {
     if !dark.isEmpty {
       out += ["", "@media (prefers-color-scheme: dark) {", "  :root {"] + dark + ["  }", "}"]
     }
+    out += appearanceClasses(config)
 
     let faces = DesignTokenLineHeights.faces(config)
     for group in config.fonts {
@@ -197,6 +198,9 @@ enum DesignTokensCSSEmitter {
       if let name = group.name { out += ["/* \(name) */", ""] }
       for token in group.tokens {
         if let doc = token.doc { out += blockComment(doc, indent: "") }
+        for text in DesignTokenLineHeights.fractionNotes(token, faces, unit: "px") {
+          out += blockComment(text, indent: "")
+        }
         out.append(".\(fontClass(token.name)) {")
         out.append("  font-family: var(\(familyProperty(token.family)));")
         out.append("  font-weight: \(token.weight);")
@@ -218,6 +222,36 @@ enum DesignTokensCSSEmitter {
       }
     }
     return DesignTokensEmitter.render(out).trimmingCharacters(in: .newlines) + "\n"
+  }
+
+  /// `.appearance-light` and `.appearance-dark`: every colour and gradient
+  /// that differs by appearance, at that appearance's value, for a page
+  /// fixed to one appearance whatever `prefers-color-scheme` says. The class
+  /// goes on the page's `<body>`, whose descendants read the redefined
+  /// properties.
+  static func appearanceClasses(_ config: DesignTokenConfig) -> [String] {
+    var light: [String] = []
+    var dark: [String] = []
+    for token in config.colorTokens {
+      if case let .auto(lightValue, darkValue) = token.appearance {
+        light.append("  \(colorProperty(token.name)): \(cssColor(lightValue));")
+        dark.append("  \(colorProperty(token.name)): \(cssColor(darkValue));")
+      }
+    }
+    for token in config.gradients {
+      if case let .auto(lightStops, darkStops) = token.appearance {
+        light.append("  \(gradientProperty(token.name)): \(stops(lightStops));")
+        dark.append("  \(gradientProperty(token.name)): \(stops(darkStops));")
+      }
+    }
+    return [
+      "",
+      "/* A page fixed to one appearance: class=\"appearance-light\" or",
+      "   class=\"appearance-dark\" on its <body> keeps that appearance's values",
+      "   under either prefers-color-scheme. */",
+      ".appearance-light {",
+      "  color-scheme: light;",
+    ] + light + ["}", "", ".appearance-dark {", "  color-scheme: dark;"] + dark + ["}"]
   }
 
   // MARK: - tokens.json
