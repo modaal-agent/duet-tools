@@ -16,7 +16,8 @@ import Foundation
 ///   face's own (`DesignTokenLineHeights`); and `--font-family-<family>` per
 ///   family.
 /// - `tokens.json`: every token with its CSS name, its values per appearance as
-///   CSS colour strings, its type metrics and its prose.
+///   CSS colour strings, its type metrics, the Dynamic Type style a font token
+///   names (`textStyle`), and its prose.
 /// - `fonts/<file>`: a copy of each font file a family's `files` names, with
 ///   an `@font-face` rule for it at the top of `tokens.css`.
 ///
@@ -288,7 +289,7 @@ enum DesignTokensCSSEmitter {
           ("name", .string(token.name)), ("css", .string(fontClass(token.name))), ("group", text(group.name)),
           ("family", .string(token.family.rawValue)), ("weight", .number(Double(token.weight))),
           ("size", .number(token.size)), ("lineHeight", .number(token.lineHeight)),
-          ("tracking", .number(token.tracking)),
+          ("tracking", .number(token.tracking)), ("textStyle", text(token.textStyle)),
           ("opticalSize", token.opticalSize.map(JSON.number)), ("softness", token.softness.map(JSON.number)),
           ("width", token.width.map(JSON.number)),
           ("doc", text(token.doc)), ("note", text(token.note)), ("source", text(token.source)),
