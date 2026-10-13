@@ -387,9 +387,11 @@ tools that show the app's tokens:
   `prefers-color-scheme`.
 - **`tokens.json`.** Every token with its CSS name, its light and dark values
   as CSS colours, its metrics, its group and its prose, and each family's
-  stack; `spacing` and `radii` list the length scales with their `px` values,
-  and are absent when the config declares none. A tool lists the tokens from
-  this file, never from the token files or the stylesheet.
+  stack; each font entry carries the `textStyle` its token names (the
+  `UIFont.TextStyle` the cut scales against), and has no `textStyle` when the
+  token names none. `spacing` and `radii` list the length scales with their
+  `px` values, and are absent when the config declares none. A tool lists the
+  tokens from this file, never from the token files or the stylesheet.
 - **`fonts/`.** A copy of each file a family's `files` names.
 
 A gradient's stop list is the whole value and the page picks the axis, as in

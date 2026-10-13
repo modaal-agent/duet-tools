@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.33.0 — 2026-10-14
+
+### Added — `tokens.json` names each text style's Dynamic Type style
+
+Each font entry of the web target's `tokens.json` carries `textStyle`, the
+`UIFont.TextStyle` its token names (`$extensions["dev.modaal.duet"].textStyle`
+at config version 2, `swift: { textStyle: … }` at version 1). A token that
+names none, as in a config without a `swift:` target, has no `textStyle` key.
+A tool that draws a token at another Dynamic Type size reads the style from
+`tokens.json`, as it reads every other value there. The contract's section
+"The web target" states the field.
+
+### Adopting
+
+**Regenerate the token targets** with `duet design-tokens` in the commit that
+moves `parity/duet-tools.ref` to 0.33.0: `tokens.json` gains `textStyle` on
+every font entry whose token names one, so `duet design-tokens --check` fails
+until it is regenerated.
+
 ## 0.32.0 — 2026-10-09
 
 ### Added — a comment on a fractional size or line height

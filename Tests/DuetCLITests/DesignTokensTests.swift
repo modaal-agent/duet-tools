@@ -114,6 +114,45 @@ final class DesignTokensTests: XCTestCase {
 
   /// The two languages read one input, so the case lists cannot diverge — the
   /// pin the mirror design needed is this equality, held by construction.
+  /// The font entries of the web target's `tokens.json`, in order.
+  private func manifestFonts(_ config: DesignTokenConfig) throws -> [[String: Any]] {
+    let manifest = try XCTUnwrap(DesignTokensEmitter.emit(config: config).first { $0.path.hasSuffix("/tokens.json") })
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(manifest.content.utf8)) as? [String: Any])
+    return try XCTUnwrap(json["fonts"] as? [[String: Any]])
+  }
+
+  func testTheManifestNamesEachFontTokensTextStyle() throws {
+    // A tool that models a platform's text-size setting reads each style's
+    // Dynamic Type style from tokens.json, as it reads every other value.
+    let config = try goldenConfig()
+    let fonts = try manifestFonts(config)
+    XCTAssertEqual(fonts.map { $0["name"] as? String }, config.fontTokens.map(\.name))
+    for (entry, token) in zip(fonts, config.fontTokens) {
+      XCTAssertNotNil(token.textStyle, token.name)
+      XCTAssertEqual(entry["textStyle"] as? String, token.textStyle, token.name)
+    }
+  }
+
+  func testAFontTokenWithoutATextStyleHasNoneInTheManifest() throws {
+    let webOnly = minimal
+      .replacingOccurrences(of: """
+        swift:
+          output: Sources/Theming/Generated
+          engine: DuetTheming
+          theme: MainTheme
+        """, with: """
+        css:
+          output: web/shared
+        """)
+      .replacingOccurrences(of: """
+                swift:
+                  textStyle: body
+        """, with: "")
+    let fonts = try manifestFonts(try DesignTokenConfig.parse(webOnly, path: "design-tokens.yaml"))
+    XCTAssertEqual(fonts.count, 1)
+    XCTAssertNil(fonts[0]["textStyle"], "a token that names no style carries no key")
+  }
+
   func testBothLanguagesEmitTheSameCaseListInTheSameOrder() throws {
     let config = try goldenConfig()
     let files = DesignTokensEmitter.emit(config: config)
