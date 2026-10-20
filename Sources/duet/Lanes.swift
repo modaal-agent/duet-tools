@@ -626,6 +626,21 @@ enum Lanes {
       ?? ((manifest.swiftPackageDirs.isEmpty || feature?.swiftSource.isEmpty == true
         || feature?.hasKotlinScenario == true)
         ? "kotlin" : nil)
+    // A Kotlin record with no Kotlin lane task to run is refused here, before
+    // the pre-delete below: a scope with no `kotlin:` path derives no task,
+    // and recording it through the unscoped task set would regenerate every
+    // OTHER feature's fixtures under a --feature flag.
+    if options.chain == nil, platform == "kotlin",
+      manifest.androidDir == nil || manifest.gradleTasks(scope: feature).isEmpty
+    {
+      let message = noKotlinRunnerRefusal(explicitPlatform: options.platform != nil, feature: feature)
+      if options.json {
+        emitJSON(["status": "failed", "phase": "meta", "errors": [message]])
+      } else {
+        print("duet record: FAIL — \(message)")
+      }
+      return 1
+    }
     // Snapshot fixture bytes so the summary lists what THIS run rewrote (git diff
     // would also show unrelated uncommitted fixture changes).
     let before = fixtureDigests(repo)
@@ -738,27 +753,10 @@ enum Lanes {
       }
       results = launches.map(finish)
     } else if platform == "kotlin" {
-      // Reachable only by explicit --platform kotlin on a Swift-only manifest —
-      // the defaulting above never picks kotlin without a Kotlin root.
+      // The refusal ahead of the pre-delete guarantees a Kotlin root and at
+      // least one lane task here.
       let tasks = manifest.gradleTasks(scope: feature)
-      guard let androidDir = manifest.androidDir, !tasks.isEmpty else {
-        // A scope with no `kotlin:` path derives no task; recording it through
-        // the unscoped task set would regenerate every OTHER feature's
-        // fixtures under a --feature flag.
-        let message =
-          feature.map {
-            "--platform kotlin --feature \($0.name): that feature declares no "
-              + "`kotlin:` path — there is no Kotlin runner to record it through"
-          }
-          ?? "--platform kotlin: the manifest declares no `kotlin:` paths — "
-            + "there is no Kotlin runner to record through"
-        if options.json {
-          emitJSON(["status": "failed", "phase": "meta", "errors": [message]])
-        } else {
-          print("duet record: FAIL — \(message)")
-        }
-        return 1
-      }
+      guard let androidDir = manifest.androidDir, !tasks.isEmpty else { return 1 }
       // Per-task --rerun: same note as verify — it binds to the task named
       // right before it, and a mixed tree names one lane task per module shape.
       results.append(
@@ -965,6 +963,27 @@ enum Lanes {
         + " `duet verify --feature \(feature.name) --swift-only`."
     }
     return message
+  }
+
+  /// The refusal for a Kotlin record that has no Kotlin lane task to run. It
+  /// names `--platform kotlin` only when the caller passed it, and says why
+  /// the scope has no task: no `kotlin:` path, or `kotlin: pending`.
+  static func noKotlinRunnerRefusal(explicitPlatform: Bool, feature: Feature?) -> String {
+    guard let feature else {
+      return (explicitPlatform ? "--platform kotlin: " : "")
+        + "the manifest declares no `kotlin:` paths — there is no Kotlin runner to record through"
+    }
+    let flag = explicitPlatform ? "--platform kotlin " : ""
+    let scope = "\(flag)--feature \(feature.name)"
+    if feature.kotlinSource == "pending" {
+      let writer =
+        feature.hasKotlinScenario
+        ? "its scenario is Kotlin (\(feature.scenario ?? "")), and " : ""
+      return "\(scope): \(writer)the feature declares `kotlin: pending` — there is no"
+        + " Kotlin module to record it through until the port lands. Nothing was deleted."
+    }
+    return "\(scope): that feature declares no `kotlin:` path — there is no Kotlin"
+      + " runner to record it through. Nothing was deleted."
   }
 
   /// Writes back each pre-deleted fixture the run did not regenerate, from
