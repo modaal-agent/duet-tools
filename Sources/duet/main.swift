@@ -105,8 +105,9 @@ let usage = """
         THAT feature declares: a row with no `kotlin:` path runs the Swift
         lane alone, and a lane flag naming the lane it lacks is the same
         meta-error. The Kotlin lane runs the manifest's own module tasks
-        (:<module>:jvmTest per feature, plus the module hosting each chain's
-        replay when unscoped) — never the unqualified `test`, which Gradle
+        (:<module>:test per feature for a `src/main` module, :<module>:jvmTest
+        for a `commonMain` one, plus the module hosting each chain's replay
+        when unscoped) — never the unqualified `test`, which Gradle
         expands into every module, an Android app module's SDK-bound unit
         tests included. Failures render with step label, JSON path, and
         scenario line.
@@ -117,10 +118,11 @@ let usage = """
         typo'd section cannot silently drop its block), then scenario
         existence, fixture symmetry (listed ⊆ disk, no orphans), the
         module-name mirror pin, the presentation ledger's entry shape, and —
-        for features declaring BOTH `swift:` and `kotlin:` — declaration
-        parity (State fields, Action/EffectPayload cases, camelCase ↔
-        PascalCase fold), the migration-window check. --json emits the plan
-        (status/errors/features/chains/presentation + top-level scalars).
+        for features declaring BOTH `swift:` and `kotlin:` (during a
+        crossing, or permanently on a twins row) — declaration parity
+        (State fields, Action/EffectPayload cases, camelCase ↔ PascalCase
+        fold). --json emits the plan (status/errors/features/chains/
+        presentation + top-level scalars).
         `verify` runs the same checks as its first meta-gate.
     duet record [--feature <name>|--chain <name>] [--platform swift|kotlin]
                 [--check [--write]] [--json]
@@ -138,7 +140,15 @@ let usage = """
         rewrite lands in parity/.runs/record-check/ instead (--write
         materializes it into the tree anyway). While any feature is
         dual-writer (a `swift:` twin plus a Kotlin `scenario:`), unscoped
-        record refuses — record per feature or per chain inside that window.
+        record refuses: point that row's `scenario:` at the Swift twin's
+        scenario so one writer remains, or record per feature or per chain.
+        With --feature, --platform must name the language of the feature's
+        scenario (the writer of its fixtures) and is refused otherwise,
+        before any fixture is touched. Without --platform, a manifest with
+        no `swift:` paths records through Kotlin; otherwise --feature takes
+        Kotlin for a row with no `swift:` twin or a `.kt` scenario and Swift
+        for the rest, and an unscoped record runs every Swift root plus one
+        Gradle leg for the rows with no `swift:` twin.
     duet lanes [--json]
         the lane inventory as data: every lane task, package root, and filter
         the manifest derives (unscopedGradleTasks = what `verify` runs;
@@ -230,8 +240,8 @@ let usage = """
         says duet-kmp; the manifest derives no Kotlin lane" is a finding)
         — that last row asked only where the manifest derives exactly ONE
         lane, and never of a target the `migration` marker names: a repo
-        migrating feature by feature derives both lanes, and one with no
-        features derives neither.
+        migrating feature by feature and a twins repo derive both lanes,
+        and one with no features derives neither.
         Row 2: the worker-isolation lint — a Working conformer (direct,
         via a refining protocol, or via a superclass) declared
         '@unchecked Sendable' in non-test sources; the compiler accepts

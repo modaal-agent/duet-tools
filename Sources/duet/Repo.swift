@@ -111,12 +111,12 @@ struct Feature {
   /// The scenario is Kotlin-authored (the writer runs in the Gradle lane).
   var hasKotlinScenario: Bool { scenario?.hasSuffix(".kt") == true }
 
-  /// The dual-writer window: a `swift:` twin still declared while the
-  /// scenario is already Kotlin-authored — the span of a per-feature migration
-  /// in which BOTH platforms hold a writer for the same fixture files. Unscoped
-  /// `record` refuses while any feature is in this state: the Swift roots run
-  /// every scenario under REGEN, so the retiring twin would re-record fixtures
-  /// the Kotlin scenario owns.
+  /// The dual-writer state: a `swift:` twin declared while the scenario is
+  /// Kotlin-authored — the span of a per-feature migration, or a twins row
+  /// whose Kotlin scenario writes — in which BOTH platforms hold a writer for
+  /// the same fixture files. Unscoped `record` refuses while any feature is in
+  /// this state: the Swift roots run every scenario under REGEN, so the Swift
+  /// twin's scenario would re-record fixtures the Kotlin scenario owns.
   var isDualWriter: Bool {
     !swiftSource.isEmpty && swiftSource != "pending" && hasKotlinScenario
   }

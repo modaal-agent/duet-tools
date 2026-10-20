@@ -116,8 +116,8 @@ enum Mcp {
           "type": "object",
           "properties": [
             "feature": ["type": "string", "description": "feature name (omit = everything)"],
-            "chain": ["type": "string", "description": "chain fixture name — records exactly the test sources that mention it (the mid-migration scope)"],
-            "platform": ["type": "string", "enum": ["swift", "kotlin"], "description": "record through one platform's runner (default swift)"],
+            "chain": ["type": "string", "description": "chain fixture name — records exactly the test sources that mention it (the scope for a chain whose participants share no module)"],
+            "platform": ["type": "string", "enum": ["swift", "kotlin"], "description": "record through one platform's runner; with `feature`, it must be the language of the feature's scenario. Default: Kotlin when the manifest declares no `swift:` paths; else with `feature`, Kotlin for a row with no `swift:` twin or a `.kt` scenario and Swift for the rest; else every Swift root plus one Gradle leg for the rows with no `swift:` twin"],
             "check": ["type": "boolean", "description": "drift gate — red on behavioral drift only; a failing check leaves parity/fixtures untouched (rewrite lands in parity/.runs/record-check/)"],
           ] as [String: Any],
         ] as [String: Any],
@@ -168,7 +168,7 @@ enum Mcp {
       ],
       [
         "name": "duet_doctor",
-        "description": "Cross-check the repo's declaration layer against what is on disk: every target in .modaal/project.json (platform present, template one this toolchain models, pair members agreeing on template, an iOS target's xcodegen.yml present, the template's implied shape matching the manifest's derived lanes — asked only where the manifest derives exactly ONE lane and never of a target the `migration` marker names, since a repo migrating feature by feature derives both lanes and one with no features derives neither), plus the worker-isolation lint — a Working conformer declared '@unchecked Sendable' in non-test sources, which compiles with no diagnostic even under complete concurrency checking. Read-only.",
+        "description": "Cross-check the repo's declaration layer against what is on disk: every target in .modaal/project.json (platform present, template one this toolchain models, pair members agreeing on template, an iOS target's xcodegen.yml present, the template's implied shape matching the manifest's derived lanes — asked only where the manifest derives exactly ONE lane and never of a target the `migration` marker names, since a repo migrating feature by feature and a twins repo derive both lanes and one with no features derives neither), plus the worker-isolation lint — a Working conformer declared '@unchecked Sendable' in non-test sources, which compiles with no diagnostic even under complete concurrency checking. Read-only.",
         "inputSchema": ["type": "object", "properties": [String: Any]()] as [String: Any],
       ],
     ]

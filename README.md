@@ -77,13 +77,15 @@ duet version             # the toolchain version, matching the release tag; work
   `--feature` run takes the lanes THAT feature declares — a row with no
   `kotlin:` path runs the Swift lane alone, rather than the whole Kotlin
   plane its manifest derives. The Kotlin lane names its modules
-  (`:<module>:jvmTest` per feature, plus the module hosting each chain's
-  replay on an unscoped run) rather than the unqualified `test` / `jvmTest`,
-  which Gradle expands into every module in the tree — including an Android
-  application module, whose unit-test task needs an SDK location
-  (mid-migration coexistence: a feature with no `swift:` twin is expected
-  kotlin-only, and a CHAIN expects a Swift row only while every participant —
-  its fixture's `initialStates` keys — still has a twin). The Swift lane runs one
+  (`:<module>:test` per feature for a `src/main` module, `:<module>:jvmTest`
+  for a `commonMain` one, plus the module hosting each chain's replay on an
+  unscoped run) rather than the unqualified `test` / `jvmTest`, which Gradle
+  expands into every module in the tree — including an Android application
+  module, whose unit-test task needs an SDK location. A feature reports only
+  from the lanes it declares (no `swift:` twin: the Kotlin lane alone; no
+  Kotlin lane: the Swift lane alone), and a CHAIN expects a row from a lane
+  only while every participant — its fixture's `initialStates` keys —
+  declares that lane. The Swift lane runs one
   `swift test` per package root (per-feature roots derived from the manifest —
   multi-package repos with subtree packages are first-class; JSON:
   `lanes.swift` is an array). The host-lane rule (`HostLane.swift`,
@@ -104,10 +106,10 @@ duet version             # the toolchain version, matching the release tag; work
   orphans), the module-name mirror pin (which rules apply is derived from
   the manifest's own per-feature keys and source sets), the presentation
   ledger's entry shape, and — while a feature declares BOTH `swift:` and
-  `kotlin:` — declaration parity (State fields, Action/EffectPayload cases,
-  camelCase ↔ PascalCase fold), the migration-window check. `--json` emits
-  the plan other tools consume instead of re-parsing the yaml. Running the
-  toolchain needs no interpreter runtime.
+  `kotlin:`, during a crossing or permanently on a twins row — declaration
+  parity (State fields, Action/EffectPayload cases, camelCase ↔ PascalCase
+  fold). `--json` emits the plan other tools consume instead of re-parsing
+  the yaml. Running the toolchain needs no interpreter runtime.
 - `duet record [--feature <name>|--chain <name>] [--platform swift|kotlin]
   [--check [--write]]` — scenario-driven fixture regeneration through the
   framework's ONE pretty writer; sum-coder regen is folded in; `--check` is the
@@ -120,9 +122,16 @@ duet version             # the toolchain version, matching the release tag; work
   sources that mention it (quoted) and runs exactly those, so a chain whose
   participants share no module records mid-migration without an unscoped
   pass. While any feature is dual-writer (a `swift:` twin plus a Kotlin
-  `scenario:`), unscoped record refuses with the feature named — record per
-  feature or per chain inside that window (the writer follows the manifest's
-  scenario).
+  `scenario:`), unscoped record refuses with the feature named: point that
+  row's `scenario:` at the Swift twin's scenario so one writer remains, or
+  record per feature or per chain (the writer follows the manifest's
+  scenario). With `--feature`, `--platform` must name the language of the
+  feature's scenario, the writer of its fixtures; another value is refused
+  before any fixture is touched. Without `--platform`, a manifest with no
+  `swift:` paths records through Kotlin; otherwise a `--feature` record
+  takes Kotlin when the feature has no `swift:` twin or a `.kt` scenario
+  and Swift when it does not, and an unscoped record runs every Swift root
+  plus one Gradle leg for the rows with no `swift:` twin.
 - `duet lanes` — the lane inventory as data: every lane task, package root,
   and filter the manifest derives (`unscopedGradleTasks` is what `verify`
   runs; `laneFamilyTasks` is the unqualified family YOUR `./gradlew` line
@@ -182,8 +191,8 @@ duet version             # the toolchain version, matching the release tag; work
   present, the template's implied shape matching the manifest's derived
   lanes — that last row asked only of a manifest deriving exactly ONE lane,
   and never of a target the `migration` marker names, because a repo
-  migrating feature by feature derives both and a repo with no features
-  derives neither), plus the worker-isolation lint — a `Working` conformer (direct,
+  migrating feature by feature and a twins repo derive both and a repo with
+  no features derives neither), plus the worker-isolation lint — a `Working` conformer (direct,
   via a refining protocol, or via a superclass) declared
   `@unchecked Sendable` in non-test sources. The compiler accepts that stamp
   with no diagnostic even under complete concurrency checking, so only a
