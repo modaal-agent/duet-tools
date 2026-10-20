@@ -120,9 +120,10 @@ let usage = """
         module-name mirror pin, the presentation ledger's entry shape, and —
         for features declaring BOTH `swift:` and `kotlin:` (during a
         crossing, or permanently on a twins row) — declaration parity
-        (State fields, Action/EffectPayload cases, camelCase ↔ PascalCase
-        fold). --json emits the plan (status/errors/features/chains/
-        presentation + top-level scalars).
+        (State fields, and Action/EffectPayload cases by wire name: the
+        Swift case name, against a Kotlin case's `@SerialName` or else its
+        class name folded to camelCase). --json emits the plan
+        (status/errors/features/chains/presentation + top-level scalars).
         `verify` runs the same checks as its first meta-gate.
     duet record [--feature <name>|--chain <name>] [--platform swift|kotlin]
                 [--check [--write]] [--json]

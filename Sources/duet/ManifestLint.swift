@@ -534,6 +534,25 @@ enum ManifestLint {
     return Set(captures("^\\s*public\\s+var\\s+(\\w+)\\s*:", in: body, anchorsMatchLines: true))
   }
 
+  /// A sealed interface's case: group 1 is its annotation run — the
+  /// annotations, visibility modifiers and comments directly before
+  /// `data object|class`, in any order — and group 2 its class name. The run
+  /// is anchored to the declaration, so an annotation inside the previous
+  /// case's parameter list or body is not part of it.
+  private static let kotlinCaseRegex = try! NSRegularExpression(
+    pattern: #"((?:\s*(?:@\w+(?:\.\w+)*(?:\((?:[^()]|\([^()]*\))*\))?"#
+      + #"|/\*[\s\S]*?\*/|//[^\n]*|(?:public|internal|private|protected)\b))*)"#
+      + #"\s*data\s+(?:object|class)\s+(\w+)"#)
+
+  /// `@SerialName("x")` (or `value = "x"`, or the qualified annotation name)
+  /// in a case's annotation run.
+  private static let serialNameRegex = try! NSRegularExpression(
+    pattern: #"@(?:\w+\.)*SerialName\s*\(\s*(?:value\s*=\s*)?"([^"]*)"\s*\)"#)
+
+  /// The Kotlin cases by wire name. A case's own `@SerialName("x")` is what
+  /// it encodes as, and the generated Swift coders write the Swift case name,
+  /// so `x` is the name compared; a case without one encodes as its class
+  /// name, whose PascalCase folds to the Swift camelCase spelling.
   static func kotlinCases(
     _ source: String, type: String, path: String, errors: inout [String]
   ) -> Set<String>? {
@@ -542,11 +561,20 @@ enum ManifestLint {
         source, headerPattern: "sealed\\s+interface\\s+\(type)\\b[^{]*\\{",
         context: "\(path) \(type)", errors: &errors)
     else { return nil }
-    // Kotlin PascalCase case names fold to the Swift camelCase spelling.
+    let string = String(body)
+    let ns = string as NSString
     return Set(
-      captures("data\\s+(?:object|class)\\s+(\\w+)", in: body).map { name in
-        name.prefix(1).lowercased() + name.dropFirst()
-      })
+      kotlinCaseRegex.matches(in: string, range: NSRange(location: 0, length: ns.length))
+        .map { match in
+          let run = ns.substring(with: match.range(at: 1))
+          if let serial = serialNameRegex.firstMatch(
+            in: run, range: NSRange(location: 0, length: (run as NSString).length))
+          {
+            return (run as NSString).substring(with: serial.range(at: 1))
+          }
+          let name = ns.substring(with: match.range(at: 2))
+          return name.prefix(1).lowercased() + name.dropFirst()
+        })
   }
 
   static func kotlinStateFields(

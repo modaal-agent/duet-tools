@@ -107,9 +107,11 @@ duet version             # the toolchain version, matching the release tag; work
   the manifest's own per-feature keys and source sets), the presentation
   ledger's entry shape, and — while a feature declares BOTH `swift:` and
   `kotlin:`, during a crossing or permanently on a twins row — declaration
-  parity (State fields, Action/EffectPayload cases, camelCase ↔ PascalCase
-  fold). `--json` emits the plan other tools consume instead of re-parsing
-  the yaml. Running the toolchain needs no interpreter runtime.
+  parity (State fields, and Action/EffectPayload cases by wire name: the
+  Swift case name, against a Kotlin case's `@SerialName` or else its
+  PascalCase class name folded to camelCase). `--json` emits the plan other
+  tools consume instead of re-parsing the yaml. Running the toolchain needs
+  no interpreter runtime.
 - `duet record [--feature <name>|--chain <name>] [--platform swift|kotlin]
   [--check [--write]]` — scenario-driven fixture regeneration through the
   framework's ONE pretty writer; sum-coder regen is folded in; `--check` is the
