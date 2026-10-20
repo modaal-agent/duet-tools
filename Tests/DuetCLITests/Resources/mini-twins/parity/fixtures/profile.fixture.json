@@ -1,0 +1,6 @@
+{
+  "fixture": "profile",
+  "initialState": {"name": ""},
+  "note": "mini-tree fixture — the lint checks existence; no step to drive",
+  "steps": []
+}

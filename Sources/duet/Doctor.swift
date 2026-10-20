@@ -16,9 +16,10 @@ import Foundation
 /// gate derivation stays manifest-only.
 ///
 /// The two template-shape rows ask only where the manifest has evidence to
-/// answer with: a manifest deriving BOTH lanes is a per-feature migration in
-/// progress (rows cross one at a time, so a Swift-templated target sits
-/// beside a Kotlin lane for the whole window), and a manifest with no
+/// answer with: a manifest deriving BOTH lanes is either a per-feature
+/// migration in progress (rows cross one at a time, so a Swift-templated
+/// target sits beside a Kotlin lane for the whole window) or a twins repo
+/// (each app runs its own core, one twin per side), and a manifest with no
 /// features derives neither lane. Both states are silent. A target the
 /// `migration` marker's `targets` names is silent too, single-lane or not:
 /// the Android target grafted onto a migrating repo declares the Kotlin
@@ -55,15 +56,21 @@ enum Doctor {
   /// declaration is a finding (the mis-declaration case: gates ran green
   /// for two specs with a nonexistent name in this field).
   static let knownTemplates: Set<String> = [
-    "duet-kmp", "duet-swift-ios", "duet-swift-scene",
+    "duet-kmp", "duet-swift-ios", "duet-swift-scene", "duet-twins",
   ]
 
   /// Templates whose repo shape carries a Kotlin lane. The others are
-  /// single-core Swift: pure SwiftPM, no Kotlin twin.
-  static let kotlinShapedTemplates: Set<String> = ["duet-kmp"]
+  /// single-core Swift: pure SwiftPM, no Kotlin twin. `duet-twins` carries
+  /// both: a Swift twin the iPhone app runs and a Kotlin twin the Android app
+  /// runs.
+  static let kotlinShapedTemplates: Set<String> = ["duet-kmp", "duet-twins"]
 
   /// Templates with an Android target arm.
-  static let androidCapableTemplates: Set<String> = ["duet-kmp"]
+  static let androidCapableTemplates: Set<String> = ["duet-kmp", "duet-twins"]
+
+  /// The `duet.flavor` values this toolchain models, in the order findings
+  /// list them.
+  static let knownFlavors = ["swift", "kmp", "twins"]
 
   /// What the declarations are checked against. `fileExists` takes a
   /// repo-relative path — injected so the checks stay pure.
@@ -100,9 +107,11 @@ enum Doctor {
       findings.append("[declarations] \(file): `duet` is not an object")
     }
     if let duet = metadata["duet"] as? [String: Any] {
-      if let flavor = duet["flavor"] as? String, flavor != "swift", flavor != "kmp" {
+      if let flavor = duet["flavor"] as? String, !knownFlavors.contains(flavor) {
+        let modeled = knownFlavors.map { "'\($0)'" }
         findings.append(
-          "[declarations] \(file): `duet.flavor` is '\(flavor)' — this toolchain models 'swift' and 'kmp'")
+          "[declarations] \(file): `duet.flavor` is '\(flavor)' — this toolchain models "
+            + modeled.dropLast().joined(separator: ", ") + " and " + modeled[modeled.count - 1])
       }
       if let template = duet["template"] as? String, !knownTemplates.contains(template) {
         findings.append(
@@ -170,8 +179,8 @@ enum Doctor {
       let kotlinTemplate = kotlinShapedTemplates.contains(template)
       // The shape rows fire on evidence of the OTHER lane and only where the
       // manifest derives exactly one (see the type's doc comment): both lanes
-      // is a migration window, neither is a repo with no features, and a
-      // marker-named target is the migration's own.
+      // is a migration window or a twins repo, neither is a repo with no
+      // features, and a marker-named target is the migration's own.
       let singleLane = geometry.kotlinShaped != geometry.swiftShaped
       let answerable = singleLane && !migrationTargets.contains(name)
       if kotlinTemplate, !geometry.kotlinShaped, answerable {

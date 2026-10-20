@@ -129,6 +129,43 @@ final class ManifestLintTests: XCTestCase {
     XCTAssertEqual(counter.gradleTestTask, ":subtrees:counter:logic:jvmTest")
   }
 
+  func testMiniTwinsGoldenPlanAndDerivedLanes() throws {
+    let repo = try makeTree("mini-twins")
+    let result = try ManifestLint.lint(repo: repo)
+    XCTAssertEqual(result.errors, [])
+    XCTAssertEqual(result.fixturesOnDisk, 3)
+    XCTAssertEqual(result.singleSourceCount, 0)
+    XCTAssertEqual(result.parsed.scalars, ["replayRunner": "src-ios/Libraries/Replay"])
+
+    let manifest = try Manifest.load(repo: repo)
+    XCTAssertTrue(manifest.lintOK)
+    XCTAssertEqual(manifest.features.map(\.name), ["greeter", "profile"])
+    XCTAssertEqual(manifest.chains, ["greeter.handoff"])
+    let greeter = try XCTUnwrap(manifest.feature(named: "greeter"))
+    XCTAssertEqual(greeter.swiftModule, "GreeterFeature")
+    // A plain JVM module (`src/main`): its lane task is `test`, not `jvmTest`.
+    XCTAssertEqual(greeter.gradleTestTask, ":subtrees:greeter:logic:test")
+    XCTAssertFalse(greeter.isKmpSourceSet)
+    XCTAssertFalse(greeter.isDualWriter)  // the scenario is the Swift twin's
+    let profile = try XCTUnwrap(manifest.feature(named: "profile"))
+    XCTAssertFalse(profile.hasKotlinLane)
+    XCTAssertEqual(
+      manifest.swiftPackageDirs.map(\.path),
+      [
+        repo.root.appendingPathComponent("src-ios/Subtrees/Greeter/GreeterFeature").path,
+        repo.root.appendingPathComponent("src-ios/Subtrees/Profile/ProfileFeature").path,
+      ])
+    XCTAssertEqual(
+      manifest.androidDir?.path, repo.root.appendingPathComponent("src-android").path)
+    XCTAssertEqual(
+      manifest.replayRunnerPackageDir?.path,
+      repo.root.appendingPathComponent("src-ios/Libraries/Replay").path)
+    XCTAssertEqual(manifest.unscopedGradleTasks, [":subtrees:greeter:logic:test"])
+    XCTAssertEqual(manifest.laneFamilyTasks, ["test"])
+    XCTAssertEqual(
+      Lanes.chainParticipants(of: "greeter.handoff", in: repo), ["greeter", "profile"])
+  }
+
   func testPlanShapeMatchesTheContract() throws {
     let repo = try makeTree("mini-swift")
     let plan = ManifestLint.plan(of: try ManifestLint.lint(repo: repo))

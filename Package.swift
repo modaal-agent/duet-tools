@@ -85,8 +85,8 @@ let package = Package(
     // dual-writer predicate, settings parsing) by importing the executable
     // module directly — SwiftPM links it into the test bundle without running
     // its top-level code. Resources/ carries the miniature adopter trees
-    // (mini-dual / mini-swift / mini-kmp) the manifest-lint harness copies to
-    // a temp directory and breaks programmatically.
+    // (mini-dual / mini-swift / mini-kmp / mini-twins) the tests copy to a
+    // temp directory and break programmatically.
     .testTarget(
       name: "DuetCLITests",
       dependencies: [

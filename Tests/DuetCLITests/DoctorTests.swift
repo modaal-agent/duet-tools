@@ -203,6 +203,111 @@ final class DoctorTests: XCTestCase {
     let findings = Doctor.declarationFindings(
       projectJSON: json(text), geometry: geometry(kotlinShaped: false))
     XCTAssertEqual(findings.count, 2)
+    XCTAssertTrue(
+      findings.contains { $0.contains("'objc' — this toolchain models 'swift', 'kmp' and 'twins'") },
+      "\(findings)")
+  }
+
+  // MARK: - [declarations] on a twins tree
+
+  /// The doctor verb end to end on a copy of a mini tree: the declaration rows
+  /// read its `.modaal/project.json`, the shape rows the manifest's lanes.
+  private func doctorExit(_ repo: Repo) throws -> Int32 {
+    var options = Options()
+    options.command = "doctor"
+    options.json = true
+    return try Doctor.run(repo: repo, options: options)
+  }
+
+  private func treeFindings(_ repo: Repo) throws -> [String] {
+    let manifest = try Manifest.load(repo: repo)
+    return Doctor.declarationFindings(
+      projectJSON: try Data(contentsOf: repo.root.appendingPathComponent(".modaal/project.json")),
+      geometry: Doctor.Geometry(
+        kotlinShaped: manifest.androidDir != nil,
+        swiftShaped: !manifest.swiftPackageDirs.isEmpty,
+        fileExists: { FileManager.default.fileExists(atPath: repo.root.appendingPathComponent($0).path) }))
+  }
+
+  func testATwinsDeclarationOverATwoSidedManifestPasses() throws {
+    // Two paired targets on `duet-twins`, `duet.flavor: twins`, and a manifest
+    // deriving both lanes: one row with a twin on each side.
+    let repo = try makeMiniTree("mini-twins")
+    let manifest = try Manifest.load(repo: repo)
+    XCTAssertNotNil(manifest.androidDir)
+    XCTAssertFalse(manifest.swiftPackageDirs.isEmpty)
+    XCTAssertEqual(try treeFindings(repo), [])
+    XCTAssertEqual(try doctorExit(repo), 0)
+  }
+
+  func testATwinsDeclarationOverAKotlinOnlyManifestPasses() throws {
+    // The tree before the Swift twin joins: the Kotlin twin alone, a plain JVM
+    // module, recorded by its own Kotlin scenario. The template is
+    // Kotlin-shaped, so the single Kotlin lane answers for it.
+    let repo = try makeMiniTree("mini-twins")
+    try Data(
+      """
+      features:
+        greeter:
+          kotlin: src-android/subtrees/greeter/logic/src/main/kotlin/com/mini/greeter/GreeterFeature.kt
+          state: GreeterState
+          action: GreeterAction
+          effectPayload: GreeterEffectPayload
+          scenario: src-android/subtrees/greeter/logic/src/test/kotlin/com/mini/greeter/GreeterScenarioTest.kt
+          fixtures:
+            - greeter
+      """.utf8
+    ).write(to: repo.manifestFile)
+    try FileManager.default.removeItem(
+      at: repo.fixturesDir.appendingPathComponent("profile.fixture.json"))
+    try FileManager.default.removeItem(
+      at: repo.fixturesDir.appendingPathComponent("greeter.handoff.fixture.json"))
+    let manifest = try Manifest.load(repo: repo)
+    XCTAssertNotNil(manifest.androidDir)
+    XCTAssertTrue(manifest.swiftPackageDirs.isEmpty)
+    XCTAssertEqual(try treeFindings(repo), [])
+    XCTAssertEqual(try doctorExit(repo), 0)
+  }
+
+  func testATwinsDeclarationOverASwiftOnlyManifestIsAFinding() {
+    // The negative control for the row above: `duet-twins` implies a Kotlin
+    // lane, so a manifest deriving only the Swift lane contradicts it.
+    let text = """
+      {"targets": {"Mini": {"platform": "iOS", "template": "duet-twins"}}}
+      """
+    let findings = Doctor.declarationFindings(
+      projectJSON: json(text), geometry: geometry(kotlinShaped: false))
+    XCTAssertEqual(findings.count, 1)
+    XCTAssertTrue(findings[0].contains("derives no Kotlin lane"), findings[0])
+  }
+
+  func testAnUnknownTemplateOnATwinsTreeIsStillAFinding() throws {
+    let repo = try makeMiniTree("mini-twins")
+    try rewriteMiniTree(
+      repo, ".modaal/project.json",
+      #""MiniAndroid": {"platform": "Android", "architecture": "duet", "template": "duet-twins""#,
+      #""MiniAndroid": {"platform": "Android", "architecture": "duet", "template": "duet-twin""#)
+    let findings = try treeFindings(repo)
+    XCTAssertTrue(
+      findings.contains {
+        $0.contains("target 'MiniAndroid' names no template this toolchain models: 'duet-twin'")
+          && $0.contains("duet-twins")
+      },
+      "\(findings)")
+    XCTAssertEqual(try doctorExit(repo), 1)
+  }
+
+  func testAnUnknownFlavorOnATwinsTreeIsStillAFinding() throws {
+    let repo = try makeMiniTree("mini-twins")
+    try rewriteMiniTree(
+      repo, ".modaal/project.json", #""flavor": "twins""#, #""flavor": "twin""#)
+    XCTAssertEqual(
+      try treeFindings(repo),
+      [
+        "[declarations] .modaal/project.json: `duet.flavor` is 'twin' — this toolchain models "
+          + "'swift', 'kmp' and 'twins'"
+      ])
+    XCTAssertEqual(try doctorExit(repo), 1)
   }
 
   // MARK: - [workers]
