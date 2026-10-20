@@ -1,5 +1,114 @@
 # Changelog
 
+## 0.34.0 — 2026-10-20
+
+### Added — `doctor` models the `duet-twins` template and the `twins` flavor
+
+`duet doctor` accepts `duet-twins` as a target or repo template and
+`duet.flavor: twins`. A twins repo carries a Swift twin the iPhone app runs
+and a Kotlin twin the Android app runs, each feature declaring both `swift:`
+and `kotlin:`. The template is Kotlin-shaped and Android-capable: a manifest
+deriving both lanes holds its shape rows, as does one deriving the Kotlin
+lane alone, and a Swift-only manifest is a finding. The pair rule is
+unchanged, and the flavor finding lists `swift`, `kmp` and `twins`.
+
+### Added — the `kotlinCore: jvm | multiplatform` manifest key
+
+An optional top-level scalar stating how the repo builds its Kotlin modules.
+Absent means `multiplatform`, the rules every manifest had before the key.
+Under `kotlinCore: jvm` every Kotlin module is a plain JVM module, with
+sources in `src/main` and tests in `src/test`:
+
+- a feature with no `swift:` twin may live in `src/main`, under
+  `subtrees/<name>/logic` or `feature-<name>`;
+- a `kotlin:`-only path in another source set is an error asking for
+  `src/main`;
+- a multiplatform source set (`commonMain`, `commonTest`, `jvmMain`,
+  `jvmTest`) in a `kotlin:` path or a `.kt` `scenario:` path is an error
+  naming the path.
+
+Any other value is an error. The key rides the `duet lint --json` plan beside
+`replayRunner`, and the unknown-top-level-key error lists it.
+`contracts/manifest.md` states the rules.
+
+### Added — `protocol-run --platform swift|kotlin|both`
+
+`--platform` takes `swift`, `kotlin` or `both`. `both` builds and drives the
+Swift runner, then the Kotlin runner, and fails if either fails. With
+`--platform`, each runner is checked against the features that declare its
+side and the chains whose participants all declare it, the rule `verify`'s
+coverage gate follows; the features and chains a runner is not sent are
+listed in its block (`notSent` in `--json`). Without `--platform` the runner
+choice and the checks are unchanged. The text output names each runner's
+side (`protocol-run [swift]: …`) and tags each failure line; `--json` adds
+`platform` and `runners`. The MCP tool's `platform` enum gains `both`.
+
+### Changed — `record --platform` must name the language of the feature's scenario
+
+`duet record --feature X --platform P`, with or without `--check`, is refused
+when `P` is not the language of X's `scenario:` (`.kt` is Kotlin, `.swift` is
+Swift), before any sum-coder regeneration or fixture delete. The refusal
+names the scenario and the command to run. In 0.33.0, `--platform kotlin` on
+a row whose Swift scenario writes the fixtures deleted the committed
+fixtures and exited 0 with them gone.
+
+A Kotlin record whose scope derives no Kotlin lane task (a row with no
+`kotlin:` path, or `kotlin: pending`) is refused before the pre-delete; its
+message names `--platform kotlin` only when it was passed. Every other exit
+between the pre-delete and the lanes' results writes the deleted fixtures
+back, so a run that records nothing leaves `parity/fixtures` byte-identical.
+
+### Changed — declaration parity compares Kotlin cases by `@SerialName`
+
+`duet lint`, and `verify`'s meta-gate, compare Action and EffectPayload cases
+by wire name: the Swift case name against a Kotlin case's `@SerialName`, or,
+for a case without one, its PascalCase class name folded to camelCase. The
+annotation counts only in the case's own annotation run (the annotations,
+modifiers, KDoc and line comments directly before its `data object` or
+`data class`); a `@SerialName` on a parameter or a property of the previous
+case does not carry over. A `data class` named inside such a comment is not
+counted as a case.
+
+### Changed — help, contract and refusal text
+
+- `verify`'s help and the README name the Kotlin lane's tasks:
+  `:<module>:test` for a `src/main` module, `:<module>:jvmTest` for a
+  `commonMain` one.
+- The contract and the `lint`, `record` and `doctor` text describe a row
+  declaring both `swift:` and `kotlin:` as a crossing's coexistence window
+  or a permanent twins row.
+- The dual-writer refusal names its two ways out: point `scenario:` at the
+  Swift twin's scenario, or record scoped with `--feature` or `--chain`.
+- The MCP tool's `record` schema states the default platform as the CLI
+  derives it.
+- The README's current-release line and install example name 0.34.0.
+
+### Adopting
+
+**No change to the tree is required** to move `parity/duet-tools.ref` to
+0.34.0: no generated file, fixture or other committed output changes.
+
+**New refusals and errors, each with its fix:**
+
+- `record --feature X --platform P` with `P` other than the language of X's
+  `scenario:` exits 1. Drop `--platform`, which follows the scenario, or pass
+  the scenario's language. To check the recordings on the other side, run
+  `duet verify --feature X --kotlin-only` or `--swift-only`.
+- `protocol-run --platform` with a value other than `swift`, `kotlin` or
+  `both`, or `--platform both` with `--runner`, exits 2; 0.33.0 ran the
+  default runner for any other value. Pass one of the three values, or drop
+  the flag.
+- `lint` compares a Kotlin case that has a `@SerialName` by that name. A
+  Swift case named after the Kotlin class rather than its serial name is now
+  a declaration-parity violation. Rename the Swift case to the serial name,
+  the name both sides' coders write.
+- A manifest that declares `kotlinCore:` is checked by the rules above, and
+  a value other than `jvm` or `multiplatform` is a lint error.
+
+**Optional:** a twins repo whose Kotlin modules are plain JVM modules
+declares `kotlinCore: jvm`; its `.modaal/project.json` may name the
+`duet-twins` template and the `twins` flavor.
+
 ## 0.33.0 — 2026-10-14
 
 ### Added — `tokens.json` names each text style's Dynamic Type style
