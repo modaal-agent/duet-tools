@@ -58,9 +58,10 @@ features:
 ```
 
 - `swift:` / `kotlin:` — repo-relative source paths of the feature's
-  declarations. Declare the sides the feature has: both (the dual,
-  migration-window state), `swift:` only (the Swift-only flavor), or
-  `kotlin:` only (the KMP flavor / a fully migrated feature).
+  declarations. Declare the sides the feature has: both (a crossing's
+  coexistence window, or permanent twins, where each app runs its own
+  core), `swift:` only (the Swift-only flavor), or `kotlin:` only (the KMP
+  flavor / a fully migrated feature).
   `kotlin: pending` declares a single-sided feature whose Kotlin port has
   not landed. A feature must declare at least one side.
 - `state:` / `action:` / `effectPayload:` — the kernel type names; the

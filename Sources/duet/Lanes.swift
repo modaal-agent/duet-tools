@@ -576,16 +576,17 @@ enum Lanes {
     }
     // The dual-writer guard: while a feature declares BOTH a `swift:`
     // twin and a Kotlin `scenario:`, two writers exist for its fixture files.
-    // Unscoped record runs every Swift root under REGEN, so the retiring twin
-    // would re-record fixtures the Kotlin scenario owns — refuse, with the
-    // scoped verbs as the in-window recording paths.
+    // Unscoped record runs every Swift root under REGEN, so the Swift twin's
+    // scenario would re-record fixtures the Kotlin scenario owns — refuse,
+    // naming the two ways out: one writer, or a scoped record.
     let dualWriters = manifest.features.filter(\.isDualWriter).map(\.name)
     if feature == nil, options.chain == nil, !dualWriters.isEmpty {
       let message =
         "dual-writer feature(s) in the manifest: \(dualWriters.joined(separator: ", "))"
         + " — a `swift:` twin plus a Kotlin `scenario:` is two writers for the same"
-        + " fixtures, and an unscoped pass re-records through the retiring Swift twin."
-        + " Record scoped inside the window: `duet record --feature <name>` (the writer"
+        + " fixtures, and an unscoped pass re-records them through the Swift twin's"
+        + " scenario too. Point `scenario:` at the Swift twin's scenario so one writer"
+        + " remains, or record scoped: `duet record --feature <name>` (the writer"
         + " follows the manifest's scenario) or `duet record --chain <name>`."
       if options.json {
         emitJSON(["status": "failed", "phase": "meta", "errors": [message]])

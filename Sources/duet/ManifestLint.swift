@@ -6,8 +6,8 @@ import Foundation
 /// The manifest meta-checks (`duet lint`, and every verb's `Manifest.load`):
 /// scenario existence, fixture symmetry, the module-name mirror pin, the
 /// presentation-ledger shape, and — for features declaring BOTH sources — the
-/// declaration-parity cross-check, the migration-window check every
-/// swift→kotlin wave passes through.
+/// declaration-parity cross-check, which every swift→kotlin wave passes
+/// through during its crossing and a twins row stays under permanently.
 ///
 /// Which rules apply to a feature is derived from the manifest itself — which
 /// per-feature keys exist (`swift:`/`kotlin:`) and which source set the Kotlin
@@ -184,7 +184,8 @@ enum ManifestLint {
       }
 
       // Declaration parity — only a feature declaring BOTH sources has a twin
-      // to hold in lockstep (the dual state every migration passes through).
+      // to hold in lockstep (the dual state every migration passes through,
+      // and the permanent state of a twins row).
       if !swift.isEmpty, kotlinReal,
         let swiftSrc = try? String(contentsOf: swiftPath, encoding: .utf8),
         let kotlinSrc = try? String(contentsOf: kotlinPath, encoding: .utf8)
