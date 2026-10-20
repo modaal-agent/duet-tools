@@ -104,7 +104,9 @@ duet version             # the toolchain version, matching the release tag; work
   its block), and the same checks run in-process as `verify`'s first
   meta-gate: scenario existence, fixture symmetry (listed ⊆ disk, no
   orphans), the module-name mirror pin (which rules apply is derived from
-  the manifest's own per-feature keys and source sets), the presentation
+  the manifest's own per-feature keys and source sets, and from its
+  `kotlinCore:` key: under `kotlinCore: jvm` a `kotlin:`-only feature lives
+  in `src/main` and a multiplatform source set is an error), the presentation
   ledger's entry shape, and — while a feature declares BOTH `swift:` and
   `kotlin:`, during a crossing or permanently on a twins row — declaration
   parity (State fields, and Action/EffectPayload cases by wire name: the

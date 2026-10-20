@@ -29,7 +29,8 @@ struct ParsedManifest {
   var chains: [String] = []
   var waivers: [[String: String]] = []
   var islands: [[String: String]] = []
-  /// Known top-level scalars (`replayRunner:` today) — ride the plan verbatim.
+  /// Known top-level scalars (`replayRunner:`, `kotlinCore:`) — ride the plan
+  /// verbatim.
   var scalars: [String: String] = [:]
   /// One `mocks:` generator row — the config `duet mocks` runs (grammar in
   /// contracts/manifest.md). Rows keep manifest order; generation follows it.
@@ -82,7 +83,10 @@ enum ManifestParser {
   /// safe under the pin regime (the CLI version is pinned per repo, so a
   /// manifest never meets an older parser that doesn't know its keys).
   static let knownSections: Set<String> = ["features", "chains", "presentation", "mocks"]
-  static let knownScalars: Set<String> = ["replayRunner"]
+  static let knownScalars: Set<String> = ["replayRunner", "kotlinCore"]
+  /// The values `kotlinCore:` takes (contracts/manifest.md). Absent means
+  /// `multiplatform`.
+  static let kotlinCoreValues: Set<String> = ["jvm", "multiplatform"]
   /// `mocks:` generator-row keys whose value is a list of lines below them
   /// (contracts/manifest.md). Named here because the row parser has to refuse
   /// an inline value on one — see `parseMocks`.

@@ -4,10 +4,12 @@
 # and the Kotlin twin replays the same fixtures in its golden test and checks
 # them in a verify-only scenario. `profile` is a Swift-only row, and the chain
 # spans both features, so a Kotlin runner is checked against neither. The
-# Swift replay runner lives outside every feature package (`replayRunner:`).
+# Swift replay runner lives outside every feature package (`replayRunner:`),
+# and every Kotlin module is a plain JVM module (`kotlinCore: jvm`).
 # Tests copy this tree to a temp directory before breaking it.
 
 replayRunner: src-ios/Libraries/Replay
+kotlinCore: jvm
 
 features:
   greeter:

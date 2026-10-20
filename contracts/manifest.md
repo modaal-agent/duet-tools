@@ -33,6 +33,12 @@ accept it.
   - `replayRunner: <dir>` — optional scalar: the Swift package root owning
     the `Sources/replay-runner` executable, for repos whose replay glue
     lives outside every feature package.
+  - `kotlinCore: jvm | multiplatform` — optional scalar: how the repo builds
+    its Kotlin modules. Absent means `multiplatform`. `jvm` declares every
+    Kotlin module a plain JVM module, with sources under `src/main` and tests
+    under `src/test`; the checks below then accept a `kotlin:`-only feature
+    in `src/main` and refuse a multiplatform source set. Any other value is
+    an error.
 - **Unknown top-level keys are an error**, named with the known set. The top
   level routes whole blocks, so a typo'd section header (a misspelled
   `chains:`) would otherwise drop its entire block silently — a misdeclared
@@ -178,7 +184,8 @@ from repo-level configuration:
 | `kotlin:` declared (not `pending`) | the module dir is `feature-<name>` (flat) or `subtrees/<name>/logic` (subtree); the path carries a `<module>/src/<sourceSet>/` shape |
 | both declared | declaration parity — State property names, Action and EffectPayload case names (Kotlin PascalCase folds to Swift camelCase) — and subtree geometry moves in lockstep (swift under `Subtrees/<Name>/` iff kotlin under `subtrees/<name>/`) |
 | `src/commonMain/` source set | the module is single-source (the ONE implementation): geometry lockstep is not asserted, and the subtree shape is mandatory |
-| `kotlin:` only | the feature must BE single-source (`commonMain`) |
+| `kotlin:` only | the feature must BE single-source: `commonMain`, or `src/main` under `kotlinCore: jvm` |
+| `kotlinCore: jvm` | no `kotlin:` path and no `.kt` `scenario:` path names a multiplatform source set (`commonMain`, `commonTest`, `jvmMain`, `jvmTest`) |
 
 Plus, independent of flavor: scenario existence, fixture symmetry (listed ⊆
 disk, no orphans), the ledger's entry shape, and the mocks section's shape —
@@ -195,6 +202,6 @@ One JSON object: `status` (`ok`|`fail`), `errors` (every violation, in check
 order), `features` (each entry's scalars verbatim plus its `fixtures` list),
 `chains`, `presentation` (`waivers`/`islands` as parsed), `mocks` (bundle +
 generator rows, when the section exists), the known top-level scalars
-(`replayRunner`), and the `toolchain` stamp every `duet` JSON report
+(`replayRunner`, `kotlinCore`), and the `toolchain` stamp every `duet` JSON report
 carries. Consume the plan instead of re-parsing the yaml —
 that is what the CLI itself does.
