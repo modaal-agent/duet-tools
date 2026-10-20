@@ -106,11 +106,11 @@ final class RecordPlatformTests: XCTestCase {
     XCTAssertEqual(try fixtureBytes(repo), before)
   }
 
-  func testARefusalAfterTheKotlinPreDeleteRestoresTheFixtures() throws {
+  func testAKotlinRecordWithNoKotlinTaskIsRefusedBeforeAnyDelete() throws {
     // A Kotlin-written row whose Kotlin port has not landed (`kotlin:
-    // pending`): the record defaults to the Kotlin path, pre-deletes the
-    // row's fixtures, and then finds no Kotlin task to record through. The
-    // refusal puts the deleted file back.
+    // pending`): the record defaults to the Kotlin path and finds no Kotlin
+    // task to record through. It refuses before the pre-delete, so the
+    // committed file is the same file afterwards, not a restored copy.
     let repo = try makeMiniTree("mini-twins")
     let scenario =
       "src-android/subtrees/profile/logic/src/test/kotlin/com/mini/profile/ProfileScenarioTest.kt"
@@ -124,9 +124,64 @@ final class RecordPlatformTests: XCTestCase {
       "    kotlin: pending\n    scenario: \(scenario)\n")
     let before = try fixtureBytes(repo)
     XCTAssertNotNil(before["profile.fixture.json"])
+    let fixture = repo.fixturesDir.appendingPathComponent("profile.fixture.json")
+    func fileNumber() throws -> Int? {
+      try FileManager.default.attributesOfItem(atPath: fixture.path)[.systemFileNumber] as? Int
+    }
+    let number = try XCTUnwrap(try fileNumber())
     XCTAssertEqual(try record(repo, feature: "profile"), 1)
     XCTAssertEqual(try fixtureBytes(repo), before)
+    XCTAssertEqual(try fileNumber(), number)
     XCTAssertEqual(try record(repo, feature: "profile", platform: "kotlin"), 1)
     XCTAssertEqual(try fixtureBytes(repo), before)
+    XCTAssertEqual(try fileNumber(), number)
+  }
+
+  // MARK: - The refusal when no Kotlin task exists
+
+  private let profileScenario =
+    "src-android/subtrees/profile/logic/src/test/kotlin/com/mini/profile/ProfileScenarioTest.kt"
+
+  private func profile(kotlin: String, scenario: String?) -> Feature {
+    Feature(
+      name: "profile",
+      swiftSource:
+        "src-ios/Subtrees/Profile/ProfileFeature/Sources/ProfileFeature/ProfileFeature.swift",
+      kotlinSource: kotlin,
+      stateType: "ProfileState", actionType: "ProfileAction",
+      payloadType: "ProfileEffectPayload", scenario: scenario, fixtures: ["profile"])
+  }
+
+  func testAPendingRowNamesThePendingPortAndNoFlagTheCallerDidNotPass() {
+    XCTAssertEqual(
+      Lanes.noKotlinRunnerRefusal(
+        explicitPlatform: false, feature: profile(kotlin: "pending", scenario: profileScenario)),
+      "--feature profile: its scenario is Kotlin (\(profileScenario)), and the feature declares"
+        + " `kotlin: pending` — there is no Kotlin module to record it through until the port"
+        + " lands. Nothing was deleted.")
+  }
+
+  func testAnExplicitPlatformIsNamedInTheRefusal() {
+    XCTAssertEqual(
+      Lanes.noKotlinRunnerRefusal(
+        explicitPlatform: true, feature: profile(kotlin: "pending", scenario: profileScenario)),
+      "--platform kotlin --feature profile: its scenario is Kotlin (\(profileScenario)), and the"
+        + " feature declares `kotlin: pending` — there is no Kotlin module to record it through"
+        + " until the port lands. Nothing was deleted.")
+  }
+
+  func testARowWithNoKotlinPathIsNamedAsSuch() {
+    XCTAssertEqual(
+      Lanes.noKotlinRunnerRefusal(
+        explicitPlatform: true, feature: profile(kotlin: "", scenario: swiftScenario)),
+      "--platform kotlin --feature profile: that feature declares no `kotlin:` path — there is"
+        + " no Kotlin runner to record it through. Nothing was deleted.")
+  }
+
+  func testAnUnscopedRecordNamesTheManifest() {
+    XCTAssertEqual(
+      Lanes.noKotlinRunnerRefusal(explicitPlatform: true, feature: nil),
+      "--platform kotlin: the manifest declares no `kotlin:` paths — there is no Kotlin runner"
+        + " to record through")
   }
 }
