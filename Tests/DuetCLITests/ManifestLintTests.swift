@@ -437,6 +437,64 @@ final class ManifestLintTests: XCTestCase {
       "got \(errors)")
   }
 
+  // The Kotlin side is compared by wire name: a case's own `@SerialName` is
+  // what it encodes as, and the Swift case name is what the Swift coders
+  // write.
+
+  func testASerialNameIsComparedWithTheSwiftCaseOfThatName() throws {
+    let repo = try makeTree("mini-dual")
+    try rewrite(
+      repo, kotlinGreeter, "    data class Log(val line: String)",
+      "    @Serializable\n    @SerialName(\"log\")\n    data class Emit(val line: String)")
+    XCTAssertEqual(try lintErrors(repo), [])
+  }
+
+  func testASerialNameIsNotComparedAsItsFoldedClassName() throws {
+    let repo = try makeTree("mini-dual")
+    try rewrite(
+      repo, kotlinGreeter, "    data class Log(val line: String)",
+      "    @Serializable\n    @SerialName(\"log\")\n    data class Emit(val line: String)")
+    try rewrite(
+      repo, "src-ios/Sources/GreeterFeature/GreeterFeature.swift", "case log(String)",
+      "case emit(String)")
+    let errors = try lintErrors(repo)
+    XCTAssertTrue(
+      errors.contains(
+        "[greeter] EffectPayload lockstep violation: swift-only=['emit'] kotlin-only=['log']"),
+      "got \(errors)")
+  }
+
+  func testKotlinCaseNamesByAnnotationRun() {
+    let source = """
+      sealed interface SplashEffectPayload {
+          /** Tells the host the splash finished. */
+          @Serializable
+          @SerialName("notifyListener")
+          data class NotifyHost(@SerialName("evt") val event: SplashDelegateEvent) : SplashEffectPayload
+
+          data object ArmSafetyNet : SplashEffectPayload
+
+          @kotlinx.serialization.SerialName(value = "cancelNet")
+          // the net's cancellation
+          @Serializable
+          internal data object Disarm : SplashEffectPayload
+
+          @Serializable data class Trace(val line: String) : SplashEffectPayload {
+              @SerialName("ignored") val extra: Int get() = 0
+          }
+          data object Done : SplashEffectPayload
+      }
+      """
+    var errors: [String] = []
+    XCTAssertEqual(
+      ManifestLint.kotlinCases(source, type: "SplashEffectPayload", path: "x.kt", errors: &errors),
+      // A SerialName names its own case only: `ArmSafetyNet` after the
+      // parameter's `evt` and `Done` after the property's `ignored` keep the
+      // class-name fold.
+      ["notifyListener", "armSafetyNet", "cancelNet", "trace", "done"])
+    XCTAssertEqual(errors, [])
+  }
+
   func testDeclarationNotFound() throws {
     let repo = try makeTree("mini-dual")
     try rewrite(
