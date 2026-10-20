@@ -1,0 +1,6 @@
+{
+  "fixture": "greeter",
+  "initialState": {"message": "hello", "waveCount": 0},
+  "note": "mini-tree fixture — the lint checks existence; no step to drive",
+  "steps": []
+}

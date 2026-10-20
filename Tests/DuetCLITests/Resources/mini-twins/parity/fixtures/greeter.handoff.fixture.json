@@ -1,0 +1,9 @@
+{
+  "fixture": "greeter.handoff",
+  "initialStates": {
+    "greeter": {"message": "hello", "waveCount": 0},
+    "profile": {"name": ""}
+  },
+  "note": "mini-tree chain fixture — its initialStates keys name the participants",
+  "steps": []
+}

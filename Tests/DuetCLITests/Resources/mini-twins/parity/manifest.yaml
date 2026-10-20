@@ -1,0 +1,36 @@
+# Miniature twins adopter tree (test resource): the iPhone app and the Android
+# app each run their own core. `greeter` has a Swift twin and a Kotlin twin
+# (a plain JVM module, `src/main`); its Swift scenario is the writer of record,
+# and the Kotlin twin replays the same fixtures in its golden test and checks
+# them in a verify-only scenario. `profile` is a Swift-only row, and the chain
+# spans both features, so a Kotlin runner is checked against neither. The
+# Swift replay runner lives outside every feature package (`replayRunner:`).
+# Tests copy this tree to a temp directory before breaking it.
+
+replayRunner: src-ios/Libraries/Replay
+
+features:
+  greeter:
+    swift: src-ios/Subtrees/Greeter/GreeterFeature/Sources/GreeterFeature/GreeterFeature.swift
+    kotlin: src-android/subtrees/greeter/logic/src/main/kotlin/com/mini/greeter/GreeterFeature.kt
+    state: GreeterState
+    action: GreeterAction
+    effectPayload: GreeterEffectPayload
+    scenario: src-ios/Subtrees/Greeter/GreeterFeature/Tests/GreeterFeatureTests/GreeterScenarioTests.swift
+    fixtures:
+      - greeter
+  profile:
+    swift: src-ios/Subtrees/Profile/ProfileFeature/Sources/ProfileFeature/ProfileFeature.swift
+    state: ProfileState
+    action: ProfileAction
+    effectPayload: ProfileEffectPayload
+    scenario: src-ios/Subtrees/Profile/ProfileFeature/Tests/ProfileFeatureTests/ProfileScenarioTests.swift
+    fixtures:
+      - profile
+
+chains:
+  - greeter.handoff
+
+presentation:
+  waivers: []
+  islands: []

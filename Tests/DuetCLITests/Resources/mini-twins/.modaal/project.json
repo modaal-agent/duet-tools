@@ -1,0 +1,9 @@
+{
+  "template": "duet-twins",
+  "xcodegen_root": "src-ios/App",
+  "targets": {
+    "Mini": {"platform": "iOS", "architecture": "duet", "template": "duet-twins", "pair": "Mini"},
+    "MiniAndroid": {"platform": "Android", "architecture": "duet", "template": "duet-twins", "pair": "Mini"}
+  },
+  "duet": {"template": "duet-twins", "flavor": "twins", "projectName": "Mini", "kotlinPackage": "com.mini"}
+}

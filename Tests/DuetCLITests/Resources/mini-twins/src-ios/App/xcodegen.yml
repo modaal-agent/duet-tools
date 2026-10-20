@@ -1,0 +1,2 @@
+# Mini-tree app spec: exists so the iOS target declaration's check passes.
+name: Mini
