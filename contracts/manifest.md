@@ -182,7 +182,7 @@ from repo-level configuration:
 | --- | --- |
 | `swift:` declared | the Swift module is `<X>Feature` with `lower(X)` == the feature name; in a split subtree, the package layout is `Subtrees/<Name>/<X>Feature/Sources/<X>Feature/` (a feature-named leaf — SwiftPM derives a path dependency's identity from the lowercased leaf directory alone, so a generic leaf collides with the next subtree's) |
 | `kotlin:` declared (not `pending`) | the module dir is `feature-<name>` (flat) or `subtrees/<name>/logic` (subtree); the path carries a `<module>/src/<sourceSet>/` shape |
-| both declared | declaration parity — State property names, Action and EffectPayload case names (Kotlin PascalCase folds to Swift camelCase) — and subtree geometry moves in lockstep (swift under `Subtrees/<Name>/` iff kotlin under `subtrees/<name>/`) |
+| both declared | declaration parity — State property names, Action and EffectPayload case names by wire name (the Swift case name, against a Kotlin case's `@SerialName`, or else its PascalCase class name folded to camelCase) — and subtree geometry moves in lockstep (swift under `Subtrees/<Name>/` iff kotlin under `subtrees/<name>/`) |
 | `src/commonMain/` source set | the module is single-source (the ONE implementation): geometry lockstep is not asserted, and the subtree shape is mandatory |
 | `kotlin:` only | the feature must BE single-source: `commonMain`, or `src/main` under `kotlinCore: jvm` |
 | `kotlinCore: jvm` | no `kotlin:` path and no `.kt` `scenario:` path names a multiplatform source set (`commonMain`, `commonTest`, `jvmMain`, `jvmTest`) |
