@@ -561,6 +561,19 @@ enum Lanes {
       }
       return 1
     }
+    // A scoped record records through the feature's `scenario:`, the writer
+    // of its fixtures, so `--platform` must name that scenario's language.
+    // Checked before anything is regenerated or deleted: the Kotlin path
+    // pre-deletes the feature's fixtures below, and a Kotlin test task whose
+    // scenario only verifies writes none of them back.
+    if let refusal = platformScenarioMismatch(platform: options.platform, feature: feature) {
+      if options.json {
+        emitJSON(["status": "failed", "phase": "meta", "errors": [refusal]])
+      } else {
+        print("duet record: REFUSED — \(refusal)")
+      }
+      return 1
+    }
     // The dual-writer guard: while a feature declares BOTH a `swift:`
     // twin and a Kotlin `scenario:`, two writers exist for its fixture files.
     // Unscoped record runs every Swift root under REGEN, so the retiring twin
@@ -668,6 +681,15 @@ enum Lanes {
           "duet record: pre-deleted \(preDeleted.count) committed fixture(s) so the"
             + " Kotlin writer regenerates them (it skips existing files)")
       }
+    }
+    // Every exit between the pre-delete and the lanes' results — a refusal
+    // below, or a launch that throws — puts the pre-deleted files back, so a
+    // run that recorded nothing leaves parity/fixtures as it found it. Once
+    // the lanes have run, the outcome paths below account for the pre-deleted
+    // files themselves.
+    var lanesRan = false
+    defer {
+      if !lanesRan { restorePreDeleted(preDeleted, from: before, in: repo) }
     }
     var results: [ProcessResult] = []
     if let chain = options.chain {
@@ -789,6 +811,7 @@ enum Lanes {
       }
       results = launches.map(finish)
     }
+    lanesRan = true
     if results.contains(where: { $0.exitCode != 0 }) {
       // A red lane may have written a partial rewrite already (the Swift
       // runners write directly) — a failing --check leaves the fixture tree
@@ -797,12 +820,7 @@ enum Lanes {
       // A failed record must not leave the tree with fewer fixtures than it
       // found: put back what the pre-delete removed and the run did not
       // rewrite (partial rewrites stay, as on every non-check failure).
-      for file in preDeleted {
-        let url = repo.fixturesDir.appendingPathComponent(file)
-        if !FileManager.default.fileExists(atPath: url.path), let original = before[file] {
-          try? original.whole.write(to: url)
-        }
-      }
+      restorePreDeleted(preDeleted, from: before, in: repo)
       var logs: [String] = []
       for result in results where result.exitCode != 0 {
         let log = (try? String(contentsOf: result.logURL, encoding: .utf8)) ?? ""
@@ -910,6 +928,55 @@ enum Lanes {
       }
     }
     return 0
+  }
+
+  /// The language a scenario source is written in, from its extension: `.kt`
+  /// is Kotlin, `.swift` is Swift, anything else is unknown (nil).
+  static func scenarioLanguage(_ path: String) -> String? {
+    if path.hasSuffix(".kt") { return "kotlin" }
+    if path.hasSuffix(".swift") { return "swift" }
+    return nil
+  }
+
+  /// The refusal for `record --feature X --platform P` when P is not the
+  /// language of X's `scenario:` — nil when the run is unscoped, names no
+  /// platform, or the scenario's language is unknown. The scenario is the
+  /// writer of the feature's fixtures; recording through the other platform
+  /// runs a scenario that is not the writer, and on the Kotlin path deletes
+  /// the committed fixtures first.
+  static func platformScenarioMismatch(platform: String?, feature: Feature?) -> String? {
+    guard let platform, let feature, let scenario = feature.scenario,
+      let language = scenarioLanguage(scenario), platform != language
+    else { return nil }
+    let languageName = language == "kotlin" ? "Kotlin" : "Swift"
+    var message =
+      "--platform \(platform) --feature \(feature.name): the feature's scenario is"
+      + " \(languageName) (\(scenario)), and the scenario is the writer of its fixtures."
+      + " Record through it: `duet record --feature \(feature.name) --platform \(language)`."
+    if platform == "kotlin", feature.hasKotlinLane {
+      message +=
+        " The Kotlin twin replays the recordings in"
+        + " `duet verify --feature \(feature.name) --kotlin-only`."
+    }
+    if platform == "swift", !feature.swiftSource.isEmpty, feature.swiftSource != "pending" {
+      message +=
+        " The Swift twin replays the recordings in"
+        + " `duet verify --feature \(feature.name) --swift-only`."
+    }
+    return message
+  }
+
+  /// Writes back each pre-deleted fixture the run did not regenerate, from
+  /// the snapshot taken before the delete.
+  private static func restorePreDeleted(
+    _ files: [String], from before: [String: FixtureDigest], in repo: Repo
+  ) {
+    for file in files {
+      let url = repo.fixturesDir.appendingPathComponent(file)
+      if !FileManager.default.fileExists(atPath: url.path), let original = before[file] {
+        try? original.whole.write(to: url)
+      }
+    }
   }
 
   /// Repo-root-relative rendering of an absolute path (for lane labels).
