@@ -143,11 +143,19 @@ duet version             # the toolchain version, matching the release tag; work
   the last run's failures from `parity/.runs` (no re-run); emit a standalone
   failing unit test for one step. `duet materialize --clean` deletes every
   generated `Materialized_*` test.
-- `duet protocol-run [--platform swift|kotlin] [--runner <path>]` — byte-gate
-  the full corpus through any conforming replay-protocol runner
+- `duet protocol-run [--platform swift|kotlin|both] [--runner <path>]` —
+  byte-gate the full corpus through any conforming replay-protocol runner
   (flavor-neutral). Builds the repo's own runner itself: the Swift
   `replay-runner` product when the manifest has one, else the Kotlin lane's
-  `:replay-runner:installDist`; `--platform` forces the choice.
+  `:replay-runner:installDist`, and drives it against every feature and
+  chain. `--platform swift|kotlin` builds that side's runner and drives it
+  against the features that declare that side and the chains whose
+  participants all declare it, so a Swift-only row is not sent to the Kotlin
+  runner; `--platform both` runs the Swift runner, then the Kotlin runner,
+  and fails if either fails — the protocol gate for a repo where each app
+  runs its own core. Each result line names its runner; `--runner` drives a
+  prebuilt runner as the side `--platform` names, and is refused with
+  `both`.
 - `duet canonical-sum [--check]` — (re)generate the committed sum coders for
   every `CanonicalSumCodable` enum (normally implicit via `record`).
 - `duet write-fixtures` — materialize pending record artifacts into pretty

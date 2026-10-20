@@ -146,12 +146,12 @@ enum Mcp {
       ],
       [
         "name": "duet_protocol_run",
-        "description": "Byte-gate the FULL corpus (leaves and chains) through a replay-protocol runner subprocess — the flavor-neutral lane: the runner exposes only decode→reduce→encode, and the CLI drives fixtures and compares bytes. Default: build+drive the repo's own runner (the Swift replay-runner product when the manifest has one, else the Kotlin lane's :replay-runner:installDist); `platform` forces a flavor's runner on repos carrying both, `runner` a prebuilt executable path.",
+        "description": "Byte-gate the FULL corpus (leaves and chains) through a replay-protocol runner subprocess — the flavor-neutral lane: the runner exposes only decode→reduce→encode, and the CLI drives fixtures and compares bytes. Default: build+drive the repo's own runner (the Swift replay-runner product when the manifest has one, else the Kotlin lane's :replay-runner:installDist) against every feature and chain. `platform` swift or kotlin builds that side's runner and drives it against the features declaring that side and the chains whose participants all declare it; `both` runs the Swift runner, then the Kotlin runner, and fails if either fails. `runner` is a prebuilt executable path, driven as the side `platform` names (not with `both`).",
         "inputSchema": [
           "type": "object",
           "properties": [
-            "platform": ["type": "string", "enum": ["swift", "kotlin"], "description": "build+drive this flavor's own runner"],
-            "runner": ["type": "string", "description": "path to a prebuilt conforming runner (overrides platform)"],
+            "platform": ["type": "string", "enum": ["swift", "kotlin", "both"], "description": "build+drive this side's runner against the features declaring that side; both = the Swift runner, then the Kotlin runner"],
+            "runner": ["type": "string", "description": "path to a prebuilt conforming runner (not with platform both)"],
           ] as [String: Any],
         ] as [String: Any],
       ],
@@ -212,8 +212,8 @@ enum Mcp {
       var args = ["protocol-run", "--json"]
       if let runner = arguments["runner"] as? String { args += ["--runner", runner] }
       if let platform = arguments["platform"] as? String {
-        guard platform == "swift" || platform == "kotlin" else {
-          return ([], "platform must be \"swift\" or \"kotlin\"")
+        guard ["swift", "kotlin", "both"].contains(platform) else {
+          return ([], "platform must be \"swift\", \"kotlin\" or \"both\"")
         }
         args += ["--platform", platform]
       }

@@ -175,13 +175,19 @@ let usage = """
         (path deps + Duet family pins; duet-services per linked product).
         Overrides for template iteration: TEMPLATES_DIR, SOURCERY,
         MOCK_TEMPLATES.
-    duet protocol-run [--platform swift|kotlin] [--runner <path>] [--json]
+    duet protocol-run [--platform swift|kotlin|both] [--runner <path>] [--json]
         byte-gate the full corpus through a replay-protocol runner
         (contracts/replay-protocol-v1.md). Default: build + drive the repo's
         own runner — the Swift `replay-runner` product when the manifest has
         a package for it, else the Kotlin lane's `:replay-runner:installDist`
-        (built by the CLI). --platform forces a flavor's runner on repos
-        carrying both; --runner drives any conforming prebuilt runner.
+        (built by the CLI) — against every feature and chain. --platform
+        swift|kotlin builds and drives that side's runner against the
+        features that declare that side and the chains whose participants
+        all declare it (a Swift-only row is not sent to the Kotlin runner);
+        --platform both runs the Swift runner, then the Kotlin runner, and
+        fails if either fails. Each result line names its runner. --runner
+        drives any conforming prebuilt runner (checked as the side
+        --platform names; not with both).
     duet write-fixtures [--json]
         materialize pending record artifacts (parity/.runs/record/**) into
         pretty fixture files — the framework repos' own-corpus regen path; adopter
