@@ -135,7 +135,10 @@ final class ManifestLintTests: XCTestCase {
     XCTAssertEqual(result.errors, [])
     XCTAssertEqual(result.fixturesOnDisk, 3)
     XCTAssertEqual(result.singleSourceCount, 0)
-    XCTAssertEqual(result.parsed.scalars, ["replayRunner": "src-ios/Libraries/Replay"])
+    XCTAssertEqual(
+      result.parsed.scalars,
+      ["replayRunner": "src-ios/Libraries/Replay", "kotlinCore": "jvm"])
+    XCTAssertEqual(ManifestLint.plan(of: result)["kotlinCore"] as? String, "jvm")
 
     let manifest = try Manifest.load(repo: repo)
     XCTAssertTrue(manifest.lintOK)
@@ -199,7 +202,7 @@ final class ManifestLintTests: XCTestCase {
     let errors = try lintErrors(repo)
     XCTAssertTrue(
       errors.contains(
-        "manifest.yaml: unknown top-level key 'chanis' (known: chains, features, mocks, presentation, replayRunner)"),
+        "manifest.yaml: unknown top-level key 'chanis' (known: chains, features, kotlinCore, mocks, presentation, replayRunner)"),
       "got \(errors)")
     // The failure mode the strictness exists for: the block's chain fixture is
     // no longer gated — and now that is loud, not silent.
@@ -352,6 +355,106 @@ final class ManifestLintTests: XCTestCase {
       "    kotlin: src-kmp/subtrees/counter/logic/src/commonMain/kotlin/com/mini/counter/CounterFeature.kt\n",
       "")
     try assertError(repo, containing: "[counter] declares no source path (`swift:` or `kotlin:`)")
+  }
+
+  // MARK: - Row 4b: `kotlinCore: jvm` (plain JVM Kotlin modules)
+
+  /// mini-twins with `greeter`'s Swift twin removed: a Kotlin-only row whose
+  /// path is `src/main`.
+  private func makeKotlinOnlyMainRow(keepKotlinCore: Bool) throws -> Repo {
+    let repo = try makeTree("mini-twins")
+    try rewrite(
+      repo, "parity/manifest.yaml",
+      "    swift: src-ios/Subtrees/Greeter/GreeterFeature/Sources/GreeterFeature/GreeterFeature.swift\n",
+      "")
+    if !keepKotlinCore {
+      try rewrite(repo, "parity/manifest.yaml", "kotlinCore: jvm\n", "")
+    }
+    return repo
+  }
+
+  func testAKotlinOnlyMainRowPassesUnderKotlinCoreJvm() throws {
+    let repo = try makeKotlinOnlyMainRow(keepKotlinCore: true)
+    XCTAssertEqual(try lintErrors(repo), [])
+  }
+
+  func testAKotlinOnlyMainRowWithoutTheKeyKeepsTheCommonMainRule() throws {
+    let repo = try makeKotlinOnlyMainRow(keepKotlinCore: false)
+    try assertError(
+      repo, containing: "[greeter] single-source feature must live in commonMain, got src/main/")
+  }
+
+  func testKotlinCoreMultiplatformKeepsTheCommonMainRule() throws {
+    let repo = try makeKotlinOnlyMainRow(keepKotlinCore: true)
+    try rewrite(repo, "parity/manifest.yaml", "kotlinCore: jvm\n", "kotlinCore: multiplatform\n")
+    try assertError(
+      repo, containing: "[greeter] single-source feature must live in commonMain, got src/main/")
+  }
+
+  func testAKotlinOnlyRowOutsideSrcMainIsNamedUnderKotlinCoreJvm() throws {
+    let repo = try makeKotlinOnlyMainRow(keepKotlinCore: true)
+    try rewrite(
+      repo, "parity/manifest.yaml",
+      "logic/src/main/kotlin/com/mini/greeter/GreeterFeature.kt",
+      "logic/src/test/kotlin/com/mini/greeter/GreeterGoldenTest.kt")
+    let errors = try lintErrors(repo)
+    XCTAssertEqual(
+      errors,
+      [
+        "[greeter] single-source feature under `kotlinCore: jvm` must live in src/main, got"
+          + " src/test/ — a feature with no `swift:` twin is the ONE implementation"
+      ])
+  }
+
+  func testKotlinCoreJvmNamesAMultiplatformKotlinPath() throws {
+    let repo = try makeTree("mini-twins")
+    try rewrite(repo, "parity/manifest.yaml", "logic/src/main/kotlin", "logic/src/commonMain/kotlin")
+    try assertError(
+      repo,
+      containing:
+        "[greeter] kotlin path is in the multiplatform source set src/commonMain/, but the"
+        + " manifest declares `kotlinCore: jvm`")
+    // One finding for the path: the commonMain rules do not apply under the key.
+    XCTAssertFalse(try lintErrors(repo).contains { $0.contains("single-source") })
+  }
+
+  func testKotlinCoreJvmNamesAMultiplatformScenarioPath() throws {
+    let repo = try makeTree("mini-twins")
+    try rewrite(
+      repo, "parity/manifest.yaml",
+      "scenario: src-ios/Subtrees/Greeter/GreeterFeature/Tests/GreeterFeatureTests/GreeterScenarioTests.swift",
+      "scenario: src-android/subtrees/greeter/logic/src/jvmTest/kotlin/com/mini/greeter/GreeterScenarioTest.kt")
+    try assertError(
+      repo,
+      containing:
+        "[greeter] scenario path is in the multiplatform source set src/jvmTest/, but the"
+        + " manifest declares `kotlinCore: jvm`")
+  }
+
+  func testAKotlinScenarioUnderSrcTestPassesUnderKotlinCoreJvm() throws {
+    let repo = try makeTree("mini-twins")
+    try rewrite(
+      repo, "parity/manifest.yaml",
+      "scenario: src-ios/Subtrees/Greeter/GreeterFeature/Tests/GreeterFeatureTests/GreeterScenarioTests.swift",
+      "scenario: src-android/subtrees/greeter/logic/src/test/kotlin/com/mini/greeter/GreeterScenarioTest.kt")
+    XCTAssertEqual(try lintErrors(repo), [])
+  }
+
+  func testAnUnknownKotlinCoreValueIsNamed() throws {
+    let repo = try makeTree("mini-twins")
+    try rewrite(repo, "parity/manifest.yaml", "kotlinCore: jvm\n", "kotlinCore: android\n")
+    try assertError(
+      repo, containing: "manifest.yaml: kotlinCore must be jvm or multiplatform, got 'android'")
+  }
+
+  func testTheMultiplatformTreesPassWithKotlinCoreMultiplatform() throws {
+    for name in ["mini-kmp", "mini-dual"] {
+      let repo = try makeTree(name)
+      let manifest = repo.root.appendingPathComponent("parity/manifest.yaml")
+      let text = try String(contentsOf: manifest, encoding: .utf8)
+      try Data(("kotlinCore: multiplatform\n" + text).utf8).write(to: manifest)
+      XCTAssertEqual(try lintErrors(repo), [], name)
+    }
   }
 
   // MARK: - Row 5: the presentation ledger's entry shape

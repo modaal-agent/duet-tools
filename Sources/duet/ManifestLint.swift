@@ -134,6 +134,15 @@ enum ManifestLint {
     errors += parsed.ledgerParseErrors
     errors += presentationErrors(parsed: parsed)
     errors += mocksErrors(parsed: parsed, repo: repo)
+    // `kotlinCore:` states how the tree builds its Kotlin modules. Absent is
+    // `multiplatform`, so a manifest without the key keeps the source-set
+    // rules below unchanged.
+    let kotlinCore = parsed.scalars["kotlinCore"]
+    if let kotlinCore, !ManifestParser.kotlinCoreValues.contains(kotlinCore) {
+      errors.append(
+        "manifest.yaml: kotlinCore must be jvm or multiplatform, got \(ManifestParser.pythonRepr(kotlinCore))")
+    }
+    let jvmCore = kotlinCore == "jvm"
 
     let fm = FileManager.default
     var listed = Set<String>()
@@ -164,7 +173,7 @@ enum ManifestLint {
         errors.append("[\(name)] scenario file missing on disk: \(scenario)")
       }
 
-      checkModuleMirror(name: name, keys: keys, errors: &errors)
+      checkModuleMirror(name: name, keys: keys, jvmCore: jvmCore, errors: &errors)
 
       let swift = keys["swift"] ?? ""
       let kotlin = keys["kotlin"] ?? ""
@@ -281,6 +290,12 @@ enum ManifestLint {
 
   // MARK: - The module-name mirror pin
 
+  /// The source sets of a Kotlin Multiplatform module, refused under
+  /// `kotlinCore: jvm`.
+  static let multiplatformSourceSets: Set<String> = [
+    "commonMain", "commonTest", "jvmMain", "jvmTest",
+  ]
+
   /// Pin the module-name geometry — the iOS↔Android mirror:
   /// - The Swift module (Sources/<Module>/) is `<X>Feature` with lower(X) ==
   ///   the feature name; in a split subtree the gated half is the subtree
@@ -296,7 +311,13 @@ enum ManifestLint {
   ///   is the ONE implementation — geometry lockstep is not asserted, and the
   ///   subtree shape becomes MANDATORY (every migrated wave normalizes).
   ///   A feature with no `swift:` twin must BE single-source (commonMain).
-  static func checkModuleMirror(name: String, keys: [String: String], errors: inout [String]) {
+  /// - Under `kotlinCore: jvm` every Kotlin module is a plain JVM module: a
+  ///   feature with no `swift:` twin lives in `src/main` instead, and a
+  ///   multiplatform source set in the `kotlin:` path or a `.kt` `scenario:`
+  ///   path is an error.
+  static func checkModuleMirror(
+    name: String, keys: [String: String], jvmCore: Bool = false, errors: inout [String]
+  ) {
     let swift = keys["swift"] ?? ""
     let kotlin = keys["kotlin"] ?? ""
     let kotlinReal = !kotlin.isEmpty && kotlin != "pending"
@@ -312,7 +333,23 @@ enum ManifestLint {
       let flat = kmodule == ["feature-\(name)"]
       kotlinSubtree = kmodule == ["subtrees", name, "logic"]
       let sourceSet = srcIndex + 1 < kparts.count ? kparts[srcIndex + 1] : ""
-      singleSource = sourceSet == "commonMain"
+      if jvmCore {
+        // Every Kotlin module is a plain JVM module: these source-set rules
+        // apply in place of the commonMain ones, and the module dir keeps
+        // the two mirror forms checked below.
+        if multiplatformSourceSets.contains(sourceSet) {
+          errors.append(
+            "[\(name)] kotlin path is in the multiplatform source set src/\(sourceSet)/, but the"
+              + " manifest declares `kotlinCore: jvm` (a plain JVM module's sources are"
+              + " src/main/): \(kotlin)")
+        } else if swift.isEmpty, !sourceSet.isEmpty, sourceSet != "main" {
+          errors.append(
+            "[\(name)] single-source feature under `kotlinCore: jvm` must live in src/main,"
+              + " got src/\(sourceSet)/ — a feature with no `swift:` twin is the ONE implementation")
+        }
+      } else {
+        singleSource = sourceSet == "commonMain"
+      }
       if singleSource, !kotlinSubtree {
         errors.append(
           "[\(name)] single-source kotlin module `\(kmodule.joined(separator: "/"))` must be"
@@ -323,10 +360,21 @@ enum ManifestLint {
           "[\(name)] kotlin module `\(kmodule.joined(separator: "/"))` breaks the mirror pin"
             + " (want `feature-\(name)` or `subtrees/\(name)/logic`)")
       }
-      if swift.isEmpty, !singleSource, !sourceSet.isEmpty {
+      if !jvmCore, swift.isEmpty, !singleSource, !sourceSet.isEmpty {
         errors.append(
           "[\(name)] single-source feature must live in commonMain, got src/\(sourceSet)/"
             + " — a feature with no `swift:` twin is the ONE implementation")
+      }
+    }
+    if jvmCore, let scenario = keys["scenario"], scenario.hasSuffix(".kt") {
+      let sparts = scenario.split(separator: "/").map(String.init)
+      if let srcIndex = sparts.firstIndex(of: "src"), srcIndex + 1 < sparts.count,
+        multiplatformSourceSets.contains(sparts[srcIndex + 1])
+      {
+        errors.append(
+          "[\(name)] scenario path is in the multiplatform source set src/\(sparts[srcIndex + 1])/,"
+            + " but the manifest declares `kotlinCore: jvm` (a plain JVM module's tests are"
+            + " src/test/): \(scenario)")
       }
     }
     if swift.isEmpty {
