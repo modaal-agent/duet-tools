@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.35.0 — 2026-10-26
+
+### Changed — lane logs and scratch files go under `$TMPDIR`
+
+`verify`, `record`, the host lane and `mutate` write each lane's log
+(`duet-<lane>-<pid>.log`, the path a failing run prints) under `$TMPDIR`
+when the variable is set and not empty, and under the user's temporary
+directory otherwise. So does `mocks`, for the file that holds
+`swift package describe`'s stderr. On macOS that temporary directory is
+the per-user folder whatever `$TMPDIR` says, so a run inside a sandbox
+that allows writes only under `$TMPDIR` could not create its log and
+exited 1 before the lane ran.
+
+### Adopting
+
+**No change to the tree is required** to move `parity/duet-tools.ref` to
+0.35.0: no generated file, fixture or other committed output changes, and
+no command gains a refusal.
+
 ## 0.34.0 — 2026-10-20
 
 ### Added — `doctor` models the `duet-twins` template and the `twins` flavor

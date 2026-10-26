@@ -7,7 +7,7 @@ The open `duet` CLI — the verification toolchain for
 verification, scenario-driven recording, the replay-protocol lane, the
 manifest and declaration checks (`lint`, `doctor`), the mutation drill, and
 the codegen verbs (sum coders, generated mocks, design tokens). Current
-release: **0.34.0** — [CHANGELOG.md](CHANGELOG.md) states what each release
+release: **0.35.0** — [CHANGELOG.md](CHANGELOG.md) states what each release
 carries; a new or changed gate is a minor, and pre-1.0 minors are breaking by
 family convention.
 
@@ -32,7 +32,7 @@ Each release publishes a prebuilt binary for macOS on Apple silicon
 (macOS 13+) beside a checksum file:
 
 ```sh
-TAG=0.34.0   # the current release, or the tag in the adopter repo's parity/duet-tools.ref
+TAG=0.35.0   # the current release, or the tag in the adopter repo's parity/duet-tools.ref
 BASE=https://github.com/modaal-agent/duet-tools/releases/download/$TAG
 curl -fsSLO $BASE/duet-macos-arm64.zip
 curl -fsSLO $BASE/duet-macos-arm64.zip.sha256

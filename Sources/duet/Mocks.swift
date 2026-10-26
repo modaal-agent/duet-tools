@@ -430,7 +430,7 @@ enum Mocks {
     // stderr to a FILE, not a second pipe: the JSON is read from this process
     // before the child exits, and a manifest-compile warning filling a stderr
     // pipe would deadlock that read. It is forwarded verbatim below.
-    let noise = fm.temporaryDirectory.appendingPathComponent(
+    let noise = Lanes.scratchDirectory().appendingPathComponent(
       "duet-describe-\(UUID().uuidString).log")
     fm.createFile(atPath: noise.path, contents: nil)
     defer { try? fm.removeItem(at: noise) }
