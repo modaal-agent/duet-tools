@@ -11,12 +11,26 @@ enum Lanes {
     let seconds: Double
   }
 
+  /// Where the CLI writes its lane logs and other scratch files: `$TMPDIR` when
+  /// the variable is set and not empty, else the user's temporary directory.
+  /// Foundation's temporary directory on macOS is the per-user folder whatever
+  /// `$TMPDIR` says, and a sandbox that allows writes only under `$TMPDIR`
+  /// refuses a file there.
+  static func scratchDirectory(
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> URL {
+    if let tmpdir = environment["TMPDIR"], !tmpdir.isEmpty {
+      return URL(fileURLWithPath: tmpdir, isDirectory: true)
+    }
+    return FileManager.default.temporaryDirectory
+  }
+
   /// Launches a process with output captured to a log file. `wait: false` returns
   /// immediately (caller pairs it with `finish`).
   static func launch(
     _ arguments: [String], cwd: URL, extraEnv: [String: String] = [:], logName: String
   ) throws -> (Process, URL, Date) {
-    let logURL = FileManager.default.temporaryDirectory
+    let logURL = scratchDirectory()
       .appendingPathComponent("duet-\(logName)-\(ProcessInfo.processInfo.processIdentifier).log")
     FileManager.default.createFile(atPath: logURL.path, contents: nil)
     let handle = try FileHandle(forWritingTo: logURL)
