@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.35.1 — 2026-10-27
+
+### Fixed — lane logs are created in a sandbox that refuses the user's temporary directory
+
+In 0.35.0, a run inside a sandbox that allows writes under `$TMPDIR` and
+refuses them in the user's temporary directory still exited 1 before the
+lane ran, with `The file "duet-<lane>-<pid>.log" doesn't exist`. The CLI
+created each log with `FileManager.createFile`, which writes atomically,
+and Foundation stages an atomic write in the user's temporary directory
+whatever directory the file is in. `verify`, `record`, the host lane,
+`mutate`, `protocol-run`'s runner build and `mocks` now create each log with
+a plain write, under `$TMPDIR` as before. `materialize` writes the test file
+it generates with a plain write too.
+
+### Adopting
+
+**No change to the tree is required** to move `parity/duet-tools.ref` to
+0.35.1: no generated file, fixture or other committed output changes, and
+no command gains a refusal.
+
 ## 0.35.0 — 2026-10-26
 
 ### Changed — lane logs and scratch files go under `$TMPDIR`
