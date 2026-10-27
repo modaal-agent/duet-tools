@@ -432,8 +432,8 @@ enum Mocks {
     // pipe would deadlock that read. It is forwarded verbatim below.
     let noise = Lanes.scratchDirectory().appendingPathComponent(
       "duet-describe-\(UUID().uuidString).log")
-    fm.createFile(atPath: noise.path, contents: nil)
     defer { try? fm.removeItem(at: noise) }
+    let errors = try Lanes.openScratchFile(noise)
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = ["swift", "package", "describe", "--type", "json"]
@@ -441,7 +441,6 @@ enum Mocks {
     process.standardInput = FileHandle.nullDevice
     let stdout = Pipe()
     process.standardOutput = stdout
-    let errors = try FileHandle(forWritingTo: noise)
     process.standardError = errors
     try process.run()
     let data = (try? stdout.fileHandleForReading.readToEnd()) ?? Data()

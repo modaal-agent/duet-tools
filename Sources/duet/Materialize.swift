@@ -117,7 +117,7 @@ enum Materialize {
         className: className, module: module, feature: feature, fixture: fixture,
         step: step, label: label, prior: prior, priorActions: priorActions,
         action: action, expectedState: expectedState, expectedEffects: expectedEffects
-      ).write(to: file, atomically: true, encoding: .utf8)
+      ).write(to: file, atomically: false, encoding: .utf8)
       runHint =
         "cd \(packageDir.path) && swift test --filter \(className)"
     } else {
@@ -135,7 +135,7 @@ enum Materialize {
         className: className, package: package, feature: feature, fixture: fixture,
         step: step, label: label, prior: prior, priorActions: priorActions,
         action: action, expectedState: expectedState, expectedEffects: expectedEffects
-      ).write(to: file, atomically: true, encoding: .utf8)
+      ).write(to: file, atomically: false, encoding: .utf8)
       runHint =
         "cd \(androidDir.path) && ./gradlew \(task) --tests '*\(className)*'"
     }

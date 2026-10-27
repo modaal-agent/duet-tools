@@ -25,6 +25,16 @@ enum Lanes {
     return FileManager.default.temporaryDirectory
   }
 
+  /// Creates `url` empty, or empties it, and opens it for writing. The file is
+  /// created with a plain write: Foundation stages an atomic write, and
+  /// `FileManager.createFile`, in the user's temporary directory whatever the
+  /// target's directory is, and a sandbox that allows writes only under
+  /// `$TMPDIR` refuses that staging file.
+  static func openScratchFile(_ url: URL) throws -> FileHandle {
+    try Data().write(to: url)
+    return try FileHandle(forWritingTo: url)
+  }
+
   /// Launches a process with output captured to a log file. `wait: false` returns
   /// immediately (caller pairs it with `finish`).
   static func launch(
@@ -32,8 +42,7 @@ enum Lanes {
   ) throws -> (Process, URL, Date) {
     let logURL = scratchDirectory()
       .appendingPathComponent("duet-\(logName)-\(ProcessInfo.processInfo.processIdentifier).log")
-    FileManager.default.createFile(atPath: logURL.path, contents: nil)
-    let handle = try FileHandle(forWritingTo: logURL)
+    let handle = try openScratchFile(logURL)
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = arguments
