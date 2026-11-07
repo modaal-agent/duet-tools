@@ -280,6 +280,16 @@ cancel surface; results carry `structuredContent` alongside the text report.
 [duet-macros](https://github.com/modaal-agent/duet-macros): both ceremony-killer
 vehicles assemble from the one emission rule-set.
 
+## Agent skill
+
+The duet repository's agent skill,
+[`skills/duet/`](https://github.com/modaal-agent/duet/tree/main/skills/duet),
+teaches a coding agent the framework and this CLI's verbs, MCP tools and
+diagnostics, and runs the CLI at a tree's pin. Install it in Claude Code with
+`/plugin marketplace add modaal-agent/duet`, then
+`/plugin install duet-ios-android@modaal-duet`, or in another agent with
+`npx skills add modaal-agent/duet`.
+
 ## Contracts
 
 Two grammars are fixed here, in `contracts/`, because this CLI is the one

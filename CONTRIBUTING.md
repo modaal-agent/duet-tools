@@ -31,5 +31,12 @@
   uses lives in that test target; a double shared across targets or with
   consumers ships in a dedicated test-support library product that only test
   targets link.
+- **A release that renames or removes a verb, an MCP tool or a diagnostic
+  updates the duet agent skill.** `skills/duet/` in the duet repository names
+  this CLI's verbs, the `duet_*` tools `duet mcp` serves and the diagnostics
+  it prints, and duet's `skill` workflow checks them against this
+  repository's newest tag every Monday (`scripts/check-skill.sh`, checks C10
+  and C11). Open the matching duet pull request with the release; the weekly
+  run fails until it merges.
 - **Licensing**: MIT, inbound = outbound; submitting a PR means your
   contribution is licensed under the [MIT License](LICENSE).
