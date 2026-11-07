@@ -23,11 +23,37 @@ final class DoctorTests: XCTestCase {
 
   private func json(_ text: String) -> Data { Data(text.utf8) }
 
-  func testMissingFileIsAFinding() {
-    let findings = Doctor.declarationFindings(
-      projectJSON: nil, geometry: geometry(kotlinShaped: true))
-    XCTAssertEqual(findings.count, 1)
-    XCTAssertTrue(findings[0].contains("missing"))
+  func testMissingFileIsNoFinding() {
+    // A repo without .modaal/project.json keeps no declaration layer.
+    XCTAssertEqual(
+      Doctor.declarationFindings(projectJSON: nil, geometry: geometry(kotlinShaped: true)), [])
+    XCTAssertEqual(
+      Doctor.declarationFindings(projectJSON: nil, geometry: geometry(kotlinShaped: false)), [])
+  }
+
+  func testRepoWithoutDeclarationsPasses() throws {
+    // mini-kmp carries no .modaal/ directory.
+    let repo = try makeMiniTree("mini-kmp")
+    XCTAssertFalse(
+      FileManager.default.fileExists(
+        atPath: repo.root.appendingPathComponent(".modaal/project.json").path))
+    var options = Options()
+    options.command = "doctor"
+    XCTAssertEqual(try Doctor.run(repo: repo, options: options), 0)
+    options.json = true
+    XCTAssertEqual(try Doctor.run(repo: repo, options: options), 0)
+  }
+
+  func testRepoWithoutDeclarationsStillRunsTheWorkerLint() throws {
+    let repo = try makeMiniTree("mini-kmp")
+    let dir = repo.root.appendingPathComponent("src-ios/Sources/App")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try Data(
+      "final class SessionWorker: Working, @unchecked Sendable {}\n".utf8
+    ).write(to: dir.appendingPathComponent("Workers.swift"))
+    var options = Options()
+    options.command = "doctor"
+    XCTAssertEqual(try Doctor.run(repo: repo, options: options), 1)
   }
 
   func testInvalidJSONIsAFinding() {

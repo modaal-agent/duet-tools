@@ -242,7 +242,8 @@ let usage = """
         — that last row asked only where the manifest derives exactly ONE
         lane, and never of a target the `migration` marker names: a repo
         migrating feature by feature and a twins repo derive both lanes,
-        and one with no features derives neither.
+        and one with no features derives neither. A repo without
+        .modaal/project.json declares no targets, and Row 1 reports nothing.
         Row 2: the worker-isolation lint — a Working conformer (direct,
         via a refining protocol, or via a superclass) declared
         '@unchecked Sendable' in non-test sources; the compiler accepts

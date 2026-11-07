@@ -13,7 +13,9 @@ import Foundation
 /// template name nothing models — stays green everywhere. Doctor reads the
 /// declarations and answers: "this repo says X; here is what X implies;
 /// here is what is on disk." This is the CLI's only `.modaal` consumer —
-/// gate derivation stays manifest-only.
+/// gate derivation stays manifest-only. A repo without the file keeps no
+/// declaration layer, so the row has nothing to check there and reports
+/// nothing; the [workers] row runs either way.
 ///
 /// The two template-shape rows ask only where the manifest has evidence to
 /// answer with: a manifest deriving BOTH lanes is either a per-feature
@@ -86,15 +88,14 @@ enum Doctor {
   }
 
   /// Findings for the declaration layer. `projectJSON` is the raw file
-  /// content, nil when the file is absent. Deny-nothing like every reader
-  /// of this file: keys and targets the check has no name for produce no
-  /// finding — only named keys with the wrong shape, and declarations
-  /// whose implications the disk contradicts, are findings.
+  /// content, nil when the file is absent — a repo that keeps no
+  /// declaration layer, which produces no finding. Deny-nothing like every
+  /// reader of this file: keys and targets the check has no name for
+  /// produce no finding — only named keys with the wrong shape, and
+  /// declarations whose implications the disk contradicts, are findings.
   static func declarationFindings(projectJSON: Data?, geometry: Geometry) -> [String] {
     let file = ".modaal/project.json"
-    guard let projectJSON else {
-      return ["[declarations] \(file): missing — the repo declares no targets"]
-    }
+    guard let projectJSON else { return [] }
     guard let root = try? JSONSerialization.jsonObject(with: projectJSON),
       let metadata = root as? [String: Any]
     else {
@@ -508,14 +509,19 @@ enum Doctor {
       Lanes.emitJSON([
         "status": findings.isEmpty ? "passed" : "failed",
         "findings": findings,
+        "declarations": projectJSON == nil ? "absent" : "present",
         "targetsChecked": targetsChecked,
         "swiftSourcesScanned": sources.count,
       ])
       return findings.isEmpty ? 0 : 1
     }
     if findings.isEmpty {
+      let declarations =
+        projectJSON == nil
+        ? "no .modaal/project.json, no target declarations to check"
+        : "\(targetsChecked) target declaration(s)"
       print(
-        "duet doctor: PASS — \(targetsChecked) target declaration(s), "
+        "duet doctor: PASS — \(declarations), "
           + "\(sources.count) Swift source file(s) scanned")
       return 0
     }

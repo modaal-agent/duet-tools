@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.36.0 — 2026-11-07
+
+### Changed — `doctor` checks the declaration layer only in a repo that keeps one
+
+A repo without `.modaal/project.json` declares no targets, and `doctor`'s
+`[declarations]` row reports nothing for it: the run prints
+`duet doctor: PASS — no .modaal/project.json, no target declarations to
+check, <n> Swift source file(s) scanned` when the `[workers]` row finds
+nothing either, and exits 0. In a repo that keeps the file, every
+declaration check runs as before. The `[workers]` row runs in every repo.
+`doctor --json` carries `"declarations": "absent"` or `"present"`.
+
+### Fixed — `duet help` names every tool `duet mcp` serves
+
+The `duet mcp` entry of the usage text names all nine tools, `duet_lint`
+and `duet_lanes` included.
+
+### Adopting
+
+**No change to the tree is required** to move `parity/duet-tools.ref` to
+0.36.0: no generated file, fixture or other committed output changes, and
+no command gains a refusal. A workflow that runs `doctor` on a repo without
+`.modaal/project.json` passes where it exited 1.
+
 ## 0.35.1 — 2026-10-27
 
 ### Fixed — lane logs are created in a sandbox that refuses the user's temporary directory
