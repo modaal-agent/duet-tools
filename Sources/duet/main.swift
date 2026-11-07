@@ -262,11 +262,11 @@ let usage = """
         seconds: the full suite runs once per row plus a baseline.
     duet mcp
         serve the verification verbs as a stdio MCP server (duet_verify,
-        duet_record, duet_explain, duet_materialize, duet_protocol_run,
-        duet_scope, duet_doctor) — one mcpServers entry gives any agent
-        harness the toolchain; tool results are the verbs' --json reports
-        (each stamped with the toolchain version). Launch with cwd inside
-        the repo.
+        duet_lint, duet_record, duet_lanes, duet_explain, duet_materialize,
+        duet_protocol_run, duet_scope, duet_doctor) — one mcpServers entry
+        gives any agent harness the toolchain; tool results are the verbs'
+        --json reports (each stamped with the toolchain version). Launch
+        with cwd inside the repo.
     duet version
         print the toolchain version (matches the release tag), so gate
         receipts can record which toolchain ran. Works outside a repo.
