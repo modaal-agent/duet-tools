@@ -34,9 +34,11 @@
 - **A release that renames or removes a verb, an MCP tool or a diagnostic
   updates the duet agent skill.** `skills/duet/` in the duet repository names
   this CLI's verbs, the `duet_*` tools `duet mcp` serves and the diagnostics
-  it prints, and duet's `skill` workflow checks them against this
-  repository's newest tag every Monday (`scripts/check-skill.sh`, checks C10
-  and C11). Open the matching duet pull request with the release; the weekly
-  run fails until it merges.
+  it prints. Open the matching duet pull request with the release. duet's
+  `skill` workflow (`scripts/check-skill.sh`) runs every Monday: a verb or a
+  tool missing from this repository's newest tag fails check C10 until that
+  pull request merges. A quoted diagnostic that only an older tag prints is a
+  C11 note and does not fail the run, so a reworded or removed diagnostic
+  reaches the skill only through that pull request.
 - **Licensing**: MIT, inbound = outbound; submitting a PR means your
   contribution is licensed under the [MIT License](LICENSE).
