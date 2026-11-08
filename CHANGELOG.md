@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.37.0 — 2026-11-07
+
+### Added — `duet pins` checks a tree's family pins
+
+`duet pins [<path>] [--latest] [--json]` lists every Duet family pin the
+tree declares, one row per pin with its version, its kind and the file and
+line it is read from:
+
+- each `.package(url: …/modaal-agent/duet…)` of every `Package.swift`,
+  read whole when the call spans several lines;
+- each package of every `project.yml` and `xcodegen.yml` whose `url:` names
+  a family repository, with the version key beside the url;
+- the `duet`, `duetServices` and `mocksProcessor` keys of every
+  `libs.versions.toml`;
+- `parity/duet-tools.ref` and the manifest's `mocks: bundle:`.
+
+`.build`, `.duet-family`, `DerivedData`, `checkouts`, `build`, `.gradle`,
+`.git` and `node_modules` are not read. The run exits 1 and prints a `✗`
+line for each pin that is not one exact version (`from:`, a range, a
+branch, a revision, or an XcodeGen package with no version key) and for
+each package pinned at two versions, and prints `duet pins: OK` otherwise.
+
+`--latest` adds the network reads: the run exits 1 when the duet tag that
+the tree's duet-services or duet-migration release pins differs from the
+tree's duet pin, or when a read fails, and lists the newest release of duet,
+duet-tools, duet-services, duet-macros and duet-migration (each pinner with
+the duet tag it pins), of the swift-sourcery-templates bundle (`templates-`
+tags) and of `dev.modaal:mocks-processor` on the family's Maven host. It
+needs `github.com`, `raw.githubusercontent.com` and `modaal-agent.github.io`.
+
+Like `version` and `assert-replayed`, the verb runs outside a parity repo:
+the root is the directory holding `parity/fixtures` above `<path>` (default:
+the working directory), else `<path>`.
+
+### Adopting
+
+**No change to the tree is required** to move `parity/duet-tools.ref` to
+0.37.0: no generated file, fixture or other committed output changes, and
+no command gains a refusal. A workflow that checks the tree's pins with its
+own script can run `tools/duet pins` instead.
+
 ## 0.36.0 — 2026-11-07
 
 ### Changed — `doctor` checks the declaration layer only in a repo that keeps one

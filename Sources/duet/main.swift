@@ -19,6 +19,7 @@ struct Options {
   var clean = false
   var check = false
   var write = false
+  var latest = false
 
   enum OptionsError: Error, CustomStringConvertible {
     case unknownFeature(String)
@@ -76,6 +77,8 @@ struct Options {
         options.check = true
       case "--write":
         options.write = true
+      case "--latest":
+        options.latest = true
       case "-":
         options.target = "-"
       case "--help", "-h":
@@ -268,6 +271,23 @@ let usage = """
         gives any agent harness the toolchain; tool results are the verbs'
         --json reports (each stamped with the toolchain version). Launch
         with cwd inside the repo.
+    duet pins [<path>] [--latest] [--json]
+        the Duet family pins the tree declares, checked against the
+        exact-pin rule: each `.package(url: …/modaal-agent/duet…)` of every
+        Package.swift, each package of every project.yml and xcodegen.yml
+        whose url names modaal-agent/duet…, the `duet`, `duetServices` and
+        `mocksProcessor` keys of every libs.versions.toml,
+        parity/duet-tools.ref, and the manifest's `mocks: bundle:`. Build
+        output and dependency checkouts are not read. Exit 1 when a family
+        package is pinned by anything but one exact version, or when two
+        pins of one package name two versions. --latest also reads the
+        network: it fails when the duet tag that the tree's duet-services
+        (or duet-migration) release pins differs from the tree's duet pin,
+        and prints the newest release of each family repository, of the
+        swift-sourcery-templates bundle and of mocks-processor. Works
+        outside a parity repo: the root is the directory holding
+        parity/fixtures above <path> (default: the working directory), else
+        <path> itself.
     duet version
         print the toolchain version (matches the release tag), so gate
         receipts can record which toolchain ran. Works outside a repo.
@@ -294,6 +314,10 @@ if command == "version" {
 // any parity tree (a framework repo's own CI) get the empty-pass gate too.
 if command == "assert-replayed" {
   exit(AssertReplayed.run(options: options))
+}
+// So does pins: it reads any tree's package manifests, a parity repo or not.
+if command == "pins" {
+  exit(Pins.run(options: options))
 }
 let discovered = command == "design-tokens"
   ? Repo.discover(marker: DesignTokenConfig.relativePath) ?? Repo.discover()

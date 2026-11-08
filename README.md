@@ -32,13 +32,13 @@ Each release publishes a prebuilt binary for macOS on Apple silicon
 (macOS 13+) beside a checksum file:
 
 ```sh
-TAG=0.36.0   # the current release, or the tag in the adopter repo's parity/duet-tools.ref
+TAG=0.37.0   # the current release, or the tag in the adopter repo's parity/duet-tools.ref
 BASE=https://github.com/modaal-agent/duet-tools/releases/download/$TAG
 curl -fsSLO $BASE/duet-macos-arm64.zip
 curl -fsSLO $BASE/duet-macos-arm64.zip.sha256
 shasum -a 256 -c duet-macos-arm64.zip.sha256
 unzip duet-macos-arm64.zip     # a bare 'duet' executable
-./duet version                 # expect: duet 0.36.0
+./duet version                 # expect: duet 0.37.0
 ```
 
 Put it on `PATH`, or point `DUET_BIN` at it — an adopter repo's `tools/duet`
@@ -244,6 +244,19 @@ duet version             # the toolchain version, matching the release tag; work
   config generates nothing and passes. `duet design-tokens migrate` rewrites a version-1 config as
   version 2. `Tests/terrazzo/` cross-checks the version-2 fixture against an
   independent DTCG implementation (development only; needs Node).
+- `duet pins [<path>] [--latest]` — the Duet family pins a tree declares,
+  checked against the exact-pin rule. It reads each family `.package(url:)`
+  of every `Package.swift`, each family package of every `project.yml` and
+  `xcodegen.yml`, the `duet`, `duetServices` and `mocksProcessor` keys of
+  every `libs.versions.toml`, `parity/duet-tools.ref` and the manifest's
+  `mocks: bundle:`, skipping build output and dependency checkouts, and
+  exits 1 when a family package is pinned by anything but one exact version
+  or when two pins of one package name two versions. `--latest` also reads
+  the network: it exits 1 when the duet tag that the tree's duet-services
+  (or duet-migration) release pins differs from the tree's duet pin, and
+  prints the newest release of each family repository, of the
+  swift-sourcery-templates bundle and of mocks-processor. Works outside a
+  parity repo.
 - `duet mcp` — the same verification verbs as a stdio MCP server
   (`duet_verify`, `duet_lint`, `duet_record`, `duet_explain`,
   `duet_materialize`, `duet_protocol_run`, `duet_scope`, `duet_lanes`,
