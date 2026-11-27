@@ -32,13 +32,13 @@ Each release publishes a prebuilt binary for macOS on Apple silicon
 (macOS 13+) beside a checksum file:
 
 ```sh
-TAG=0.37.0   # the current release, or the tag in the adopter repo's parity/duet-tools.ref
+TAG=0.38.0   # the current release, or the tag in the adopter repo's parity/duet-tools.ref
 BASE=https://github.com/modaal-agent/duet-tools/releases/download/$TAG
 curl -fsSLO $BASE/duet-macos-arm64.zip
 curl -fsSLO $BASE/duet-macos-arm64.zip.sha256
 shasum -a 256 -c duet-macos-arm64.zip.sha256
 unzip duet-macos-arm64.zip     # a bare 'duet' executable
-./duet version                 # expect: duet 0.37.0
+./duet version                 # expect: duet 0.38.0
 ```
 
 Put it on `PATH`, or point `DUET_BIN` at it — an adopter repo's `tools/duet`
