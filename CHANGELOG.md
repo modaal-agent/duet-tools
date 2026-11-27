@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.38.1 — 2026-11-27
+
+### Fixed — the host lane and `materialize --clean` in a Gradle build at the repository root
+
+In 0.38.0, a tree whose Gradle build is at the repository root has its
+`.build/` directory inside the Gradle root: SwiftPM checks out package
+dependencies there, and `mocks` checks out the family's sources there,
+Kotlin test sources included. The walk that finds the module hosting a
+chain's replay read those checkouts, added a task such as
+`:.build:duet-sources:duet:kotlin:kernel-test:test` that the build does not
+define, and the host lane failed. `materialize --clean` deleted
+`Materialized_*` files inside the checkouts. Both walks now skip build
+products, tool state and dependency checkouts (`.build`, `build`, `.gradle`,
+`.kotlin`, `checkouts`, `.git` and the other directories every inventory
+walk skips).
+
+### Adopting
+
+**No change to the tree is required** to move `parity/duet-tools.ref` to
+0.38.1: no generated file, fixture or other committed output changes, and
+no command gains a refusal.
+
 ## 0.38.0 — 2026-11-27
 
 ### Added — a Gradle build at the repository root
