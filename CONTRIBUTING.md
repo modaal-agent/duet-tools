@@ -16,6 +16,10 @@
   a pin to raise, or a new refusal or error it can meet and its fix. The
   running text of the entry describes the change; it does not carry an
   instruction that appears nowhere under `### Adopting`.
+- **A pull request merges with a merge commit**: `gh pr merge --merge
+  --delete-branch`, not `--rebase` or `--squash`. The branch's commits land
+  on `main` unchanged, so the SHAs a commit message's `Verified:` line cites,
+  and the release commit a tag points at, are commits `main` holds.
 - **A release cut sets the version in the commit that gets tagged** (the
   family convention — see the `duet` repo's CONTRIBUTING, rule 7). The version
   of record is `duetToolsVersion` in `Sources/duet/Version.swift`; `duet version`
