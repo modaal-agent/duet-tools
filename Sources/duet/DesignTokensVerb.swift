@@ -29,7 +29,16 @@ enum DesignTokensVerb {
 
   static func regenerate(repo: Repo, config: DesignTokenConfig, check: Bool) throws -> Regen {
     var regen = Regen()
-    let files = DesignTokensEmitter.emit(config: config)
+    var files = DesignTokensEmitter.emit(config: config)
+    // The resolver's `app` modifier: each context generates alone, and the
+    // merge keeps one vocabulary and the colour values per app.
+    if let modifier = try DesignTokenConfig.appModifier(repo: repo) {
+      let perApp = try modifier.contexts.map { app -> DesignTokensAppValues.AppValues in
+        let appConfig = try DesignTokenConfig.load(repo: repo, app: app) ?? config
+        return .init(app: app, config: appConfig, files: DesignTokensEmitter.emit(config: appConfig))
+      }
+      files = try DesignTokensAppValues.merge(perApp: perApp, modifier: modifier, config: config)
+    }
     for file in files {
       let url = repo.root.appendingPathComponent(file.path)
       let existing = FileManager.default.contents(atPath: url.path)
@@ -45,7 +54,10 @@ enum DesignTokensVerb {
       }
     }
     let emitted = Set(files.map(\.path))
+    // `TokenApp` is owned whether or not the resolver declares apps, so a
+    // dropped modifier leaves it reported as an orphan.
     var owned = DesignTokensEmitter.ownedPaths(config: config)
+      .union(DesignTokensAppValues.tokenAppPaths(config: config))
     // The web target owns its fonts directory: a file the config no longer
     // names is reported, as a dropped vocabulary's file is.
     if let target = config.css {

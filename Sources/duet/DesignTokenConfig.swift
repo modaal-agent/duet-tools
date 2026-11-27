@@ -125,7 +125,7 @@ struct DesignTokenConfig {
     var files: [FontFile]
   }
 
-  struct ColorToken {
+  struct ColorToken: Equatable {
     var name: String
     var doc: String?
     var note: String?
@@ -135,7 +135,7 @@ struct DesignTokenConfig {
     var source: String? = nil
   }
 
-  struct FontToken {
+  struct FontToken: Equatable {
     var name: String
     var doc: String?
     var note: String?
@@ -164,7 +164,7 @@ struct DesignTokenConfig {
     case fixed([ColorValue])
   }
 
-  struct GradientToken {
+  struct GradientToken: Equatable {
     var name: String
     var doc: String?
     var note: String?
@@ -174,7 +174,7 @@ struct DesignTokenConfig {
 
   /// A length on the app's spacing or corner-radius scale. The value is the
   /// token's `px`, read as points on Apple, dp on Android and px on the web.
-  struct DimensionToken {
+  struct DimensionToken: Equatable {
     var name: String
     var doc: String?
     var note: String?
@@ -259,7 +259,7 @@ extension DesignTokenConfig {
   /// Loads and validates the config. Returns nil when the repo declares none.
   /// Version 1 carries the tokens in this grammar; version 2 names a DTCG
   /// resolver (`tokens:`) and carries only the targets.
-  static func load(repo: Repo) throws -> DesignTokenConfig? {
+  static func load(repo: Repo, app: String? = nil) throws -> DesignTokenConfig? {
     let file = url(in: repo)
     guard FileManager.default.fileExists(atPath: file.path) else { return nil }
     let text: String
@@ -269,7 +269,7 @@ extension DesignTokenConfig {
       throw DesignTokenConfigError.unreadable(path: relativePath, reason: "\(error)")
     }
     if let root = (try? Yams.load(yaml: text)) as? [String: Any], root["version"] as? Int == dtcgVersion {
-      return try loadDTCG(root, configURL: file)
+      return try loadDTCG(root, configURL: file, app: app)
     }
     return try parse(text, path: relativePath)
   }
@@ -279,7 +279,7 @@ extension DesignTokenConfig {
 
   /// Version 2: `tokens:` (a resolver path relative to this file) and the
   /// targets. The token vocabularies are the resolver's.
-  static func loadDTCG(_ root: [String: Any], configURL: URL) throws -> DesignTokenConfig {
+  static func loadDTCG(_ root: [String: Any], configURL: URL, app: String? = nil) throws -> DesignTokenConfig {
     let reader = Reader(path: relativePath)
     try reader.keys(root, known: ["version", "tokens", "swift", "kotlin", "css"], at: "top level")
     let tokens = try reader.string(root, "tokens", at: "top level")
@@ -288,7 +288,20 @@ extension DesignTokenConfig {
     let resolver = parity.appendingPathComponent(tokens)
     return try DTCGSource.load(
       resolver: resolver, relativePath: "parity/" + tokens, targets: targets,
-      repoRoot: parity.deletingLastPathComponent())
+      repoRoot: parity.deletingLastPathComponent(), app: app)
+  }
+
+  /// The resolver's `app` modifier: nil for a version-1 config and for a
+  /// resolver that declares none.
+  static func appModifier(repo: Repo) throws -> DTCGSource.AppModifier? {
+    let file = url(in: repo)
+    guard let text = try? String(contentsOf: file, encoding: .utf8),
+          let root = (try? Yams.load(yaml: text)) as? [String: Any], root["version"] as? Int == dtcgVersion,
+          let tokens = root["tokens"] as? String
+    else { return nil }
+    let resolver = file.deletingLastPathComponent().appendingPathComponent(tokens)
+    guard FileManager.default.fileExists(atPath: resolver.path) else { return nil }
+    return try DTCGSource.appModifier(resolver: resolver, relativePath: "parity/" + tokens)
   }
 
   static func parse(_ text: String, path: String) throws -> DesignTokenConfig {
@@ -620,3 +633,5 @@ extension DesignTokenConfig {
     }
   }
 }
+
+extension DesignTokenConfig.Group: Equatable where Token: Equatable {}

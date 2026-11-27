@@ -36,6 +36,9 @@ import Yams
 enum DTCGSource {
   static let extensionKey = "dev.modaal.duet"
   static let formatVersion = "2025.10"
+  /// The top-level group whose tokens are read for aliases only: the values
+  /// an app context overrides, once per appearance.
+  static let primitiveGroup = "primitive"
 
   /// A JSON value with its object keys in document order. JSONSerialization
   /// drops the order, and the generated vocabularies follow it, so the files
@@ -135,7 +138,7 @@ enum DTCGSource {
     var darkFiles: [String: String] = [:]
   }
 
-  static func resolve(resolver url: URL, relativePath: String) throws -> Resolved {
+  static func resolve(resolver url: URL, relativePath: String, app: String? = nil) throws -> Resolved {
     let text = try String(contentsOf: url, encoding: .utf8)
     let doc = try parseJSON(text, path: relativePath)
     guard let top = doc.pairs else { throw Failure(description: "\(relativePath): the document must be an object") }
@@ -204,8 +207,22 @@ enum DTCGSource {
         dark += set
         continue
       }
+      if name == "app" {
+        // One context per app. The chosen app's sources apply to both
+        // appearances at the modifier's position: they override the sources
+        // before it (the primitives) and are overridden by those after it.
+        let modifier = try appModifier(body, relativePath: relativePath)
+        let chosen = app ?? modifier.defaultContext
+        guard modifier.contexts.contains(chosen) else {
+          throw Failure(description: "\(relativePath): modifier 'app' has no context '\(chosen)'")
+        }
+        let appSources = try sources(body["contexts"]?[chosen], at: "app.\(chosen)")
+        light += appSources
+        dark += appSources
+        continue
+      }
       guard name == "appearance" else {
-        throw Failure(description: "\(relativePath): modifier '\(name)': the targets know one modifier, 'appearance' (light, dark)")
+        throw Failure(description: "\(relativePath): modifier '\(name)': the targets know two modifiers, 'appearance' (light, dark) and 'app' (one context per app)")
       }
       sawAppearance = true
       guard let contexts = body["contexts"]?.pairs,
@@ -239,6 +256,44 @@ enum DTCGSource {
     return Resolved(
       light: merge(light.map(\.0)), dark: merge(dark.map(\.0)), darkPaths: darkPaths,
       lightFiles: files(light), darkFiles: files(darkOnly))
+  }
+
+  /// The resolver's `app` modifier: its contexts in document order, one per
+  /// app, and the context a run without an app reads.
+  struct AppModifier: Equatable {
+    var contexts: [String]
+    var defaultContext: String
+  }
+
+  /// A context name becomes a `TokenApp` case in Swift and an entry in
+  /// Kotlin, beside the type's `current` member.
+  static let appContextReserved: Set<String> = DesignTokenRules.reserved.union(["current"])
+
+  static func appModifier(_ body: JSON, relativePath: String) throws -> AppModifier {
+    guard let contexts = body["contexts"]?.pairs, !contexts.isEmpty else {
+      throw Failure(description: "\(relativePath): modifier 'app' needs one context per app")
+    }
+    for (context, _) in contexts {
+      let shaped = context.first.map { $0.isASCII && $0.isLetter && $0.isLowercase } == true
+        && context.allSatisfy { $0.isASCII && ($0.isNumber || ($0.isLetter && $0.isLowercase)) }
+      guard shaped, !appContextReserved.contains(context) else {
+        throw Failure(
+          description: "\(relativePath): modifier 'app': context '\(context)' must be lower-case ASCII"
+            + " letters and digits, starting with a letter, and not a Swift or Kotlin keyword — it"
+            + " becomes a `TokenApp` case in both languages")
+      }
+    }
+    guard let fallback = body["default"]?.string, contexts.contains(where: { $0.0 == fallback }) else {
+      throw Failure(description: "\(relativePath): modifier 'app' needs a 'default' that names one of its contexts")
+    }
+    return AppModifier(contexts: contexts.map(\.0), defaultContext: fallback)
+  }
+
+  /// The `app` modifier of the resolver at *url*, nil when it declares none.
+  static func appModifier(resolver url: URL, relativePath: String) throws -> AppModifier? {
+    let doc = try parseJSON(try String(contentsOf: url, encoding: .utf8), path: relativePath)
+    guard let body = doc["modifiers"]?["app"] else { return nil }
+    return try appModifier(body, relativePath: relativePath)
   }
 
   static func isToken(_ node: JSON) -> Bool { node["$value"] != nil }
@@ -418,12 +473,12 @@ enum DTCGSource {
   static func load(
     resolver url: URL, relativePath: String,
     targets: (DesignTokenConfig.SwiftTarget?, DesignTokenConfig.KotlinTarget?, DesignTokenConfig.CSSTarget?),
-    repoRoot: URL
+    repoRoot: URL, app: String? = nil
   ) throws -> DesignTokenConfig {
     guard FileManager.default.fileExists(atPath: url.path) else {
       throw Failure(description: "\(DesignTokenConfig.relativePath): 'tokens' names \(relativePath), which does not exist")
     }
-    let resolved = try resolve(resolver: url, relativePath: relativePath)
+    let resolved = try resolve(resolver: url, relativePath: relativePath, app: app)
     let file = relativePath
     let (swift, kotlin, css) = targets
 
@@ -469,9 +524,13 @@ enum DTCGSource {
     // rule it breaks (contracts/design-tokens.md, "Rules"), and all of them
     // are reported together; nothing is generated while one stands.
     var problems: [(file: String, text: String)] = []
-    let lightTokens = try tokens(resolved.light, file: file)
+    // The top-level `primitive` group holds values other tokens alias (one
+    // per appearance, so an app context can override both). It is read for
+    // aliases and generates no vocabulary case.
+    let lightTokens = try tokens(resolved.light, file: file).filter { $0.path.first != primitiveGroup }
     let lightIDs = Set(lightTokens.map(\.id))
-    for id in resolved.darkPaths.sorted() where !lightIDs.contains(id) {
+    for id in resolved.darkPaths.sorted()
+    where !lightIDs.contains(id) && !id.hasPrefix(primitiveGroup + ".") {
       let darkFile = resolved.darkFiles[id] ?? file
       problems.append((darkFile, "\(darkFile): '\(id)' is defined only for the dark appearance: R5 — declare it in the base set too"))
     }

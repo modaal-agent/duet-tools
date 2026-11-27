@@ -96,13 +96,17 @@ One colour file per appearance, each holding every colour: a design tool that
 imports one file per mode creates a variable only for a token present in
 every file.
 
-**The resolver.** Its `resolutionOrder` holds sets and one modifier,
-`appearance`, whose contexts are exactly `light` (the default) and `dark`.
-A source is a token group written inline, or `{"$ref": "<file>"}` relative to
-the resolver; a JSON Pointer into a file is not read. Later sources win, a
-token replacing the earlier token at its path whole. `version` must be
-`"2025.10"`. A token defined only in the `dark` context is refused: every
-token is declared for the light appearance first.
+**The resolver.** Its `resolutionOrder` holds sets, the modifier
+`appearance`, whose contexts are exactly `light` (the default) and `dark`,
+and, for a repo whose apps share the vocabulary and differ in colour, the
+modifier `app` ("Values per app" below). A source is a token group written
+inline, or `{"$ref": "<file>"}` relative to the resolver; a JSON Pointer into
+a file is not read. Later sources win, a token replacing the earlier token at
+its path whole. `version` must be `"2025.10"`. A token defined only in the
+`dark` context is refused: every token is declared for the light appearance
+first. A top-level group named `primitive` is read for aliases and generates
+no vocabulary case: it holds the values other tokens alias, such as one
+accent per appearance.
 
 **What the generator reads** (anything else is refused by name):
 
@@ -215,6 +219,72 @@ above its entry in the Swift and Kotlin value tables and above its rule in
 - when its size is not a whole number.
 
 `tokens.json` carries no such comment: its `note` is the author's alone.
+
+## Values per app
+
+A repo with several apps that read one vocabulary declares the `app`
+modifier, with one context per app and a `default`:
+
+```
+parity/design-tokens.resolver.json              set "primitives", modifier "app", modifier "appearance", set "styles", in that order
+parity/design-tokens/primitive.tokens.json      the `primitive` group: the values the colour files alias, once per appearance
+parity/design-tokens/app.<id>.tokens.json       one app's values for some primitives
+```
+
+```json
+"modifiers": {
+  "app": {
+    "contexts": { "foyer": [], "atlas": [{ "$ref": "design-tokens/app.atlas.tokens.json" }] },
+    "default": "foyer"
+  }
+}
+```
+
+- **Contexts.** A context's name is lower-case ASCII letters and digits,
+  starting with a letter, and none of the names R2 reserves or `current`: it
+  becomes a case of the generated `TokenApp`. `default` names one of them. A
+  context with no source has the values of the sets around it, so an app
+  without a file of its own looks like the default app.
+- **The order.** The chosen context's sources apply to both appearances at
+  the modifier's place in `resolutionOrder`: they override the sources before
+  it and are overridden by the sources after it. A modifier context cannot
+  name one file for light and another for dark, so an app's file overrides
+  primitives that exist once per appearance (`primitive.accentLight`,
+  `primitive.accentDark`), and the two colour files alias them
+  (`"$value": "{primitive.accentLight}"`). With the primitives first, then
+  `app`, then `appearance`, an app's file changes exactly the colours that
+  alias a primitive it overrides.
+- **Colour values only.** Each app context is generated alone and compared
+  with the default context: a context that changes anything but colour values
+  is refused, naming the app and the token — a colour added or renamed, a
+  colour's description, note or source, a gradient (a gradient stop that
+  aliases a colour the app overrides follows it, so write that stop's own
+  colour), a typography token, a family or its files, a spacing or radius
+  step.
+- **Swift.** `TokenApp.swift` in the Swift output declares
+  `public enum TokenApp: String, CaseIterable, Sendable` with one case per
+  context, in the resolver's order, and `public static var current`, which
+  starts at the default. While every app has the default app's colours the
+  palette is the one a resolver without the modifier generates. Otherwise
+  `<theme>Palette.swift`'s `colorSet(for:)` switches over `TokenApp.current`
+  and returns `colorSet_<id>(for:)`, one table per group of apps with equal
+  colours, named for the group's first app. The application target sets
+  `TokenApp.current` once, from its app's id, before the first view draws.
+- **Kotlin.** `TokenApp.kt`, `enum class TokenApp` with one entry per
+  context and `TokenApp.current` in its companion, and `<palette>.color(token)`
+  dispatching to `color_<id>(token)` on the same rule. The application sets
+  `TokenApp.current` before the first composition.
+- **Web.** `tokens.css` keeps the default app's values on `:root`. For each
+  app whose colours differ it appends the colours that app changes, in
+  either appearance: its light values under `[data-app="<id>"]`, its dark
+  values under the same selector inside `@media (prefers-color-scheme: dark)`,
+  and each appearance's values under `.appearance-light` and
+  `.appearance-dark` on the `data-app` element, an ancestor or a descendant
+  of it. `tokens.json` gives each colour an app changes an `apps` member,
+  `{"<id>": {"dark": …, "light": …}}`.
+- `--check` compares the merged files. `TokenApp.swift` and `TokenApp.kt`
+  belong to the targets whether or not the resolver declares the modifier, so
+  a resolver whose modifier is dropped reports them orphaned.
 
 ## Rules a token follows
 
