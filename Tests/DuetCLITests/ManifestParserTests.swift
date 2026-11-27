@@ -100,7 +100,7 @@ final class ManifestParserTests: XCTestCase {
       """)
     XCTAssertEqual(
       parsed.topLevelErrors,
-      ["manifest.yaml: unknown top-level key 'chanis' (known: chains, features, kotlinCore, mocks, presentation, replayRunner)"])
+      ["manifest.yaml: unknown top-level key 'chanis' (known: chains, features, kotlinCore, kotlinReplayRunner, mocks, presentation, replayRunner)"])
     // The misdeclared block is NOT silently adopted as chains.
     XCTAssertTrue(parsed.chains.isEmpty)
   }
@@ -115,7 +115,7 @@ final class ManifestParserTests: XCTestCase {
     let parsed = ManifestParser.parse("raplayRunner: src-ios/Replay\n")
     XCTAssertEqual(
       parsed.topLevelErrors,
-      ["manifest.yaml: unknown top-level key 'raplayRunner' (known: chains, features, kotlinCore, mocks, presentation, replayRunner)"])
+      ["manifest.yaml: unknown top-level key 'raplayRunner' (known: chains, features, kotlinCore, kotlinReplayRunner, mocks, presentation, replayRunner)"])
     XCTAssertTrue(parsed.scalars.isEmpty)
   }
 

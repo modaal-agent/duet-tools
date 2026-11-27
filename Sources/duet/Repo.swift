@@ -48,6 +48,9 @@ struct Feature {
   let payloadType: String
   let scenario: String?
   let fixtures: [String]
+  /// The number of leading components of `kotlin:` that name the Gradle root
+  /// (`GradleRoot`): 0 for a build at the repository root.
+  var gradleRootDepth: Int = 1
 
   /// `Sources/<Module>/…` → the SPM module that declares the feature.
   var swiftModule: String? {
@@ -78,10 +81,10 @@ struct Feature {
   var kotlinModulePath: String? {
     let parts = kotlinSource.split(separator: "/").map(String.init)
     let sourceSets = ["main", "test", "commonMain", "commonTest", "jvmMain", "jvmTest"]
-    guard let srcIndex = parts.firstIndex(of: "src"), srcIndex >= 2,
+    guard let srcIndex = parts.firstIndex(of: "src"), srcIndex >= gradleRootDepth + 1,
       srcIndex + 1 < parts.count, sourceSets.contains(parts[srcIndex + 1])
     else { return nil }
-    return parts[1..<srcIndex].joined(separator: "/")
+    return parts[gradleRootDepth..<srcIndex].joined(separator: "/")
   }
 
   /// Whether the feature lives in a KMP module (its source set is a
@@ -160,6 +163,9 @@ struct Manifest {
   /// glue lives outside every feature package (a scaffolded all-subtrees layout
   /// has no aggregator root to probe).
   let replayRunnerRelative: String?
+  /// The Gradle project of the Kotlin replay runner (`kotlinReplayRunner:`),
+  /// `:replay-runner` when the scalar is absent.
+  var kotlinReplayRunnerProject: String = ":replay-runner"
   /// The `mocks:` section — the bundle tag and the generator rows (manifest
   /// order), `duet mocks`' config. Empty rows = no section, or a wired
   /// section with no rows yet; the verb is a green no-op on both.
@@ -270,7 +276,7 @@ struct Manifest {
       }
     }
     let result = try ManifestLint.lint(repo: repo)
-    let features = result.parsed.featureOrder
+    let parsedFeatures = result.parsed.featureOrder
       .compactMap { name -> Feature? in
         guard let entry = result.parsed.features[name] else { return nil }
         return Feature(
@@ -292,11 +298,18 @@ struct Manifest {
     // A DECLARED feature deriving no lane at all is the error named here.
     // A lint-red manifest returns instead of throwing: the verbs' meta gate
     // renders the errors, which name the actual defect.
+    let rootDepth = GradleRoot.depth(
+      ofKotlinPaths: parsedFeatures.map(\.kotlinSource), repoRoot: repo.root)
+    let features = parsedFeatures.map { feature -> Feature in
+      var feature = feature
+      feature.gradleRootDepth = rootDepth
+      return feature
+    }
     let swiftRelatives = Set(features.compactMap(\.swiftPackageRelative)).sorted()
     let androidRelative = features.lazy
       .compactMap({ feature -> String? in
-        let parts = feature.kotlinSource.split(separator: "/")
-        return parts.count > 1 ? String(parts[0]) : nil
+        let parts = feature.kotlinSource.split(separator: "/").map(String.init)
+        return parts.count > rootDepth + 1 ? parts[..<rootDepth].joined(separator: "/") : nil
       }).first
     guard
       !swiftRelatives.isEmpty || androidRelative != nil || !result.errors.isEmpty
@@ -312,8 +325,9 @@ struct Manifest {
       lintOK: result.errors.isEmpty,
       lintErrors: result.errors,
       swiftPackageDirs: swiftRelatives.map(repo.root.appendingPathComponent),
-      androidDir: androidRelative.map(repo.root.appendingPathComponent),
+      androidDir: androidRelative.map { $0.isEmpty ? repo.root : repo.root.appendingPathComponent($0) },
       replayRunnerRelative: result.parsed.scalars["replayRunner"],
+      kotlinReplayRunnerProject: result.parsed.scalars["kotlinReplayRunner"] ?? ":replay-runner",
       mocksBundle: result.parsed.mocksScalars["bundle"],
       mockGenerators: result.parsed.mockGenerators,
       featuresBlockEmpty: result.parsed.featuresBlockEmpty,

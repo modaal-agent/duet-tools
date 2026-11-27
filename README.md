@@ -160,7 +160,8 @@ duet version             # the toolchain version, matching the release tag; work
   byte-gate the full corpus through any conforming replay-protocol runner
   (flavor-neutral). Builds the repo's own runner itself: the Swift
   `replay-runner` product when the manifest has one, else the Kotlin lane's
-  `:replay-runner:installDist`, and drives it against every feature and
+  `<project>:installDist` for the manifest's `kotlinReplayRunner:` project
+  (`:replay-runner` when absent), and drives it against every feature and
   chain. `--platform swift|kotlin` builds that side's runner and drives it
   against the features that declare that side and the chains whose
   participants all declare it, so a Swift-only row is not sent to the Kotlin

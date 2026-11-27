@@ -265,6 +265,18 @@ enum ProtocolLane {
     return failureCount == 0 ? 0 : 1
   }
 
+  /// The Kotlin replay runner of the manifest's `kotlinReplayRunner:`
+  /// (`:replay-runner` when absent): the project's directory under the
+  /// Gradle root, as a relative path and as a URL, and the launcher
+  /// `<project>:installDist` writes.
+  static func kotlinRunner(project: String, gradleRoot: URL) -> (directory: String, module: URL, launcher: URL) {
+    let segments = project.split(separator: ":").map(String.init)
+    let directory = segments.joined(separator: "/")
+    let leaf = segments.last ?? "replay-runner"
+    let module = gradleRoot.appendingPathComponent(directory)
+    return (directory, module, module.appendingPathComponent("build/install/\(leaf)/bin/\(leaf)"))
+  }
+
   private enum Build {
     case built(URL, Double)
     case failed([String], URL?)
@@ -284,24 +296,24 @@ enum ProtocolLane {
             "  (--runner <path> drives any prebuilt conforming runner)",
           ], nil)
       }
-      let module = androidDir.appendingPathComponent("replay-runner")
+      let project = manifest.kotlinReplayRunnerProject
+      let (projectDir, module, executable) = kotlinRunner(project: project, gradleRoot: androidDir)
       guard FileManager.default.fileExists(atPath: module.path) else {
         return .failed(
           [
-            "protocol-run\(tag): FAIL — no `replay-runner` Gradle module at \(module.path)",
+            "protocol-run\(tag): FAIL — no `\(projectDir)` Gradle module at \(module.path)",
             "  (the Kotlin lane's conforming runner; --runner <path> drives any prebuilt one)",
           ], nil)
       }
       let build = Lanes.finish(
         try Lanes.launch(
-          ["./gradlew", ":replay-runner:installDist", "--console=plain"],
+          ["./gradlew", "\(project):installDist", "--console=plain"],
           cwd: androidDir, extraEnv: Lanes.gradleEnvironment(),
           logName: "replay-runner-installdist"))
       if build.exitCode != 0 {
         return .failed(
-          ["protocol-run\(tag): FAIL — :replay-runner:installDist did not build"], build.logURL)
+          ["protocol-run\(tag): FAIL — \(project):installDist did not build"], build.logURL)
       }
-      let executable = module.appendingPathComponent("build/install/replay-runner/bin/replay-runner")
       guard FileManager.default.isExecutableFile(atPath: executable.path) else {
         return .failed(
           ["protocol-run\(tag): FAIL — installDist produced no launcher at \(executable.path)"], nil)
