@@ -132,6 +132,51 @@ enum Doctor {
       }
     }
 
+    // `layout: 2`: an `apps` registry whose entries each have their own
+    // Kotlin package or are a variant of another app; each templated target
+    // names its app, and an app's iOS spec is apps/<id>/ios/xcodegen.yml (a
+    // variant's, its base app's). A file without `layout` is layout 1.
+    var layout = 1
+    if let value = metadata["layout"] {
+      if let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+        number.doubleValue == Double(number.intValue)
+      {
+        layout = number.intValue
+      } else {
+        findings.append("[declarations] \(file): `layout` is not an integer")
+      }
+    }
+    var apps: [String: [String: Any]] = [:]
+    if layout == 2 {
+      if let registry = metadata["apps"] as? [String: Any], !registry.isEmpty {
+        for id in registry.keys.sorted() {
+          guard let entry = registry[id] as? [String: Any] else {
+            findings.append("[declarations] \(file): app '\(id)' is not an object")
+            continue
+          }
+          apps[id] = entry
+          let hasPackage = entry["kotlinPackage"] is String
+          let base = entry["variantOf"] as? String
+          if hasPackage == (base != nil) {
+            findings.append(
+              "[declarations] \(file): app '\(id)' needs exactly one of `kotlinPackage` and `variantOf`")
+          }
+        }
+        for id in apps.keys.sorted() {
+          if let base = apps[id]?["variantOf"] as? String {
+            if apps[base] == nil {
+              findings.append("[declarations] \(file): app '\(id)': `variantOf` names no app: '\(base)'")
+            } else if apps[base]?["variantOf"] != nil {
+              findings.append("[declarations] \(file): app '\(id)': a variant of a variant ('\(base)')")
+            }
+          }
+        }
+      } else {
+        findings.append("[declarations] \(file): `layout` is 2 and `apps` is not a non-empty object")
+      }
+    } else if layout != 1 {
+      findings.append("[declarations] \(file): `layout` is \(layout) — this toolchain models 1 and 2")
+    }
     guard let targetsAny = metadata["targets"] else { return findings }
     guard let targets = targetsAny as? [String: Any] else {
       findings.append("[declarations] \(file): `targets` is not an object")
@@ -140,6 +185,8 @@ enum Doctor {
 
     let xcodegenRoot = metadata["xcodegen_root"] as? String ?? "src-ios/App"
     var templateByPair: [String: [String: [String]]] = [:]
+
+    var templateByApp: [String: [String: [String]]] = [:]
 
     for name in targets.keys.sorted() {
       guard let entry = targets[name] as? [String: Any] else {
@@ -170,6 +217,27 @@ enum Doctor {
         templateByPair[pair, default: [:]][template, default: []].append(name)
       }
       guard let template else { continue }  // unmarked target: not this row's jurisdiction
+      var appID: String?
+      if layout == 2 {
+        if entry["pair"] != nil {
+          findings.append(
+            "[declarations] \(file): target '\(name)': `pair` is a layout-1 key (at `layout` 2 a target names its `app`)")
+        }
+        guard let app = entry["app"] as? String else {
+          findings.append(
+            "[declarations] \(file): target '\(name)' declares no `app` — at `layout` 2 each"
+              + " templated target names its app in the `apps` registry")
+          continue
+        }
+        guard apps[app] != nil else {
+          findings.append(
+            "[declarations] \(file): target '\(name)' names no app of the `apps` registry: '\(app)'")
+          continue
+        }
+        appID = app
+        let base = (apps[app]?["variantOf"] as? String) ?? app
+        templateByApp[base, default: [:]][template, default: []].append(name)
+      }
 
       guard knownTemplates.contains(template) else {
         findings.append(
@@ -200,7 +268,8 @@ enum Doctor {
             + "that template has no Android target shape")
       }
       if platform.lowercased() == "ios" {
-        let spec = "\(xcodegenRoot)/xcodegen.yml"
+        let base = appID.map { (apps[$0]?["variantOf"] as? String) ?? $0 }
+        let spec = base.map { "apps/\($0)/ios/xcodegen.yml" } ?? "\(xcodegenRoot)/xcodegen.yml"
         if !geometry.fileExists(spec) {
           findings.append(
             "[declarations] target '\(name)' declares an iOS target but \(spec) is absent")
@@ -208,6 +277,16 @@ enum Doctor {
       }
     }
 
+    for app in templateByApp.keys.sorted() {
+      let byTemplate = templateByApp[app] ?? [:]
+      guard byTemplate.count > 1 else { continue }
+      let members = byTemplate.keys.sorted()
+        .flatMap { template in (byTemplate[template] ?? []).map { "\($0) → '\(template)'" } }
+        .joined(separator: ", ")
+      findings.append(
+        "[declarations] app '\(app)': targets disagree on `template` (\(members)) — "
+          + "an app's targets are emitted from one template")
+    }
     for pair in templateByPair.keys.sorted() {
       let byTemplate = templateByPair[pair] ?? [:]
       guard byTemplate.count > 1 else { continue }
