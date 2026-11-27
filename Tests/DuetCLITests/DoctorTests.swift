@@ -234,6 +234,143 @@ final class DoctorTests: XCTestCase {
       "\(findings)")
   }
 
+  // MARK: - [declarations] at `layout` 2
+
+  /// Three apps on a Gradle build at the repository root: `foyer` with an
+  /// iOS and an Android target, its variant `foyerlite`, and the Android-only
+  /// `tally`.
+  private static let layout2 = """
+    {
+      "layout": 2,
+      "duet": {"template": "duet-kmp", "flavor": "kmp", "projectName": "Suite", "kotlinPackage": "com.acme"},
+      "apps": {
+        "foyer": {"name": "Foyer", "kotlinPackage": "com.acme.foyer"},
+        "foyerlite": {"name": "FoyerLite", "variantOf": "foyer"},
+        "tally": {"name": "Tally", "kotlinPackage": "com.acme.tally"}
+      },
+      "targets": {
+        "Foyer": {"platform": "iOS", "architecture": "duet", "template": "duet-kmp", "app": "foyer"},
+        "FoyerAndroid": {"platform": "Android", "architecture": "duet", "template": "duet-kmp", "app": "foyer"},
+        "FoyerLite": {"platform": "iOS", "architecture": "duet", "template": "duet-kmp", "app": "foyerlite"},
+        "TallyAndroid": {"platform": "Android", "architecture": "duet", "template": "duet-kmp", "app": "tally"}
+      }
+    }
+    """
+
+  private func layout2Findings(
+    _ text: String = DoctorTests.layout2, existing: Set<String> = ["apps/foyer/ios/xcodegen.yml"]
+  ) -> [String] {
+    Doctor.declarationFindings(
+      projectJSON: json(text), geometry: geometry(kotlinShaped: true, existing: existing))
+  }
+
+  func testALayout2RegistryPasses() {
+    XCTAssertEqual(layout2Findings(), [])
+  }
+
+  func testAnIOSTargetsSpecIsItsAppsAndAVariantsIsItsBaseApps() {
+    let findings = layout2Findings(existing: [])
+    XCTAssertEqual(
+      findings,
+      [
+        "[declarations] target 'Foyer' declares an iOS target but apps/foyer/ios/xcodegen.yml is absent",
+        "[declarations] target 'FoyerLite' declares an iOS target but apps/foyer/ios/xcodegen.yml is absent",
+      ])
+  }
+
+  func testAnAppNeedsExactlyOneOfAPackageAndABase() {
+    let both = DoctorTests.layout2.replacingOccurrences(
+      of: #""variantOf": "foyer"}"#, with: #""variantOf": "foyer", "kotlinPackage": "com.acme.lite"}"#)
+    XCTAssertEqual(
+      layout2Findings(both),
+      ["[declarations] .modaal/project.json: app 'foyerlite' needs exactly one of `kotlinPackage` and `variantOf`"])
+    let neither = DoctorTests.layout2.replacingOccurrences(
+      of: #"{"name": "Tally", "kotlinPackage": "com.acme.tally"}"#, with: #"{"name": "Tally"}"#)
+    XCTAssertEqual(
+      layout2Findings(neither),
+      ["[declarations] .modaal/project.json: app 'tally' needs exactly one of `kotlinPackage` and `variantOf`"])
+  }
+
+  func testAVariantNamesAnAppThatIsNoVariant() {
+    let unknown = DoctorTests.layout2.replacingOccurrences(
+      of: #""variantOf": "foyer""#, with: #""variantOf": "atlas""#)
+    XCTAssertTrue(
+      layout2Findings(unknown).contains(
+        "[declarations] .modaal/project.json: app 'foyerlite': `variantOf` names no app: 'atlas'"),
+      "\(layout2Findings(unknown))")
+    let chained = DoctorTests.layout2.replacingOccurrences(
+      of: #""tally": {"name": "Tally", "kotlinPackage": "com.acme.tally"}"#,
+      with: #""tally": {"name": "Tally", "variantOf": "foyerlite"}"#)
+    XCTAssertEqual(
+      layout2Findings(chained),
+      ["[declarations] .modaal/project.json: app 'tally': a variant of a variant ('foyerlite')"])
+  }
+
+  func testATargetNamesAnAppOfTheRegistry() {
+    let unknown = DoctorTests.layout2.replacingOccurrences(of: #""app": "tally""#, with: #""app": "atlas""#)
+    XCTAssertEqual(
+      layout2Findings(unknown),
+      ["[declarations] .modaal/project.json: target 'TallyAndroid' names no app of the `apps` registry: 'atlas'"])
+    let missing = DoctorTests.layout2.replacingOccurrences(of: #", "app": "tally""#, with: "")
+    XCTAssertEqual(
+      layout2Findings(missing),
+      [
+        "[declarations] .modaal/project.json: target 'TallyAndroid' declares no `app` — at `layout` 2"
+          + " each templated target names its app in the `apps` registry"
+      ])
+  }
+
+  func testAnAppsTargetsAgreeOnTemplateAndAVariantCountsAsItsBase() {
+    let text = DoctorTests.layout2.replacingOccurrences(
+      of: #""FoyerLite": {"platform": "iOS", "architecture": "duet", "template": "duet-kmp""#,
+      with: #""FoyerLite": {"platform": "iOS", "architecture": "duet", "template": "duet-twins""#)
+    XCTAssertEqual(
+      layout2Findings(text),
+      [
+        "[declarations] app 'foyer': targets disagree on `template` (Foyer → 'duet-kmp', FoyerAndroid → 'duet-kmp',"
+          + " FoyerLite → 'duet-twins') — an app's targets are emitted from one template"
+      ])
+  }
+
+  func testPairIsALayout1Key() {
+    let text = DoctorTests.layout2.replacingOccurrences(
+      of: #""app": "tally"}"#, with: #""app": "tally", "pair": "Tally"}"#)
+    XCTAssertEqual(
+      layout2Findings(text),
+      [
+        "[declarations] .modaal/project.json: target 'TallyAndroid': `pair` is a layout-1 key (at `layout` 2"
+          + " a target names its `app`)"
+      ])
+  }
+
+  func testLayout2NeedsARegistry() {
+    let text = """
+      {"layout": 2, "targets": {"Foyer": {"platform": "iOS", "template": "duet-kmp", "app": "foyer"}}}
+      """
+    let findings = layout2Findings(text)
+    XCTAssertEqual(findings.first, "[declarations] .modaal/project.json: `layout` is 2 and `apps` is not a non-empty object")
+  }
+
+  func testAnUnmodeledOrMalformedLayoutIsAFinding() {
+    XCTAssertEqual(
+      layout2Findings(#"{"layout": 3}"#),
+      ["[declarations] .modaal/project.json: `layout` is 3 — this toolchain models 1 and 2"])
+    XCTAssertEqual(
+      layout2Findings(#"{"layout": "2"}"#),
+      ["[declarations] .modaal/project.json: `layout` is not an integer"])
+  }
+
+  func testWithoutLayoutTheRegistryIsNotReadAndTheSpecIsTheXcodegenRoots() {
+    // The layout-1 rows: `pair` groups, the spec at `xcodegen_root`.
+    let text = """
+      {"apps": {"x": {}}, "targets": {
+        "Foyer": {"platform": "iOS", "template": "duet-kmp", "pair": "Foyer"},
+        "FoyerAndroid": {"platform": "Android", "template": "duet-kmp", "pair": "Foyer"}
+      }}
+      """
+    XCTAssertEqual(layout2Findings(text, existing: ["src-ios/App/xcodegen.yml"]), [])
+  }
+
   // MARK: - [declarations] on a twins tree
 
   /// The doctor verb end to end on a copy of a mini tree: the declaration rows

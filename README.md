@@ -193,7 +193,13 @@ duet version             # the toolchain version, matching the release tag; work
 - `duet doctor` — the declaration-vs-disk cross-check: every target declared
   in `.modaal/project.json` (platform present, template one the toolchain
   models, pair members agreeing on template, an iOS target's `xcodegen.yml`
-  present, the template's implied shape matching the manifest's derived
+  present — at `xcodegen_root`, or, in a file with `"layout": 2`, at
+  `apps/<app>/ios/xcodegen.yml` of the target's app, a variant's at its base
+  app's; at `layout` 2 also the `apps` registry: each app has exactly one of
+  `kotlinPackage` and `variantOf`, `variantOf` names an app that is no
+  variant, each templated target names a registry app in `app`, an app's
+  targets agree on template, and `pair` is a finding —, the template's
+  implied shape matching the manifest's derived
   lanes — that last row asked only of a manifest deriving exactly ONE lane,
   and never of a target the `migration` marker names, because a repo
   migrating feature by feature and a twins repo derive both and a repo with
