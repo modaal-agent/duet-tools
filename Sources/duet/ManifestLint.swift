@@ -143,6 +143,12 @@ enum ManifestLint {
         "manifest.yaml: kotlinCore must be jvm or multiplatform, got \(ManifestParser.pythonRepr(kotlinCore))")
     }
     let jvmCore = kotlinCore == "jvm"
+    // `kotlinReplayRunner:` names the Kotlin replay runner's Gradle project.
+    if let runner = parsed.scalars["kotlinReplayRunner"], !ManifestParser.isGradleProjectPath(runner) {
+      errors.append(
+        "manifest.yaml: kotlinReplayRunner must be a Gradle project path such as :replay-runner"
+          + " or :tools:replay-runner, got \(ManifestParser.pythonRepr(runner))")
+    }
 
     let fm = FileManager.default
     var listed = Set<String>()
@@ -161,6 +167,7 @@ enum ManifestLint {
 
     var pending = 0
     var singleSource = 0
+    let kotlinPaths = parsed.featureOrder.compactMap { parsed.features[$0]?.keys["kotlin"] }
     for name in parsed.featureOrder {
       guard let entry = parsed.features[name] else { continue }
       let keys = entry.keys
@@ -173,7 +180,10 @@ enum ManifestLint {
         errors.append("[\(name)] scenario file missing on disk: \(scenario)")
       }
 
-      checkModuleMirror(name: name, keys: keys, jvmCore: jvmCore, errors: &errors)
+      checkModuleMirror(
+        name: name, keys: keys, jvmCore: jvmCore,
+        gradleRootDepth: GradleRoot.depth(ofKotlinPaths: kotlinPaths, repoRoot: repo.root),
+        errors: &errors)
 
       let swift = keys["swift"] ?? ""
       let kotlin = keys["kotlin"] ?? ""
@@ -303,10 +313,17 @@ enum ManifestLint {
   ///   — a feature-NAMED leaf, because SwiftPM derives a path dependency's
   ///   identity from the lowercased leaf dir alone, so a generic leaf collides
   ///   with the next subtree's.
-  /// - The Kotlin module dir is `feature-<name>` (flat) or
-  ///   `subtrees/<name>/logic` (the split-subtree shape).
+  ///   In a feature directory with one folder per part, the package is
+  ///   `subtrees/<name>/ios/<X>Feature/Sources/<X>Feature/`.
+  /// - The Kotlin module dir is `feature-<name>` (flat),
+  ///   `subtrees/<name>/logic` (the split-subtree shape), or, in a feature
+  ///   directory with one folder per part, `subtrees/<name>/core` (the
+  ///   multiplatform logic) or `subtrees/<name>/android/logic` (a JVM core,
+  ///   under `kotlinCore: jvm`).
   /// - Subtree geometry moves in lockstep for dual features: swift under
-  ///   Subtrees/<Name>/ iff kotlin under subtrees/<name>/.
+  ///   Subtrees/<Name>/ iff kotlin under subtrees/<name>/; when either half
+  ///   is in a feature directory with one folder per part, both halves are
+  ///   under the same `subtrees/<name>/`.
   /// - SINGLE-SOURCE features (a `commonMain` source set): the Kotlin module
   ///   is the ONE implementation — geometry lockstep is not asserted, and the
   ///   subtree shape becomes MANDATORY (every migrated wave normalizes).
@@ -316,23 +333,45 @@ enum ManifestLint {
   ///   multiplatform source set in the `kotlin:` path or a `.kt` `scenario:`
   ///   path is an error.
   static func checkModuleMirror(
-    name: String, keys: [String: String], jvmCore: Bool = false, errors: inout [String]
+    name: String, keys: [String: String], jvmCore: Bool = false, gradleRootDepth: Int = 1,
+    errors: inout [String]
   ) {
     let swift = keys["swift"] ?? ""
     let kotlin = keys["kotlin"] ?? ""
     let kotlinReal = !kotlin.isEmpty && kotlin != "pending"
     var singleSource = false
     var kotlinSubtree = false
+    var kotlinAndroidLogic = false
+    /// `<gradle root>/subtrees/<name>` when the Kotlin module is in a subtree.
+    var kotlinSubtreeDir: String?
     if kotlinReal {
       let kparts = kotlin.split(separator: "/").map(String.init)
       guard let srcIndex = kparts.firstIndex(of: "src") else {
         errors.append("[\(name)] kotlin path has no <module>/src/ segment: \(kotlin)")
         return
       }
-      let kmodule = Array(kparts[1..<srcIndex])
+      guard srcIndex >= gradleRootDepth + 1 else {
+        errors.append("[\(name)] kotlin path has no module below its Gradle root: \(kotlin)")
+        return
+      }
+      let kmodule = Array(kparts[gradleRootDepth..<srcIndex])
       let flat = kmodule == ["feature-\(name)"]
-      kotlinSubtree = kmodule == ["subtrees", name, "logic"]
+      let coreShape = kmodule == ["subtrees", name, "core"]
+      kotlinAndroidLogic = kmodule == ["subtrees", name, "android", "logic"]
+      kotlinSubtree = kmodule == ["subtrees", name, "logic"] || coreShape || kotlinAndroidLogic
+      if kotlinSubtree { kotlinSubtreeDir = kparts[..<(gradleRootDepth + 2)].joined(separator: "/") }
       let sourceSet = srcIndex + 1 < kparts.count ? kparts[srcIndex + 1] : ""
+      if jvmCore, coreShape {
+        errors.append(
+          "[\(name)] kotlin module `subtrees/\(name)/core` is the multiplatform shape, but the"
+            + " manifest declares `kotlinCore: jvm` (a JVM core's module is"
+            + " `subtrees/\(name)/android/logic` or `subtrees/\(name)/logic`)")
+      }
+      if !jvmCore, kotlinAndroidLogic {
+        errors.append(
+          "[\(name)] kotlin module `subtrees/\(name)/android/logic` is a JVM core's shape: declare"
+            + " `kotlinCore: jvm`, or move the multiplatform module to `subtrees/\(name)/core`")
+      }
       if jvmCore {
         // Every Kotlin module is a plain JVM module: these source-set rules
         // apply in place of the commonMain ones, and the module dir keeps
@@ -353,12 +392,13 @@ enum ManifestLint {
       if singleSource, !kotlinSubtree {
         errors.append(
           "[\(name)] single-source kotlin module `\(kmodule.joined(separator: "/"))` must be"
-            + " `subtrees/\(name)/logic` — every migrated wave normalizes to the"
-            + " template's subtree shape")
+            + " `subtrees/\(name)/logic` or `subtrees/\(name)/core` — every migrated wave"
+            + " normalizes to the template's subtree shape")
       } else if !(flat || kotlinSubtree) {
+        let third = jvmCore ? "subtrees/\(name)/android/logic" : "subtrees/\(name)/core"
         errors.append(
           "[\(name)] kotlin module `\(kmodule.joined(separator: "/"))` breaks the mirror pin"
-            + " (want `feature-\(name)` or `subtrees/\(name)/logic`)")
+            + " (want `feature-\(name)`, `subtrees/\(name)/logic` or `\(third)`)")
       }
       if !jvmCore, swift.isEmpty, !singleSource, !sourceSet.isEmpty {
         errors.append(
@@ -395,17 +435,33 @@ enum ManifestLint {
         "[\(name)] swift module `\(module)` breaks the mirror pin"
           + " (want `<X>Feature` with lower(X) == `\(name)`)")
     }
-    let swiftSubtree = parts.contains("Subtrees")
+    // The Swift package's place: `Subtrees/<Name>/<X>Feature/` (a split
+    // subtree), `subtrees/<name>/ios/<X>Feature/` (a feature directory with
+    // one folder per part), or anywhere else (flat).
+    let splitIndex = parts.firstIndex(of: "Subtrees")
+    let featureDirIndex = parts.indices.first { index in
+      index + 2 < sourcesIndex && parts[index] == "subtrees" && parts[index + 2] == "ios"
+    }
+    let swiftSubtree = splitIndex != nil || featureDirIndex != nil
     if kotlinReal, !singleSource, swiftSubtree != kotlinSubtree {
       errors.append(
         "[\(name)] subtree geometry diverges: swift"
-          + " \(swiftSubtree ? "IS" : "is NOT") under Subtrees/ but kotlin"
-          + " \(kotlinSubtree ? "IS" : "is NOT") under subtrees/\(name)/logic"
+          + " \(swiftSubtree ? "IS" : "is NOT") under a subtree but kotlin"
+          + " \(kotlinSubtree ? "IS" : "is NOT") under subtrees/\(name)/"
           + " — re-cuts move both trees in lockstep")
-    }
-    if swiftSubtree, let subtreesIndex = parts.firstIndex(of: "Subtrees"),
-      subtreesIndex + 1 < parts.count
+    } else if kotlinReal, !singleSource, swiftSubtree,
+      featureDirIndex != nil || kotlinAndroidLogic
     {
+      let swiftDir = featureDirIndex.map { parts[..<($0 + 2)].joined(separator: "/") }
+      if swiftDir == nil || swiftDir != kotlinSubtreeDir {
+        errors.append(
+          "[\(name)] subtree geometry diverges: swift is under"
+            + " `\(swiftDir ?? parts[..<sourcesIndex].joined(separator: "/"))` and kotlin under"
+            + " `\(kotlinSubtreeDir ?? kotlin)` — in a feature directory with one folder per part,"
+            + " both halves are under one `subtrees/\(name)/` (`ios/\(module)` and `android/logic`)")
+      }
+    }
+    if let subtreesIndex = splitIndex, subtreesIndex + 1 < parts.count {
       let subtreeDir = parts[subtreesIndex + 1]
       if subtreeDir.lowercased() != name {
         errors.append(
@@ -419,6 +475,20 @@ enum ManifestLint {
             + " breaks the subtree-layout pin (want"
             + " `Subtrees/\(subtreeDir)/\(module)/Sources/\(module)/` — feature-named"
             + " leaf, one level under the subtree dir)")
+      }
+    } else if let dirIndex = featureDirIndex {
+      let subtreeDir = parts[dirIndex + 1]
+      if subtreeDir != name {
+        errors.append(
+          "[\(name)] subtree dir `subtrees/\(subtreeDir)` ≠ feature `\(name)` (mirror pin)")
+      }
+      // The package is the `ios` folder's child, named for the module.
+      if sourcesIndex != dirIndex + 4 || parts[sourcesIndex - 1] != module {
+        errors.append(
+          "[\(name)] subtree package root `\(parts[..<sourcesIndex].joined(separator: "/"))`"
+            + " breaks the subtree-layout pin (want"
+            + " `subtrees/\(name)/ios/\(module)/Sources/\(module)/` — feature-named"
+            + " leaf, one level under the feature's `ios` folder)")
       }
     }
   }

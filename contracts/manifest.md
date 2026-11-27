@@ -39,6 +39,13 @@ accept it.
     under `src/test`; the checks below then accept a `kotlin:`-only feature
     in `src/main` and refuse a multiplatform source set. Any other value is
     an error.
+  - `kotlinReplayRunner: <project>` — optional scalar: the Gradle project of
+    the Kotlin replay runner, a project path such as `:tools:replay-runner`.
+    Absent means `:replay-runner`. `protocol-run` builds
+    `<project>:installDist` at the Gradle root and runs the launcher it
+    writes, `<project dir>/build/install/<leaf>/bin/<leaf>`. A value that is
+    not a project path (`:` followed by segments of letters, digits, `-`,
+    `_` and `.`, separated by `:`) is an error.
 - **Unknown top-level keys are an error**, named with the known set. The top
   level routes whole blocks, so a typo'd section header (a misspelled
   `chains:`) would otherwise drop its entire block silently — a misdeclared
@@ -70,6 +77,14 @@ features:
   flavor / a fully migrated feature).
   `kotlin: pending` declares a single-sided feature whose Kotlin port has
   not landed. A feature must declare at least one side.
+- **The Gradle root.** A `kotlin:` path starts with the Gradle build's root
+  directory: the nearest ancestor of the path that holds `settings.gradle.kts`
+  or `settings.gradle`, the repository itself included. The module path, the
+  Gradle project and its test task are taken relative to it
+  (`subtrees/<name>/core/src/commonMain/…` at a build at the repository root
+  is the project `:subtrees:<name>:core`). The first feature with a `kotlin:`
+  path decides the root for the manifest. When no ancestor holds a settings
+  file, the root is the path's first component.
 - `state:` / `action:` / `effectPayload:` — the kernel type names; the
   declaration-parity check compares them across the two sources while both
   sides are declared.
@@ -180,10 +195,10 @@ from repo-level configuration:
 
 | derivation | rules applied |
 | --- | --- |
-| `swift:` declared | the Swift module is `<X>Feature` with `lower(X)` == the feature name; in a split subtree, the package layout is `Subtrees/<Name>/<X>Feature/Sources/<X>Feature/` (a feature-named leaf — SwiftPM derives a path dependency's identity from the lowercased leaf directory alone, so a generic leaf collides with the next subtree's) |
-| `kotlin:` declared (not `pending`) | the module dir is `feature-<name>` (flat) or `subtrees/<name>/logic` (subtree); the path carries a `<module>/src/<sourceSet>/` shape |
-| both declared | declaration parity — State property names, Action and EffectPayload case names by wire name (the Swift case name, against a Kotlin case's `@SerialName`, or else its PascalCase class name folded to camelCase) — and subtree geometry moves in lockstep (swift under `Subtrees/<Name>/` iff kotlin under `subtrees/<name>/`) |
-| `src/commonMain/` source set | the module is single-source (the ONE implementation): geometry lockstep is not asserted, and the subtree shape is mandatory |
+| `swift:` declared | the Swift module is `<X>Feature` with `lower(X)` == the feature name; in a split subtree, the package layout is `Subtrees/<Name>/<X>Feature/Sources/<X>Feature/`, and in a feature directory with one folder per part it is `subtrees/<name>/ios/<X>Feature/Sources/<X>Feature/` (a feature-named leaf — SwiftPM derives a path dependency's identity from the lowercased leaf directory alone, so a generic leaf collides with the next subtree's) |
+| `kotlin:` declared (not `pending`) | the module dir, relative to the Gradle root, is `feature-<name>` (flat), `subtrees/<name>/logic` (subtree), `subtrees/<name>/core` (the multiplatform logic in a feature directory with one folder per part; not under `kotlinCore: jvm`) or `subtrees/<name>/android/logic` (a JVM core in such a directory; only under `kotlinCore: jvm`); the path carries a `<module>/src/<sourceSet>/` shape |
+| both declared | declaration parity — State property names, Action and EffectPayload case names by wire name (the Swift case name, against a Kotlin case's `@SerialName`, or else its PascalCase class name folded to camelCase) — and subtree geometry moves in lockstep (swift under `Subtrees/<Name>/` or `subtrees/<name>/ios/` iff kotlin under `subtrees/<name>/`); when either half is in a feature directory with one folder per part, both are under the same `subtrees/<name>/` (`ios/<X>Feature` beside `android/logic`) |
+| `src/commonMain/` source set | the module is single-source (the ONE implementation): geometry lockstep is not asserted, and a subtree shape (`subtrees/<name>/logic` or `subtrees/<name>/core`) is mandatory |
 | `kotlin:` only | the feature must BE single-source: `commonMain`, or `src/main` under `kotlinCore: jvm` |
 | `kotlinCore: jvm` | no `kotlin:` path and no `.kt` `scenario:` path names a multiplatform source set (`commonMain`, `commonTest`, `jvmMain`, `jvmTest`) |
 
@@ -202,6 +217,6 @@ One JSON object: `status` (`ok`|`fail`), `errors` (every violation, in check
 order), `features` (each entry's scalars verbatim plus its `fixtures` list),
 `chains`, `presentation` (`waivers`/`islands` as parsed), `mocks` (bundle +
 generator rows, when the section exists), the known top-level scalars
-(`replayRunner`, `kotlinCore`), and the `toolchain` stamp every `duet` JSON report
+(`replayRunner`, `kotlinCore`, `kotlinReplayRunner`), and the `toolchain` stamp every `duet` JSON report
 carries. Consume the plan instead of re-parsing the yaml —
 that is what the CLI itself does.

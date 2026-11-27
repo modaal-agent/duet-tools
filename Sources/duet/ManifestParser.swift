@@ -83,10 +83,20 @@ enum ManifestParser {
   /// safe under the pin regime (the CLI version is pinned per repo, so a
   /// manifest never meets an older parser that doesn't know its keys).
   static let knownSections: Set<String> = ["features", "chains", "presentation", "mocks"]
-  static let knownScalars: Set<String> = ["replayRunner", "kotlinCore"]
+  static let knownScalars: Set<String> = ["replayRunner", "kotlinCore", "kotlinReplayRunner"]
   /// The values `kotlinCore:` takes (contracts/manifest.md). Absent means
   /// `multiplatform`.
   static let kotlinCoreValues: Set<String> = ["jvm", "multiplatform"]
+
+  /// `:a` or `:a:b…`: a Gradle project path, each segment letters, digits,
+  /// `-`, `_` or `.`.
+  static func isGradleProjectPath(_ value: String) -> Bool {
+    guard value.hasPrefix(":") else { return false }
+    let segments = value.dropFirst().split(separator: ":", omittingEmptySubsequences: false)
+    return !segments.isEmpty && segments.allSatisfy { segment in
+      !segment.isEmpty && segment.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-_.".contains($0)) }
+    }
+  }
   /// `mocks:` generator-row keys whose value is a list of lines below them
   /// (contracts/manifest.md). Named here because the row parser has to refuse
   /// an inline value on one — see `parseMocks`.

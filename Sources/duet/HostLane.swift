@@ -103,9 +103,11 @@ enum HostLane {
       checkSwiftRootLock(root, repo: repo, errors: &errors)
     }
     var seen: Set<String> = []
+    let rootDepth = manifest.features.first?.gradleRootDepth ?? 1
     for module in kotlinRoots {
       checkGatedGradleModule(
-        module, seen: &seen, gradleRoot: String(module.split(separator: "/")[0]),
+        module, seen: &seen,
+        gradleRoot: module.split(separator: "/").prefix(rootDepth).joined(separator: "/"),
         via: [], repo: repo, errors: &errors)
     }
     checkDeclarationScope(
@@ -277,7 +279,7 @@ enum HostLane {
     let scan = scanGatedBuildScript(label: label, source: source)
     errors.append(contentsOf: scan.errors)
     for gradlePath in scan.projectPaths {
-      let child = "\(gradleRoot)/\(gradlePath.replacingOccurrences(of: ":", with: "/"))"
+      let child = GradleRoot.join(gradleRoot, gradlePath.replacingOccurrences(of: ":", with: "/"))
       checkGatedGradleModule(
         child, seen: &seen, gradleRoot: gradleRoot, via: via + [module],
         repo: repo, errors: &errors)

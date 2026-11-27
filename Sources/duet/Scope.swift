@@ -63,7 +63,10 @@ enum Scope {
 
   static func classify(_ path: String, repo: Repo, manifest: Manifest) -> Verdict {
     let swiftRoots = manifest.swiftPackageDirs.map { relative($0, to: repo) }
-    let androidRoot = manifest.androidDir.map { relative($0, to: repo) }
+    // "" when the Gradle build is at the repository root.
+    let androidRoot = manifest.androidDir.map { dir in
+      dir.standardizedFileURL.path == repo.root.standardizedFileURL.path ? "" : relative(dir, to: repo)
+    }
 
     // 1. A fixture file (or the fixtures directory): build products, owner-routed.
     if path.hasPrefix("parity/fixtures") {
@@ -133,7 +136,7 @@ enum Scope {
         owned.append("\(root)/Tests/\(module)Tests/")
       }
       if let modulePath = feature.kotlinModulePath, let androidRoot {
-        owned.append("\(androidRoot)/\(modulePath)/")
+        owned.append(GradleRoot.join(androidRoot, modulePath) + "/")
       }
       if owned.contains(where: { path == $0 || path.hasPrefix($0) }) {
         let lockstepNote =
@@ -174,8 +177,13 @@ enum Scope {
         notes: ["chain scenarios record via an unscoped `duet record`"])
     }
 
-    // 7. Inside the Android build, outside any feature module.
-    if let androidRoot, path.hasPrefix(androidRoot + "/") {
+    // 7. Inside the Android build, outside any feature module. With the
+    // build at the repository root, its files are the Kotlin and Gradle
+    // sources.
+    let inAndroidBuild = androidRoot.map { root in
+      root.isEmpty ? path.hasSuffix(".kt") || path.hasSuffix(".kts") : path.hasPrefix(root + "/")
+    } ?? false
+    if inAndroidBuild {
       return Verdict(
         role: "Android build tree (outside any parity feature module)",
         feature: nil,

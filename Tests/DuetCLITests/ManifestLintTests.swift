@@ -202,7 +202,7 @@ final class ManifestLintTests: XCTestCase {
     let errors = try lintErrors(repo)
     XCTAssertTrue(
       errors.contains(
-        "manifest.yaml: unknown top-level key 'chanis' (known: chains, features, kotlinCore, mocks, presentation, replayRunner)"),
+        "manifest.yaml: unknown top-level key 'chanis' (known: chains, features, kotlinCore, kotlinReplayRunner, mocks, presentation, replayRunner)"),
       "got \(errors)")
     // The failure mode the strictness exists for: the block's chain fixture is
     // no longer gated — and now that is loud, not silent.
@@ -284,7 +284,7 @@ final class ManifestLintTests: XCTestCase {
     try assertError(
       repo,
       containing:
-        "[greeter] kotlin module `feature-hello` breaks the mirror pin (want `feature-greeter` or `subtrees/greeter/logic`)")
+        "[greeter] kotlin module `feature-hello` breaks the mirror pin (want `feature-greeter`, `subtrees/greeter/logic` or `subtrees/greeter/core`)")
   }
 
   func testSubtreeGeometryDiverges() throws {
@@ -296,7 +296,7 @@ final class ManifestLintTests: XCTestCase {
     try assertError(
       repo,
       containing:
-        "[greeter] subtree geometry diverges: swift IS under Subtrees/ but kotlin is NOT under subtrees/greeter/logic")
+        "[greeter] subtree geometry diverges: swift IS under a subtree but kotlin is NOT under subtrees/greeter/")
   }
 
   func testSingleSourceOutsideSubtrees() throws {
