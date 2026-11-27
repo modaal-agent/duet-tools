@@ -1,5 +1,137 @@
 # Changelog
 
+## 0.38.0 — 2026-11-27
+
+### Added — a Gradle build at the repository root
+
+The Gradle root of a manifest is the nearest ancestor of its first
+`kotlin:` path that holds `settings.gradle.kts` or `settings.gradle`, the
+repository itself included; without one it is the path's first component, as
+before. Every feature's module path, Gradle project and test task are taken
+relative to it, so `subtrees/<name>/core/src/commonMain/…` in a build at the
+repository root is the project `:subtrees:<name>:core` with the task
+`:subtrees:<name>:core:jvmTest`. The Kotlin lanes run Gradle there, and the
+host lane's walk over `project(…)` edges and `scope`'s routing read the same
+root. A tree whose build is in `src-kmp/` or `src-android/` resolves as
+before.
+
+### Added — feature directories with one folder per part
+
+The module-name mirror pin accepts three more shapes, for a feature whose
+directory holds a folder per part:
+
+- a Kotlin module at `subtrees/<name>/core`: the multiplatform logic. It is
+  refused under `kotlinCore: jvm`, naming `subtrees/<name>/android/logic`;
+- a Kotlin module at `subtrees/<name>/android/logic`: a JVM core, under
+  `kotlinCore: jvm` only;
+- a Swift package at `subtrees/<name>/ios/<X>Feature/Sources/<X>Feature/`.
+
+A single-source module must be `subtrees/<name>/logic` or
+`subtrees/<name>/core`. A dual feature with either half in the new shapes has
+both halves under one `subtrees/<name>/`; a Swift half under `Subtrees/` and
+a Kotlin half under `subtrees/` stay valid, as do `feature-<name>` and
+`Subtrees/<Name>/<X>Feature/`. `contracts/manifest.md` lists the shapes.
+
+### Added — `kotlinReplayRunner:` names the Kotlin replay runner's project
+
+An optional top-level scalar: the Gradle project of the Kotlin replay
+runner, such as `:tools:replay-runner`. `protocol-run` builds
+`<project>:installDist` and runs `<project dir>/build/install/<leaf>/bin/<leaf>`.
+Absent means `:replay-runner`. A value that is not a Gradle project path is
+an error. The key rides the `duet lint --json` plan, and the
+unknown-top-level-key error lists it.
+
+### Added — `doctor` reads `"layout": 2` in `.modaal/project.json`
+
+A declaration file with `"layout": 2` keeps an `apps` registry, and
+`doctor`'s `[declarations]` row checks it:
+
+- each app has exactly one of `kotlinPackage` and `variantOf`;
+- `variantOf` names an app of the registry that is no variant itself;
+- each target with a `template` names a registry app in `app`, and `pair` on
+  it is a finding;
+- an app's targets, its variants' included, agree on `template`;
+- an iOS target's spec is `apps/<app>/ios/xcodegen.yml`, a variant's at its
+  base app's, in place of `xcodegen_root`'s.
+
+A `layout` other than 1 or 2, or one that is not an integer, is a finding. A
+file without `layout` is checked as before.
+
+### Added — token values per app: the resolver's `app` modifier
+
+`duet design-tokens` reads a second modifier, `app`, with one context per
+app and a `default`. Each context is generated alone; the vocabularies stay
+one, and the colour values become one table per group of apps with equal
+colours:
+
+- `TokenApp.swift` and `TokenApp.kt` declare one case per context and
+  `TokenApp.current`, which the application sets from its app id;
+- while two apps' colours differ, the Swift palette's `colorSet(for:)` and
+  the Kotlin palette's `color(token)` switch over `TokenApp.current`; while
+  every app has the default app's colours the palettes are the ones a
+  resolver without the modifier generates;
+- `tokens.css` appends each differing app's colours under
+  `[data-app="<id>"]`, per appearance, and `tokens.json` gives each colour an
+  app changes an `apps` member.
+
+A context that changes anything but colour values is refused, naming the
+app and the token. A context name must be lower-case letters and digits that
+compile as a Swift case and a Kotlin entry. A top-level token group named
+`primitive` is read for aliases and generates no vocabulary case: it holds
+the values an app overrides, once per appearance, which the colour files
+alias. `contracts/design-tokens.md` ("Values per app") gives the layout.
+
+### Changed — diagnostics
+
+- The mirror-pin error names the third accepted Kotlin shape:
+  ``(want `feature-<name>`, `subtrees/<name>/logic` or `subtrees/<name>/core`)``,
+  `subtrees/<name>/android/logic` under `kotlinCore: jvm`.
+- The geometry error reads ``swift IS under a subtree but kotlin is NOT under
+  subtrees/<name>/``.
+- `protocol-run`'s missing-runner error names the project's directory:
+  ``no `tools/replay-runner` Gradle module at <path>``. With no
+  `kotlinReplayRunner:` it reads as before, ``no `replay-runner` Gradle
+  module at <path>``.
+- An unknown resolver modifier's error lists both modifiers, `appearance`
+  and `app`.
+
+### Adopting
+
+**No change to the tree is required** to move `parity/duet-tools.ref` to
+0.38.0 when its Gradle build is in a subdirectory (`src-kmp/`, `src-android/`)
+and its token files have no top-level group named `primitive`: no generated
+file, fixture or other committed output changes, and no command gains a
+refusal on it.
+
+- **A token file with a top-level `primitive` group** generates no
+  vocabulary case for it from 0.38.0. Run `tools/duet design-tokens`; if code
+  names one of those cases, rename the group in the token files and in every
+  alias that names it, then regenerate.
+
+A tree that takes one of the new shapes writes:
+
+- **The Gradle build at the repository root:** `settings.gradle.kts`,
+  `gradlew` and `gradle/` at the root; every `kotlin:` and Kotlin `scenario:`
+  path from the module (`subtrees/<name>/core/src/…`); every Gradle call in
+  its own scripts and workflows from the root.
+- **The Kotlin replay runner at another project:**
+  `kotlinReplayRunner: :tools:replay-runner` (its project path) in
+  `parity/manifest.yaml`.
+- **Feature directories with one folder per part:** each module at
+  `subtrees/<name>/core`, `subtrees/<name>/android/logic` or
+  `subtrees/<name>/ios/<X>Feature`, and the manifest's paths with it; both
+  halves of a twins feature under one `subtrees/<name>/`.
+- **`"layout": 2`:** the `apps` registry in `.modaal/project.json`, `app` on
+  each templated target in place of `pair`, and each app's spec at
+  `apps/<app>/ios/xcodegen.yml`.
+- **Token values per app:** a `primitive` group the colour files alias, a set
+  holding it first in `resolutionOrder`, then the `app` modifier with one
+  context per app and its `default`, then `appearance`; a line in each
+  application target that sets `TokenApp.current` from the app's id before
+  the first view draws or the first composition; then `tools/duet
+  design-tokens`, and commit `TokenApp.swift` and `TokenApp.kt` with the
+  regenerated palettes.
+
 ## 0.37.0 — 2026-11-07
 
 ### Added — `duet pins` checks a tree's family pins
