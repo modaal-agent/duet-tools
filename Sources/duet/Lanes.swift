@@ -1090,6 +1090,13 @@ enum Lanes {
     var swiftRootStems: [URL: Set<String>] = [:]
   }
 
+  /// The directories a walk of the Gradle root skips: build products, tool
+  /// state and dependency checkouts (`Inventory.skippedWalkDirs`), and the
+  /// Kotlin compiler's `.kotlin`. A Gradle build at the repository root holds
+  /// `.build/`, where SwiftPM and `mocks` check out the family's sources,
+  /// Kotlin test sources included.
+  static let gradleWalkSkippedDirs: Set<String> = Inventory.skippedWalkDirs.union([".kotlin"])
+
   /// Test sources that mention the chain fixture by name (quoted — the replay
   /// convention passes the fixture name as a string literal), grouped into
   /// runnable scopes. Only test source sets are searched: they are the only
@@ -1106,7 +1113,7 @@ enum Lanes {
     {
       for case let url as URL in enumerator {
         let name = url.lastPathComponent
-        if ["build", ".gradle", ".git", ".kotlin"].contains(name) {
+        if gradleWalkSkippedDirs.contains(name) {
           enumerator.skipDescendants()
           continue
         }

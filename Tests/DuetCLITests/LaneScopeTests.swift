@@ -140,6 +140,78 @@ final class LaneScopeTests: XCTestCase {
       [":subtrees:counter:logic:jvmTest", ":aggregator:jvmTest"])
   }
 
+  /// A tree whose Gradle build sits at the repository root, with the family's
+  /// sources checked out under `.build/` the way SwiftPM and `mocks` leave them.
+  private func rootGradleTree() throws -> Repo {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("duet-lane-scope-root-\(UUID().uuidString)")
+    addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+    func write(_ relative: String, _ contents: String) throws {
+      let url = root.appendingPathComponent(relative)
+      try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try Data(contents.utf8).write(to: url)
+    }
+    try write(
+      "parity/manifest.yaml",
+      """
+      features:
+        counter:
+          kotlin: subtrees/counter/core/src/commonMain/kotlin/com/x/CounterFeature.kt
+          state: CounterState
+          action: CounterAction
+          effectPayload: CounterEffectPayload
+          scenario: subtrees/counter/core/src/jvmTest/kotlin/com/x/CounterScenarioTest.kt
+          fixtures:
+            - counter
+
+      chains:
+        - counter.wave
+      """)
+    try write("settings.gradle.kts", "include(\":subtrees:counter:core\")\n")
+    try write(
+      "subtrees/counter/core/src/commonMain/kotlin/com/x/CounterFeature.kt", "package com.x\n")
+    try write(
+      "subtrees/counter/core/src/jvmTest/kotlin/com/x/CounterScenarioTest.kt", "package com.x\n")
+    let replay = """
+      package com.x
+
+      class ChainReplayTest {
+        fun waveLeaf() = replay("counter.wave")
+      }
+      """
+    try write("shared/core/aggregator/src/jvmTest/kotlin/com/x/ChainReplayTest.kt", replay)
+    try write(".build/duet-sources/duet/kotlin/kernel-test/src/test/kotlin/com/x/ChainReplayTest.kt", replay)
+    try write(
+      "apps/counter/ios/.build/derived/SourcePackages/checkouts/duet/kotlin/kernel-test/src/jvmTest/kotlin/com/x/ChainReplayTest.kt",
+      replay)
+    return Repo(root: root)
+  }
+
+  func testAChainReplayInACheckoutUnderTheBuildDirectoryAddsNoTask() throws {
+    let repo = try rootGradleTree()
+    let manifest = try Manifest.load(repo: repo)
+    XCTAssertEqual(manifest.androidDir?.standardizedFileURL, repo.root.standardizedFileURL)
+    // The checkouts under `.build/` hold the same replay; their modules are no
+    // project of this build, so the only host is the project's own.
+    XCTAssertEqual(
+      Lanes.verifyGradleTasks(repo: repo, manifest: manifest, scope: nil),
+      [":subtrees:counter:core:jvmTest", ":shared:core:aggregator:jvmTest"])
+  }
+
+  func testCleanLeavesTheMaterializedTestsOfACheckoutUnderTheBuildDirectory() throws {
+    let repo = try rootGradleTree()
+    let manifest = try Manifest.load(repo: repo)
+    let own = repo.root.appendingPathComponent(
+      "subtrees/counter/core/src/jvmTest/kotlin/com/x/Materialized_Counter.kt")
+    let checkout = repo.root.appendingPathComponent(
+      ".build/duet-sources/duet/kotlin/kernel-test/src/test/kotlin/com/x/Materialized_Counter.kt")
+    for url in [own, checkout] { try Data("package com.x\n".utf8).write(to: url) }
+    XCTAssertEqual(Materialize.clean(repo: repo, manifest: manifest), 1)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: own.path))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: checkout.path))
+  }
+
   func testAScopedRunStaysOnItsOwnModule() throws {
     let repo = try chainTree()
     let manifest = try Manifest.load(repo: repo)
