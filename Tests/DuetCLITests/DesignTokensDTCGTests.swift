@@ -974,4 +974,312 @@ final class DesignTokensDTCGTests: XCTestCase {
 
       """)
   }
+
+  // MARK: - Values per app (the `app` modifier)
+
+  private static let primitives = "parity/design-tokens/primitive.tokens.json"
+  private static let atlas = "parity/design-tokens/app.atlas.tokens.json"
+  private static let swiftOut = "src-ios/Sources/Theming/Generated"
+  private static let kotlinOut = "src-kmp/theming/src/commonMain/kotlin/com/example/theming/Generated"
+
+  private static func srgb(_ hex: String) -> JSON {
+    let value = UInt32(hex.dropFirst(), radix: 16) ?? 0
+    let bytes = [(value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF]
+    return .object([
+      ("colorSpace", .string("srgb")),
+      ("components", .array(bytes.map { .number((Double($0) / 255 * 10000).rounded() / 10000) })),
+      ("hex", .string(hex)),
+    ])
+  }
+
+  private static func accents(light: String, dark: String) -> JSON {
+    .object([("primitive", .object([
+      ("$type", .string("color")),
+      ("accentLight", .object([("$value", srgb(light))])),
+      ("accentDark", .object([("$value", srgb(dark))])),
+    ]))])
+  }
+
+  private static func ref(_ path: String) -> JSON { .object([("$ref", .string(path))]) }
+
+  /// The fixture with `labelPrimary` aliasing one primitive per appearance,
+  /// the primitives in a set before the `app` modifier, and one context per
+  /// app in *contexts* (the first is the default). `atlas` overrides both
+  /// primitives when *atlasOverrides*; every other context names no file.
+  private func appsRepo(
+    contexts: [String] = ["foyer", "atlas"], atlasOverrides: Bool = true, order: [String]? = nil
+  ) throws -> Repo {
+    let repo = try dtcgRepo()
+    try write(repo, Self.primitives, Self.accents(light: "#35507a", dark: "#86a3d4"))
+    try edit(repo, Self.light, ["color", "Labels", "labelPrimary", "$value"], to: .string("{primitive.accentLight}"))
+    try edit(repo, Self.dark, ["color", "Labels", "labelPrimary", "$value"], to: .string("{primitive.accentDark}"))
+    if atlasOverrides {
+      try write(repo, Self.atlas, Self.accents(light: "#2e7d4f", dark: "#7fc49a"))
+    }
+    var resolver = try read(repo, Self.resolver)
+    resolver = setting(
+      resolver, ["sets", "primitives"], to: .object([("sources", .array([Self.ref("design-tokens/primitive.tokens.json")]))]))
+    resolver = setting(resolver, ["modifiers", "app"], to: .object([
+      ("contexts", .object(contexts.map { context in
+        (context, .array(context == "atlas" && atlasOverrides ? [Self.ref("design-tokens/app.atlas.tokens.json")] : []))
+      })),
+      ("default", .string(contexts[0])),
+    ]))
+    let entries = order ?? ["#/sets/primitives", "#/modifiers/app", "#/modifiers/appearance", "#/sets/styles"]
+    resolver = setting(resolver, ["resolutionOrder"], to: .array(entries.map(Self.ref)))
+    try write(repo, Self.resolver, resolver)
+    return repo
+  }
+
+  /// The resolver of *repo* without its `app` modifier.
+  private func dropAppModifier(_ repo: Repo) throws {
+    var resolver = try read(repo, Self.resolver)
+    resolver = setting(resolver, ["modifiers", "app"], to: nil)
+    resolver = setting(resolver, ["resolutionOrder"], to: .array(
+      ["#/sets/primitives", "#/modifiers/appearance", "#/sets/styles"].map(Self.ref)))
+    try write(repo, Self.resolver, resolver)
+  }
+
+  @discardableResult
+  private func generate(_ repo: Repo, check: Bool = false) throws -> DesignTokensVerb.Regen {
+    try DesignTokensVerb.regenerate(repo: repo, config: try load(repo), check: check)
+  }
+
+  private func generated(_ repo: Repo, _ path: String) throws -> String {
+    try text(repo.root.appendingPathComponent(path))
+  }
+
+  private func assertGenerationRefused(
+    _ repo: Repo, contains needle: String, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    XCTAssertThrowsError(try generate(repo), file: file, line: line) { error in
+      XCTAssertTrue("\(error)".contains(needle), "error was: \(error)", file: file, line: line)
+    }
+  }
+
+  func testAResolverWithoutTheAppModifierWritesNoTokenApp() throws {
+    let repo = try dtcgRepo()
+    let regen = try generate(repo)
+    XCTAssertFalse(regen.written.contains { $0.contains("TokenApp") }, "\(regen.written)")
+    for (path, bytes) in try emitted(repo) {
+      XCTAssertEqual(FileManager.default.contents(atPath: repo.root.appendingPathComponent(path).path), bytes, path)
+    }
+  }
+
+  func testThePrimitiveGroupIsReadForAliasesAndGeneratesNoCase() throws {
+    let repo = try appsRepo(contexts: ["foyer"], atlasOverrides: false)
+    try generate(repo)
+    let swift = try generated(repo, "\(Self.swiftOut)/SemanticColor.swift")
+    let kotlin = try generated(repo, "\(Self.kotlinOut)/SemanticColor.kt")
+    for vocabulary in [swift, kotlin] {
+      XCTAssertFalse(vocabulary.contains("accentLight"))
+      XCTAssertFalse(vocabulary.contains("accentDark"))
+    }
+    let css = try generated(repo, "web/shared/tokens.css")
+    XCTAssertTrue(css.contains("  --color-label-primary: #35507A;"), css)
+    XCTAssertTrue(css.contains("    --color-label-primary: #86A3D4;"), css)
+  }
+
+  func testAPrimitiveDefinedInTheDarkFileOnlyIsNoDarkOnlyToken() throws {
+    let repo = try appsRepo(contexts: ["foyer"], atlasOverrides: false)
+    try edit(repo, Self.primitives, ["primitive", "accentDark"], to: nil)
+    try edit(repo, Self.dark, ["primitive"], to: .object([
+      ("$type", .string("color")), ("accentDark", .object([("$value", Self.srgb("#86a3d4"))])),
+    ]))
+    XCTAssertNoThrow(try load(repo))
+  }
+
+  func testOneAppGeneratesTheFilesOfTheResolverWithoutTheModifierAndTokenApp() throws {
+    let withApp = try appsRepo(contexts: ["foyer"], atlasOverrides: false)
+    let withoutApp = try appsRepo(contexts: ["foyer"], atlasOverrides: false)
+    try dropAppModifier(withoutApp)
+    let written = try generate(withApp).written
+    let base = try generate(withoutApp).written
+    XCTAssertEqual(
+      Set(written).subtracting(base),
+      ["\(Self.swiftOut)/TokenApp.swift", "\(Self.kotlinOut)/TokenApp.kt"])
+    for path in base {
+      XCTAssertEqual(try generated(withApp, path), try generated(withoutApp, path), path)
+    }
+    XCTAssertEqual(try generated(withApp, "\(Self.swiftOut)/TokenApp.swift"), """
+      // GENERATED by `duet design-tokens` from parity/design-tokens.resolver.json —
+      // do not edit. The cases are the contexts of the resolver's `app` modifier.
+
+      /// The app whose colour values the generated palette returns. The
+      /// application target sets it once, from its app id, before the first
+      /// view draws.
+      public enum TokenApp: String, CaseIterable, Sendable {
+        case foyer
+
+        nonisolated(unsafe) public static var current: TokenApp = .foyer
+      }
+
+      """)
+    XCTAssertEqual(try generated(withApp, "\(Self.kotlinOut)/TokenApp.kt"), """
+      // GENERATED by `duet design-tokens` from parity/design-tokens.resolver.json —
+      // do not edit. The entries are the contexts of the resolver's `app` modifier.
+
+      package com.example.theming
+
+      /**
+       * The app whose colour values the generated palette returns. The application
+       * sets it once, from its app id, before the first composition.
+       */
+      enum class TokenApp {
+        foyer,
+        ;
+
+        companion object {
+          var current: TokenApp = foyer
+        }
+      }
+
+      """)
+  }
+
+  func testAnAppThatOverridesAPrimitiveGetsItsOwnColourTable() throws {
+    let oneApp = try appsRepo(contexts: ["foyer", "atlas"], atlasOverrides: false)
+    try generate(oneApp)
+    let repo = try appsRepo()
+    try generate(repo)
+
+    for vocabulary in ["\(Self.swiftOut)/SemanticColor.swift", "\(Self.kotlinOut)/SemanticColor.kt"] {
+      XCTAssertEqual(try generated(repo, vocabulary), try generated(oneApp, vocabulary), vocabulary)
+    }
+    let swift = try generated(repo, "\(Self.swiftOut)/MainThemePalette.swift")
+    for line in [
+      "  public func colorSet(for asset: _ColorAsset) -> ColorSet {\n    switch TokenApp.current {",
+      "    case .foyer: return colorSet_foyer(for: asset)",
+      "    case .atlas: return colorSet_atlas(for: asset)",
+      "  func colorSet_foyer(for asset: _ColorAsset) -> ColorSet {",
+      "  func colorSet_atlas(for asset: _ColorAsset) -> ColorSet {",
+    ] {
+      XCTAssertTrue(swift.contains(line), "missing: \(line)")
+    }
+    let kotlin = try generated(repo, "\(Self.kotlinOut)/MainPalette.kt")
+    for line in [
+      "  fun color(token: SemanticColor): ColorToken =\n    when (TokenApp.current) {",
+      "      TokenApp.foyer -> color_foyer(token)",
+      "      TokenApp.atlas -> color_atlas(token)",
+      "  private fun color_atlas(token: SemanticColor): ColorToken =",
+    ] {
+      XCTAssertTrue(kotlin.contains(line), "missing: \(line)")
+    }
+
+    // The stylesheet keeps the default app's values and appends the atlas rules.
+    let baseCSS = try generated(oneApp, "web/shared/tokens.css")
+    let css = try generated(repo, "web/shared/tokens.css")
+    XCTAssertTrue(css.hasPrefix(baseCSS))
+    XCTAssertEqual(String(css.dropFirst(baseCSS.count)), """
+
+      /* The atlas app's colours (the resolver's `app` modifier): on an
+         element with data-app="atlas" and its descendants. */
+      [data-app="atlas"] {
+        --color-label-primary: #2E7D4F;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        [data-app="atlas"] {
+          --color-label-primary: #7FC49A;
+        }
+      }
+
+      [data-app="atlas"].appearance-light,
+      [data-app="atlas"] .appearance-light,
+      .appearance-light [data-app="atlas"] {
+        --color-label-primary: #2E7D4F;
+      }
+
+      [data-app="atlas"].appearance-dark,
+      [data-app="atlas"] .appearance-dark,
+      .appearance-dark [data-app="atlas"] {
+        --color-label-primary: #7FC49A;
+      }
+
+      """)
+
+    let manifest = try DTCGSource.parseJSON(try generated(repo, "web/shared/tokens.json"), path: "tokens.json")
+    guard case let .array(colors)? = manifest["colors"] else { return XCTFail("no colors") }
+    let primary = try XCTUnwrap(colors.first { $0["name"]?.string == "labelPrimary" })
+    XCTAssertEqual(primary["light"]?.string, "#35507A")
+    XCTAssertEqual(primary["apps"]?["atlas"]?["light"]?.string, "#2E7D4F")
+    XCTAssertEqual(primary["apps"]?["atlas"]?["dark"]?.string, "#7FC49A")
+    XCTAssertEqual(colors.filter { $0["apps"] != nil }.count, 1)
+
+    let check = try generate(repo, check: true)
+    XCTAssertEqual(check.stale, [])
+    XCTAssertEqual(check.orphans, [])
+  }
+
+  func testAppsWithEqualColoursShareOneTable() throws {
+    let repo = try appsRepo(contexts: ["foyer", "atlas", "tally"])
+    try generate(repo)
+    let swift = try generated(repo, "\(Self.swiftOut)/MainThemePalette.swift")
+    XCTAssertTrue(swift.contains("    case .foyer, .tally: return colorSet_foyer(for: asset)"))
+    XCTAssertFalse(swift.contains("colorSet_tally"))
+    XCTAssertTrue(try generated(repo, "\(Self.swiftOut)/TokenApp.swift").contains("  case foyer\n  case atlas\n  case tally\n"))
+    XCTAssertFalse(try generated(repo, "web/shared/tokens.css").contains("data-app=\"tally\""))
+  }
+
+  func testAnAppThatChangesATypographyTokenIsRefused() throws {
+    let repo = try appsRepo(order: ["#/sets/primitives", "#/modifiers/appearance", "#/sets/styles", "#/modifiers/app"])
+    let type = try read(repo, Self.type)
+    let group = "Display — the serif face"
+    var largeTitle = try XCTUnwrap(type["typography"]?[group]?["largeTitle"])
+    largeTitle = setting(largeTitle, ["$value", "fontSize"], to: .object([("value", .number(40)), ("unit", .string("px"))]))
+    var atlas = try read(repo, Self.atlas)
+    atlas = setting(atlas, ["typography", "$type"], to: .string("typography"))
+    atlas = setting(atlas, ["typography", group, "largeTitle"], to: largeTitle)
+    try write(repo, Self.atlas, atlas)
+    assertGenerationRefused(
+      repo,
+      contains:
+        "parity/design-tokens.resolver.json: app 'atlas' changes the typography token 'largeTitle' — an app"
+        + " context changes colour values only")
+  }
+
+  func testAGradientThatFollowsAnOverriddenColourIsRefused() throws {
+    let repo = try appsRepo()
+    try edit(repo, Self.light, ["color", "Surfaces", "surfacePrimary", "$value"], to: .string("{primitive.accentLight}"))
+    try edit(repo, Self.dark, ["color", "Surfaces", "surfacePrimary", "$value"], to: .string("{primitive.accentDark}"))
+    assertGenerationRefused(repo, contains: "app 'atlas' changes the gradient '")
+  }
+
+  func testAnAppThatAddsAColourIsRefused() throws {
+    let repo = try appsRepo()
+    try edit(repo, Self.atlas, ["color"], to: .object([
+      ("$type", .string("color")),
+      ("Labels", .object([("labelBrand", .object([("$value", Self.srgb("#8e3fa8"))]))])),
+    ]))
+    assertGenerationRefused(
+      repo,
+      contains:
+        "app 'atlas' changes the colour vocabulary (it adds 'labelBrand'); declare every colour in the base"
+        + " files and override its value in the app's")
+  }
+
+  func testAnAppContextNameThatDoesNotCompileIsRefused() throws {
+    for context in ["default", "current", "Atlas", "atlas-lite", "2go"] {
+      let repo = try appsRepo(contexts: ["foyer", context], atlasOverrides: false)
+      assertRefused(
+        repo,
+        contains:
+          "modifier 'app': context '\(context)' must be lower-case ASCII letters and digits, starting with a"
+          + " letter, and not a Swift or Kotlin keyword")
+    }
+  }
+
+  func testTheAppModifiersDefaultNamesOneOfItsContexts() throws {
+    let repo = try appsRepo()
+    try edit(repo, Self.resolver, ["modifiers", "app", "default"], to: .string("tally"))
+    assertRefused(repo, contains: "modifier 'app' needs a 'default' that names one of its contexts")
+  }
+
+  func testADroppedAppModifierLeavesTokenAppOrphaned() throws {
+    let repo = try appsRepo()
+    try generate(repo)
+    try dropAppModifier(repo)
+    let check = try generate(repo, check: true)
+    XCTAssertEqual(check.orphans, ["\(Self.swiftOut)/TokenApp.swift", "\(Self.kotlinOut)/TokenApp.kt"])
+  }
 }
