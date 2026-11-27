@@ -304,6 +304,10 @@ enum Materialize {
       else { continue }
       for case let url as URL in enumerator {
         let name = url.lastPathComponent
+        if Lanes.gradleWalkSkippedDirs.contains(name) {
+          enumerator.skipDescendants()
+          continue
+        }
         if name.hasPrefix("Materialized_"), name.hasSuffix(".swift") || name.hasSuffix(".kt"),
           !url.path.contains("/build/")
         {
